@@ -1,11 +1,11 @@
 [package]
-name = "cfn-mig"
+name = "cfn-resource-migrator"
 version = "0.1.0"
 edition = "2021"
 description = "A tool to migrate CloudFormation resources between stacks"
 license = "Apache-2.0"
-homepage = "https://github.com/udondan/cfn-mig/"
-repository = "https://github.com/udondan/cfn-mig/"
+homepage = "https://github.com/udondan/cfn-resource-migrator/"
+repository = "https://github.com/udondan/cfn-resource-migrator/"
 authors = ["Daniel Schroeder"]
 readme = "README.md"
 keywords = ["aws", "cfn", "CloudFormation", "migration", "resources"]
