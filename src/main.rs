@@ -64,6 +64,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     user_confirm()?;
 
+    let template = get_template(&client, source_stack).await?;
+    println!(
+        "CloudFormation template of the selected stack:\n{}\n",
+        template
+    );
+
     Ok(())
 }
 
@@ -166,4 +172,13 @@ fn user_confirm() -> Result<(), Box<dyn Error>> {
         Some(true) => Ok(()),
         _ => Err("Selection has not been cofirmed".into()),
     }
+}
+
+async fn get_template(
+    client: &cloudformation::Client,
+    stack_name: &str,
+) -> Result<String, Box<dyn Error>> {
+    let resp = client.get_template().stack_name(stack_name).send().await?;
+    let template = resp.template_body().ok_or("No template found")?;
+    Ok(template.to_owned())
 }
