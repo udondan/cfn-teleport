@@ -1,5 +1,5 @@
 use aws_sdk_cloudformation as cloudformation;
-use dialoguer::{console::Term, theme::ColorfulTheme, MultiSelect, Select};
+use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, MultiSelect, Select};
 use std::error::Error;
 mod supported_resource_types;
 
@@ -61,6 +61,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for resource in selected_resources {
         println!("  {}", resource);
     }
+
+    user_confirm()?;
 
     Ok(())
 }
@@ -151,5 +153,17 @@ fn select_resources<'a>(
     match selection {
         Some(indices) => Ok(indices.iter().map(|i| items[*i]).collect()),
         None => Err("User did not select anything".into()),
+    }
+}
+
+fn user_confirm() -> Result<(), Box<dyn Error>> {
+    let confirmed = Confirm::new()
+        .with_prompt("Please confirm your selection")
+        .default(false)
+        .interact_on_opt(&Term::stderr())?;
+
+    match confirmed {
+        Some(true) => Ok(()),
+        _ => Err("User did not confirm the selection".into()),
     }
 }
