@@ -164,6 +164,6 @@ fn user_confirm() -> Result<(), Box<dyn Error>> {
 
     match confirmed {
         Some(true) => Ok(()),
-        _ => Err("User did not confirm the selection".into()),
+        _ => Err("Selection has not been cofirmed".into()),
     }
 }
