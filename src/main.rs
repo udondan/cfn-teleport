@@ -14,7 +14,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let source_stack = select_stack("Select source stack", &stack_names)?;
 
-    println!("{:?}", source_stack);
+    let target_stack = select_stack("Select target stack", &stack_names)?;
+
+    println!("{} -> {}", source_stack, target_stack);
 
     Ok(())
 }
@@ -38,6 +40,7 @@ fn select_stack<'a>(prompt: &str, items: &'a Vec<&str>) -> Result<&'a str, Box<d
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .items(items)
+        .report(false)
         .default(0)
         .interact_on_opt(&Term::stderr())?;
 
