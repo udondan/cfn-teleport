@@ -21,39 +21,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let target_stack = select_stack("Select target stack", &stack_names)?;
 
-    let mut max_lengths = [0; 3];
+    let resource_refs = &resources.iter().collect::<Vec<_>>();
 
-    let mut formatted_resources = Vec::new();
-
-    for resource in &resources {
-        let resource_type = resource.resource_type().unwrap_or_default();
-        let logical_id = resource.logical_resource_id().unwrap_or_default();
-        let physical_id = resource.physical_resource_id().unwrap_or_default();
-
-        max_lengths[0] = max_lengths[0].max(resource_type.len());
-        max_lengths[1] = max_lengths[1].max(logical_id.len());
-        max_lengths[2] = max_lengths[2].max(physical_id.len());
-    }
-
-    for resource in &resources {
-        let resource_type = resource.resource_type().unwrap_or_default();
-        let logical_id = resource.logical_resource_id().unwrap_or_default();
-        let physical_id = resource.physical_resource_id().unwrap_or_default();
-
-        let output = format!(
-            "{:<width1$}  {:<width2$}  {}",
-            resource_type,
-            logical_id,
-            physical_id,
-            width1 = max_lengths[0] + 2,
-            width2 = max_lengths[1] + 2,
-        );
-
-        formatted_resources.push(output);
-    }
-
-    let resource_strings: Vec<_> = formatted_resources.iter().map(|s| s.as_str()).collect();
-    let selected_resources = select_resources("Select resources to copy", &resource_strings)?;
+    let selected_resources = select_resources("Select resources to copy", resource_refs).await?;
 
     if selected_resources.is_empty() {
         return Err("No resources have been selected".into());
@@ -62,27 +32,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut new_logical_ids_map = HashMap::new();
 
     for resource in selected_resources.clone() {
+        let old_logical_id = resource.logical_resource_id().unwrap_or_default();
         let mut new_logical_id = String::new();
 
         println!(
             "Provide a new logical ID for resource '{}', or leave blank to use the original ID:",
-            resource
+            old_logical_id
         );
         io::stdin().read_line(&mut new_logical_id)?;
         new_logical_id = new_logical_id.trim().to_string();
         if new_logical_id.is_empty() {
-            new_logical_id = resource.to_string();
+            new_logical_id = resource
+                .logical_resource_id()
+                .unwrap_or_default()
+                .to_string();
         }
-        new_logical_ids_map.insert(resource.to_string(), new_logical_id);
+        new_logical_ids_map.insert(old_logical_id, new_logical_id);
     }
-    println!("{:?}", new_logical_ids_map);
 
     println!(
         "The following resources will be moved from stack {} to {}:",
         source_stack, target_stack
     );
 
-    for resource in selected_resources {
+    for resource in format_resources(&selected_resources).await? {
         println!("  {}", resource);
     }
 
@@ -178,18 +151,22 @@ async fn get_resources(
     Ok(sorted_resources)
 }
 
-fn select_resources<'a>(
+async fn select_resources<'a>(
     prompt: &str,
-    items: &'a Vec<&str>,
-) -> Result<Vec<&'a str>, Box<dyn Error>> {
+    resources: &'a Vec<&aws_sdk_cloudformation::model::StackResourceSummary>,
+) -> Result<Vec<&'a aws_sdk_cloudformation::model::StackResourceSummary>, Box<dyn Error>> {
+    let items = format_resources(resources).await?;
     let selection = MultiSelect::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .report(false)
-        .items(items)
+        .items(&items)
         .interact_on_opt(&Term::stderr())?;
 
     match selection {
-        Some(indices) => Ok(indices.iter().map(|i| items[*i]).collect()),
+        Some(indices) => Ok(indices
+            .into_iter()
+            .map(|index| resources[index])
+            .collect::<Vec<_>>()),
         None => Err("User did not select anything".into()),
     }
 }
@@ -213,4 +190,40 @@ async fn get_template(
     let resp = client.get_template().stack_name(stack_name).send().await?;
     let template = resp.template_body().ok_or("No template found")?;
     Ok(template.to_owned())
+}
+
+async fn format_resources(
+    resources: &Vec<&cloudformation::model::StackResourceSummary>,
+) -> Result<Vec<String>, io::Error> {
+    let mut max_lengths = [0; 3];
+    let mut formatted_resources = Vec::new();
+
+    for resource in resources.iter() {
+        let resource_type = resource.resource_type().unwrap_or_default();
+        let logical_id = resource.logical_resource_id().unwrap_or_default();
+        let physical_id = resource.physical_resource_id().unwrap_or_default();
+
+        max_lengths[0] = max_lengths[0].max(resource_type.len());
+        max_lengths[1] = max_lengths[1].max(logical_id.len());
+        max_lengths[2] = max_lengths[2].max(physical_id.len());
+    }
+
+    for resource in resources.iter() {
+        let resource_type = resource.resource_type().unwrap_or_default();
+        let logical_id = resource.logical_resource_id().unwrap_or_default();
+        let physical_id = resource.physical_resource_id().unwrap_or_default();
+
+        let output = format!(
+            "{:<width1$}  {:<width2$}  {}",
+            resource_type,
+            logical_id,
+            physical_id,
+            width1 = max_lengths[0] + 2,
+            width2 = max_lengths[1] + 2
+        );
+
+        formatted_resources.push(output);
+    }
+
+    Ok(formatted_resources)
 }
