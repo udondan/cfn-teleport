@@ -1,5 +1,5 @@
 use aws_sdk_cloudformation as cloudformation;
-use dialoguer::{console::Term, theme::ColorfulTheme, Select};
+use dialoguer::{console::Term, theme::ColorfulTheme, MultiSelect, Select};
 use std::error::Error;
 mod supported_resource_types;
 
@@ -22,6 +22,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("{} -> {}", source_stack, target_stack);
 
     let mut max_lengths = [0; 3];
+
+    let mut formatted_resources = Vec::new();
 
     for resource in &resources {
         let resource_type = resource.resource_type().unwrap_or_default();
@@ -46,6 +48,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             width1 = max_lengths[0] + 2,
             width2 = max_lengths[1] + 2,
         );
+
+        formatted_resources.push(output);
+    }
+
+    select_resources(
+        "Select resources to copy",
+        &formatted_resources
+            .iter()
+            .map(|s| s.as_str())
+            .collect::<Vec<_>>(),
+    )?;
+
+    // Print the formatted output
+    for output in formatted_resources {
         println!("{}", output);
     }
 
@@ -123,4 +139,19 @@ async fn get_resources(
     });
 
     Ok(sorted_resources)
+}
+
+fn select_resources<'a>(
+    prompt: &str,
+    items: &'a Vec<&str>,
+) -> Result<Vec<&'a str>, Box<dyn Error>> {
+    let selection = MultiSelect::with_theme(&ColorfulTheme::default())
+        .with_prompt(prompt)
+        .items(items)
+        .interact_on_opt(&Term::stderr())?;
+
+    match selection {
+        Some(indices) => Ok(indices.iter().map(|i| items[*i]).collect()),
+        None => Err("User did not select anything".into()),
+    }
 }
