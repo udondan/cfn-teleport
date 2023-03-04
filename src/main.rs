@@ -2,6 +2,8 @@ use aws_sdk_cloudformation as cloudformation;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, MultiSelect, Select};
 use std::error::Error;
 mod supported_resource_types;
+use std::collections::HashMap;
+use std::io;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -53,6 +55,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let resource_strings: Vec<_> = formatted_resources.iter().map(|s| s.as_str()).collect();
     let selected_resources = select_resources("Select resources to copy", &resource_strings)?;
 
+    if selected_resources.is_empty() {
+        return Err("No resources have been selected".into());
+    }
+
+    let mut new_logical_ids_map = HashMap::new();
+
+    for resource in selected_resources.clone() {
+        let mut new_logical_id = String::new();
+
+        println!(
+            "Provide a new logical ID for resource '{}', or leave blank to use the original ID:",
+            resource
+        );
+        io::stdin().read_line(&mut new_logical_id)?;
+        new_logical_id = new_logical_id.trim().to_string();
+        if new_logical_id.is_empty() {
+            new_logical_id = resource.to_string();
+        }
+        new_logical_ids_map.insert(resource.to_string(), new_logical_id);
+    }
+    println!("{:?}", new_logical_ids_map);
+
     println!(
         "The following resources will be moved from stack {} to {}:",
         source_stack, target_stack
@@ -65,6 +89,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     user_confirm()?;
 
     let template = get_template(&client, source_stack).await?;
+
+    //@TODO: check if the selected resources do have "DeletionPolicy": "Retain". If not, add it.
+    //@TODO: if the template has been changed, update the stack and wait for completion
+    //@TODO: remove the selected resources from the source stack template
+    //@TODO: update the stack and wait for completion
+    //@TODO: download the tempalte of the target stack
+    //@TODO: import resources into the target stack
+
     println!(
         "CloudFormation template of the selected stack:\n{}\n",
         template
