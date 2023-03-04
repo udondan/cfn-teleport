@@ -21,13 +21,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("{} -> {}", source_stack, target_stack);
 
-    for resource in resources {
-        println!(
-            "{} - Logical ID: {} Name: {}",
-            resource.resource_type().unwrap_or_default(),
-            resource.logical_resource_id().unwrap_or_default(),
-            resource.physical_resource_id().unwrap_or_default(),
+    let mut max_lengths = [0; 3];
+
+    for resource in &resources {
+        let resource_type = resource.resource_type().unwrap_or_default();
+        let logical_id = resource.logical_resource_id().unwrap_or_default();
+        let physical_id = resource.physical_resource_id().unwrap_or_default();
+
+        max_lengths[0] = max_lengths[0].max(resource_type.len());
+        max_lengths[1] = max_lengths[1].max(logical_id.len());
+        max_lengths[2] = max_lengths[2].max(physical_id.len());
+    }
+
+    for resource in &resources {
+        let resource_type = resource.resource_type().unwrap_or_default();
+        let logical_id = resource.logical_resource_id().unwrap_or_default();
+        let physical_id = resource.physical_resource_id().unwrap_or_default();
+
+        let output = format!(
+            "{:<width1$}  {:<width2$}  {}",
+            resource_type,
+            logical_id,
+            physical_id,
+            width1 = max_lengths[0] + 2,
+            width2 = max_lengths[1] + 2,
         );
+        println!("{}", output);
     }
 
     Ok(())
@@ -45,7 +64,11 @@ async fn get_stacks(
         .filter(|stack| !stack.stack_status().unwrap().as_str().starts_with("DELETE"))
         .collect::<Vec<_>>();
 
-    Ok(stacks)
+    // Sort the stacks by name
+    let mut sorted_stacks = stacks.clone();
+    sorted_stacks.sort_by_key(|stack| stack.stack_name().unwrap_or_default().to_string());
+
+    Ok(sorted_stacks)
 }
 
 fn select_stack<'a>(prompt: &str, items: &'a Vec<&str>) -> Result<&'a str, Box<dyn Error>> {
@@ -83,5 +106,21 @@ async fn get_resources(
         })
         .collect::<Vec<_>>();
 
-    Ok(filtered_resources)
+    // Sort the resources by type, logical ID, and name
+    let mut sorted_resources = filtered_resources.clone();
+    sorted_resources.sort_by_key(|resource| {
+        (
+            resource.resource_type().unwrap_or_default().to_string(),
+            resource
+                .logical_resource_id()
+                .unwrap_or_default()
+                .to_string(),
+            resource
+                .physical_resource_id()
+                .unwrap_or_default()
+                .to_string(),
+        )
+    });
+
+    Ok(sorted_resources)
 }
