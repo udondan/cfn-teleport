@@ -52,17 +52,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         formatted_resources.push(output);
     }
 
-    select_resources(
-        "Select resources to copy",
-        &formatted_resources
-            .iter()
-            .map(|s| s.as_str())
-            .collect::<Vec<_>>(),
-    )?;
+    let resource_strings: Vec<_> = formatted_resources.iter().map(|s| s.as_str()).collect();
+    let selected_resources = select_resources("Select resources to copy", &resource_strings)?;
 
-    // Print the formatted output
-    for output in formatted_resources {
-        println!("{}", output);
+    // Print the selected resources
+    for resource in selected_resources {
+        println!("{}", resource);
     }
 
     Ok(())
@@ -147,6 +142,7 @@ fn select_resources<'a>(
 ) -> Result<Vec<&'a str>, Box<dyn Error>> {
     let selection = MultiSelect::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
+        .report(false)
         .items(items)
         .interact_on_opt(&Term::stderr())?;
 
