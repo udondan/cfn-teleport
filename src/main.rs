@@ -19,8 +19,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let target_stack = select_stack("Select target stack", &stack_names)?;
 
-    println!("{} -> {}", source_stack, target_stack);
-
     let mut max_lengths = [0; 3];
 
     let mut formatted_resources = Vec::new();
@@ -55,9 +53,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let resource_strings: Vec<_> = formatted_resources.iter().map(|s| s.as_str()).collect();
     let selected_resources = select_resources("Select resources to copy", &resource_strings)?;
 
-    // Print the selected resources
+    println!(
+        "The following resources will be moved from stack {} to {}:",
+        source_stack, target_stack
+    );
+
     for resource in selected_resources {
-        println!("{}", resource);
+        println!("  {}", resource);
     }
 
     Ok(())
