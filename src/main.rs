@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(|s| s.stack_name().unwrap_or_default())
         .collect();
 
-    let source_stack = select_stack("Select source stack", stack_names)?;
+    let source_stack = select_stack("Select source stack", &stack_names)?;
 
     println!("{:?}", source_stack);
 
@@ -34,10 +34,10 @@ async fn get_stacks(
     Ok(stacks)
 }
 
-fn select_stack(prompt: &str, items: Vec<&str>) -> Result<&str, Box<dyn Error>> {
+fn select_stack<'a>(prompt: &str, items: &'a Vec<&str>) -> Result<&'a str, Box<dyn Error>> {
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
-        .items(&items)
+        .items(items)
         .default(0)
         .interact_on_opt(&Term::stderr())?;
 
