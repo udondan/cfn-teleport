@@ -63,17 +63,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let template = get_template(&client, source_stack).await?;
 
-    //@TODO: check if the selected resources do have "DeletionPolicy": "Retain". If not, add it.
+    let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
+    let template_retained = retain_resources(template, resource_ids_to_remove);
+
+    println!("Template retained: {}", template_retained);
+
     //@TODO: if the template has been changed, update the stack and wait for completion
     //@TODO: remove the selected resources from the source stack template
     //@TODO: update the stack and wait for completion
     //@TODO: download the tempalte of the target stack
     //@TODO: import resources into the target stack
 
-    println!(
-        "CloudFormation template of the selected stack:\n{}\n",
-        template
-    );
+    //println!(
+    //    "CloudFormation template of the selected stack:\n{}\n",
+    //    template
+    //);
 
     Ok(())
 }
@@ -186,10 +190,11 @@ fn user_confirm() -> Result<(), Box<dyn Error>> {
 async fn get_template(
     client: &cloudformation::Client,
     stack_name: &str,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<serde_json::Value, Box<dyn Error>> {
     let resp = client.get_template().stack_name(stack_name).send().await?;
     let template = resp.template_body().ok_or("No template found")?;
-    Ok(template.to_owned())
+    let parsed_template = serde_json::from_str(&template)?;
+    Ok(parsed_template)
 }
 
 async fn format_resources(
@@ -226,4 +231,16 @@ async fn format_resources(
     }
 
     Ok(formatted_resources)
+}
+
+fn retain_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) -> serde_json::Value {
+    let resources = template["Resources"].as_object_mut().unwrap();
+
+    for resource_id in resource_ids {
+        if let Some(resource) = resources.get_mut(resource_id) {
+            resource["DeletionPolicy"] = serde_json::Value::String("Retain".to_string());
+        }
+    }
+
+    template
 }
