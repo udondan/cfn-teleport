@@ -121,6 +121,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         new_logical_ids_map,
     );
 
+    let result =
+        create_stack_changeset(&client, target_stack, template_target, selected_resources).await?;
+
+    println!("Changeset created: {}", result);
+
     //@TODO: import resources into the target stack
 
     Ok(())
@@ -389,7 +394,7 @@ async fn create_stack_changeset(
     stack_name: &str,
     template: serde_json::Value,
     resources_to_import: Vec<&cloudformation::model::StackResourceSummary>,
-) -> Result<(), cloudformation::Error> {
+) -> Result<std::string::String, cloudformation::Error> {
     let resources = resources_to_import
         .iter()
         .map(|resource| {
@@ -415,14 +420,14 @@ async fn create_stack_changeset(
     match client
         .create_change_set()
         .stack_name(stack_name)
-        .change_set_name(change_set_name)
+        .change_set_name(change_set_name.clone())
         .template_body(serde_json::to_string(&template).unwrap())
         .change_set_type(cloudformation::model::ChangeSetType::Import)
         .set_resources_to_import(resources.into())
         .send()
         .await
     {
-        Ok(_) => Ok(()),
+        Ok(_) => Ok(change_set_name),
         Err(err) => Err(err.into()),
     }
 }
