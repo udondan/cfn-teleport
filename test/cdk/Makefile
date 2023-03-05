@@ -11,10 +11,10 @@ synth: build
 	@cdk synth
 
 deploy: build
-	@cdk deploy --require-approval never $(notify) "*"
+	@cdk deploy --require-approval never "*"
 
 DESTROY:
-	@cdk destroy $(notify)
+	@cdk destroy --force "*"
 
 info:
 	@cdk doctor

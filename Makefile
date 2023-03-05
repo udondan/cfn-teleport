@@ -13,7 +13,12 @@ release:
 test: phony
 	@\
 	cd test/cdk && \
-	$(MAKE) install deploy
+	$(MAKE) install diff deploy
+
+test-reset:
+	@\
+	cd test/cdk && \
+	$(MAKE) DESTROY
 
 # @TODO: complete test target. It should do the following:
 # - test migration from stack A to B, both buckets separately

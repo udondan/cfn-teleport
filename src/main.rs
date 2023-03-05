@@ -4,6 +4,7 @@ use std::error::Error;
 mod supported_resource_types;
 use std::collections::HashMap;
 use std::io;
+use std::io::Write;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -101,13 +102,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
     //println!("Original template: {}", template);
     //println!("Template retained: {}", template_retained);
 
-    //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
     if template_str != template_retained_str {
-        println!(
-            "Retaining resources {}...",
-            resource_ids_to_remove.join(", ")
-        );
+        //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
+        print!("Retaining resources {}", resource_ids_to_remove.join(", "));
         update_stack(&client, source_stack, template_retained).await?;
+
+        let mut stack_status = get_stack_status(&client, source_stack).await?;
+        while let Some(status) = stack_status.clone() {
+            if status == cloudformation::model::StackStatus::UpdateInProgress {
+                print!(".");
+                std::io::stdout().flush().unwrap();
+                std::thread::sleep(std::time::Duration::from_secs(1));
+                stack_status = get_stack_status(&client, source_stack).await?;
+            } else {
+                if status != cloudformation::model::StackStatus::UpdateComplete {
+                    return Err(
+                        format!("Stack update failed {}", stack_status.unwrap().as_str()).into(),
+                    );
+                }
+                break;
+            }
+        }
+
+        println!(" {}", stack_status.unwrap().as_str());
+
         //@TODO: if the template has been changed, update the stack and wait for completion
     }
 
@@ -305,14 +323,30 @@ async fn update_stack(
         .send()
         .await
     {
-        Ok(output) => {
-            println!("Stack update initiated: {:?}", output);
-            Ok(())
-        }
-        /*<ChatGPT>
-        wait until the stack update is complete
-        if the stack update fails, print the error message
-        </ChatGPT>*/
+        Ok(_output) => Ok(()),
         Err(err) => Err(err.into()),
+    }
+}
+
+async fn get_stack_status(
+    client: &cloudformation::Client,
+    stack_name: &str,
+) -> Result<Option<cloudformation::model::StackStatus>, Box<dyn std::error::Error>> {
+    let describe_stacks_output = match client.describe_stacks().stack_name(stack_name).send().await
+    {
+        Ok(output) => output,
+        Err(err) => return Err(Box::new(err)),
+    };
+
+    let stacks = describe_stacks_output.stacks().unwrap_or_default();
+    let stack = stacks.first();
+
+    if let Some(stack) = stack {
+        Ok(stack.stack_status.clone())
+    } else {
+        Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "Failed to determine stack status",
+        )))
     }
 }
