@@ -1,3 +1,3 @@
-# cfn-mig
+# cfn-resource-migrator
 
-A tool to migrate CloudFormation resources between stacks
+A command line tool which can migrate CloudFormation resources between stacks

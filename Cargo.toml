@@ -2,7 +2,7 @@
 name = "cfn-resource-migrator"
 version = "0.1.0"
 edition = "2021"
-description = "A tool to migrate CloudFormation resources between stacks"
+description = "A command line tool which can migrate CloudFormation resources between stacks"
 license = "Apache-2.0"
 homepage = "https://github.com/udondan/cfn-resource-migrator/"
 repository = "https://github.com/udondan/cfn-resource-migrator/"
