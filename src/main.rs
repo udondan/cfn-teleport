@@ -121,10 +121,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         new_logical_ids_map,
     );
 
-    let result =
-        create_stack_changeset(&client, target_stack, template_target, selected_resources).await?;
+    let changeset_name =
+        create_changeset(&client, target_stack, template_target, selected_resources).await?;
+    print!("Creating changeset {}", changeset_name);
+    wait_for_changeset_created(&client, target_stack, &changeset_name).await?;
 
-    println!("Changeset created: {}", result);
+    print!("Executing changeset {}", changeset_name);
+    execute_changeset(&client, target_stack, &changeset_name).await?;
+    wait_for_stack_update_completion(&client, target_stack).await?;
 
     //@TODO: import resources into the target stack
 
@@ -370,13 +374,16 @@ async fn wait_for_stack_update_completion(
     while let Some(status) = stack_status.clone() {
         if status == cloudformation::model::StackStatus::UpdateInProgress
             || status == cloudformation::model::StackStatus::UpdateCompleteCleanupInProgress
+            || status == cloudformation::model::StackStatus::ImportInProgress
         {
             print!(".");
             std::io::stdout().flush()?;
             std::thread::sleep(std::time::Duration::from_secs(1));
             stack_status = get_stack_status(&client, stack_name).await?;
         } else {
-            if status != cloudformation::model::StackStatus::UpdateComplete {
+            if status != cloudformation::model::StackStatus::UpdateComplete
+                && status != cloudformation::model::StackStatus::ImportComplete
+            {
                 return Err(
                     format!("Stack update failed {}", stack_status.unwrap().as_str()).into(),
                 );
@@ -389,7 +396,7 @@ async fn wait_for_stack_update_completion(
     Ok(())
 }
 
-async fn create_stack_changeset(
+async fn create_changeset(
     client: &cloudformation::Client,
     stack_name: &str,
     template: serde_json::Value,
@@ -430,4 +437,71 @@ async fn create_stack_changeset(
         Ok(_) => Ok(change_set_name),
         Err(err) => Err(err.into()),
     }
+}
+
+async fn execute_changeset(
+    client: &cloudformation::Client,
+    stack_name: &str,
+    change_set_name: &str,
+) -> Result<(), cloudformation::Error> {
+    match client
+        .execute_change_set()
+        .stack_name(stack_name)
+        .change_set_name(change_set_name)
+        .send()
+        .await
+    {
+        Ok(_) => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+async fn get_changeset_status(
+    client: &cloudformation::Client,
+    stack_name: &str,
+    changeset_name: &str,
+) -> Result<Option<cloudformation::model::ChangeSetStatus>, Box<dyn std::error::Error>> {
+    let change_set = match client
+        .describe_change_set()
+        .stack_name(stack_name)
+        .change_set_name(changeset_name)
+        .send()
+        .await
+    {
+        Ok(output) => output,
+        Err(err) => return Err(Box::new(err)),
+    };
+
+    Ok(change_set.status.clone())
+}
+
+async fn wait_for_changeset_created(
+    client: &cloudformation::Client,
+    stack_name: &str,
+    changeset_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut changeset_status = get_changeset_status(&client, stack_name, changeset_name).await?;
+
+    while let Some(status) = changeset_status.clone() {
+        if status == cloudformation::model::ChangeSetStatus::CreateInProgress
+            || status == cloudformation::model::ChangeSetStatus::CreatePending
+        {
+            print!(".");
+            std::io::stdout().flush()?;
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            changeset_status = get_changeset_status(&client, stack_name, changeset_name).await?;
+        } else {
+            if status != cloudformation::model::ChangeSetStatus::CreateComplete {
+                return Err(format!(
+                    "Changeset creation failed {}",
+                    changeset_status.unwrap().as_str()
+                )
+                .into());
+            }
+            break;
+        }
+    }
+
+    println!(" {}", changeset_status.unwrap().as_str());
+    Ok(())
 }
