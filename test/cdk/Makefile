@@ -22,5 +22,5 @@ info:
 clean:
 	@rm -rf node_modules package-lock.json
 
-install: clean
+install:
 	@npm i
