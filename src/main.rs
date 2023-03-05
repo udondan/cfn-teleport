@@ -54,10 +54,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
         new_logical_ids_map.insert(old_logical_id, new_logical_id);
     }
 
-    println!(
-        "The following resources will be moved from stack {} to {}:",
-        source_stack, target_stack
-    );
+    if source_stack == target_stack {
+        let mut duplicate_ids = Vec::new();
+        for (old_id, new_id) in &new_logical_ids_map {
+            if old_id == new_id {
+                duplicate_ids.push(old_id);
+            }
+        }
+
+        if !duplicate_ids.is_empty() {
+            let error_message = format!(
+                "Unable to proceed, because you said you want to rename resources in stack {} but did not provide new logical IDs for: {}",
+                source_stack,
+                duplicate_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(", ")
+            );
+            return Err(error_message.into());
+        }
+
+        println!(
+            "The following resources in stack {} will be renamed:",
+            source_stack
+        );
+    } else {
+        println!(
+            "The following resources will be moved from stack {} to {}:",
+            source_stack, target_stack
+        );
+    }
 
     for resource in format_resources(&selected_resources).await? {
         println!("  {}", resource);
