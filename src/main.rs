@@ -10,6 +10,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let config = aws_config::load_from_env().await;
     let client = cloudformation::Client::new(&config);
     let stacks = get_stacks(&client).await?;
+
+    //@TODO: error handling, if we got an error from the API, the error message should be printent without gibberish
+
     let stack_names: Vec<&str> = stacks
         .iter()
         .map(|s| s.stack_name().unwrap_or_default())
@@ -89,16 +92,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     user_confirm()?;
 
     let template = get_template(&client, source_stack).await?;
+    let template_str = serde_json::to_string(&template)?;
 
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
     let template_retained = retain_resources(template.clone(), resource_ids_to_remove.clone());
+    let template_retained_str = serde_json::to_string(&template_retained)?;
 
-    println!("Template retained: {}", template_retained);
+    //println!("Original template: {}", template);
+    //println!("Template retained: {}", template_retained);
 
-    //@TODO: if the template has been changed, update the stack and wait for completion
+    //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
+    if template_str != template_retained_str {
+        println!(
+            "Retaining resources {}...",
+            resource_ids_to_remove.join(", ")
+        );
+        update_stack(&client, source_stack, template_retained).await?;
+        //@TODO: if the template has been changed, update the stack and wait for completion
+    }
 
     let template_removed = remoce_resources(template.clone(), resource_ids_to_remove.clone());
-    println!("Template removed: {}", template_removed);
+    //println!("Template removed: {}", template_removed);
     //@TODO: update the stack and wait for completion
     //@TODO: download the tempalte of the target stack
     //@TODO: import resources into the target stack
@@ -277,4 +291,28 @@ fn remoce_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) ->
     }
 
     template
+}
+
+async fn update_stack(
+    client: &cloudformation::Client,
+    stack_name: &str,
+    template: serde_json::Value,
+) -> Result<(), cloudformation::Error> {
+    match client
+        .update_stack()
+        .stack_name(stack_name)
+        .template_body(serde_json::to_string(&template).unwrap())
+        .send()
+        .await
+    {
+        Ok(output) => {
+            println!("Stack update initiated: {:?}", output);
+            Ok(())
+        }
+        /*<ChatGPT>
+        wait until the stack update is complete
+        if the stack update fails, print the error message
+        </ChatGPT>*/
+        Err(err) => Err(err.into()),
+    }
 }
