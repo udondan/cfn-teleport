@@ -19,6 +19,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let resources = get_resources(&client, source_stack).await?;
 
+    if resources.is_empty() {
+        return Err(format!("No resources found in stack '{}'", source_stack).into());
+    }
+
     let target_stack = select_stack("Select target stack", &stack_names)?;
 
     let resource_refs = &resources.iter().collect::<Vec<_>>();
