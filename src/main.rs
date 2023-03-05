@@ -382,3 +382,42 @@ async fn wait_for_stack_update_completion(
     println!(" {}", stack_status.unwrap().as_str());
     Ok(())
 }
+
+async fn create_stack_changeset(
+    client: &cloudformation::Client,
+    stack_name: &str,
+    template: serde_json::Value,
+    resources_to_import: Vec<&cloudformation::model::StackResourceSummary>,
+) -> Result<(), cloudformation::Error> {
+    let resources = resources_to_import
+        .iter()
+        .map(|resource| {
+            let resource_type = resource.resource_type().unwrap_or_default();
+            let logical_id = resource.logical_resource_id().unwrap_or_default();
+            let physical_id = resource.physical_resource_id().unwrap_or_default();
+
+            cloudformation::model::ResourceToImport::builder()
+                .resource_type(resource_type.to_string())
+                .logical_resource_id(logical_id.to_string())
+                .set_resource_identifier(
+                    'BucketName',
+                    physical_id.to_string()
+                )
+                .build()
+        })
+        .collect();
+
+    match client
+        .create_change_set()
+        .stack_name(stack_name)
+        .change_set_name("stack-update")
+        .template_body(serde_json::to_string(&template).unwrap())
+        .change_set_type(cloudformation::model::ChangeSetType::Import)
+        .set_resources_to_import(resources)
+        .send()
+        .await
+    {
+        Ok(_output) => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
