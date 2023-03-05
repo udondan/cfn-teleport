@@ -13,8 +13,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let client = cloudformation::Client::new(&config);
     let stacks = get_stacks(&client).await?;
 
-    //@TODO: error handling, if we got an error from the API, the error message should be printent without gibberish
-
     let stack_names: Vec<&str> = stacks
         .iter()
         .map(|s| s.stack_name().unwrap_or_default())
@@ -129,8 +127,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     print!("Executing changeset {}", changeset_name);
     execute_changeset(&client, target_stack, &changeset_name).await?;
     wait_for_stack_update_completion(&client, target_stack).await?;
-
-    //@TODO: import resources into the target stack
 
     Ok(())
 }
