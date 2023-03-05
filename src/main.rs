@@ -92,37 +92,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     user_confirm()?;
 
-    let template = get_template(&client, source_stack).await?;
-    let template_str = serde_json::to_string(&template)?;
+    let template_source = get_template(&client, source_stack).await?;
+    let template_source_str = serde_json::to_string(&template_source)?;
 
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
 
-    // experiment start
-    let template_target = create_target_template(
-        get_template(&client, target_stack).await?,
-        selected_resources.clone(),
-        new_logical_ids_map,
-    );
-
-    // experiment end
-
-    let template_retained = retain_resources(template.clone(), resource_ids_to_remove.clone());
+    let template_retained =
+        retain_resources(template_source.clone(), resource_ids_to_remove.clone());
     let template_retained_str = serde_json::to_string(&template_retained)?;
 
-    if template_str != template_retained_str {
+    if template_source_str != template_retained_str {
         //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
         print!("Retaining resources {}", resource_ids_to_remove.join(", "));
         update_stack(&client, source_stack, template_retained).await?;
         wait_for_stack_update_completion(&client, source_stack).await?;
     }
 
-    let template_removed = remoce_resources(template.clone(), resource_ids_to_remove.clone());
+    let template_removed =
+        remove_resources(template_source.clone(), resource_ids_to_remove.clone());
     print!("Removing resources {}", resource_ids_to_remove.join(", "));
     update_stack(&client, source_stack, template_removed).await?;
     wait_for_stack_update_completion(&client, source_stack).await?;
 
-    //let template = get_template(&client, target_stack).await?;
-    //let template_str = serde_json::to_string(&template)?;
+    let template_target = add_resources(
+        get_template(&client, target_stack).await?,
+        template_source.clone(),
+        new_logical_ids_map,
+    );
 
     //@TODO: import resources into the target stack
 
@@ -292,7 +288,7 @@ fn retain_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) ->
     template
 }
 
-fn remoce_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) -> serde_json::Value {
+fn remove_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) -> serde_json::Value {
     let resources = template["Resources"].as_object_mut().unwrap();
 
     for resource_id in resource_ids {
@@ -300,6 +296,23 @@ fn remoce_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) ->
     }
 
     template
+}
+
+fn add_resources(
+    mut target_template: serde_json::Value,
+    source_template: serde_json::Value,
+    resource_id_map: HashMap<&str, String>,
+) -> serde_json::Value {
+    let target_resources = target_template["Resources"].as_object_mut().unwrap();
+    let source_resources = source_template["Resources"].as_object().unwrap();
+
+    for (resource_id, new_resource_id) in resource_id_map {
+        if let Some(resource) = source_resources.get(resource_id) {
+            target_resources.insert(new_resource_id, resource.clone());
+        }
+    }
+
+    target_template
 }
 
 async fn update_stack(
@@ -368,14 +381,4 @@ async fn wait_for_stack_update_completion(
 
     println!(" {}", stack_status.unwrap().as_str());
     Ok(())
-}
-
-fn create_target_template(
-    template: serde_json::Value,
-    resources: Vec<&cloudformation::model::StackResourceSummary>,
-    resource_id_map: HashMap<&str, String>,
-) -> serde_json::Value {
-    let mut target_template = template.clone();
-
-    target_template
 }
