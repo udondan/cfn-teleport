@@ -106,30 +106,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
         print!("Retaining resources {}", resource_ids_to_remove.join(", "));
         update_stack(&client, source_stack, template_retained).await?;
-
-        let mut stack_status = get_stack_status(&client, source_stack).await?;
-        while let Some(status) = stack_status.clone() {
-            if status == cloudformation::model::StackStatus::UpdateInProgress {
-                print!(".");
-                std::io::stdout().flush().unwrap();
-                std::thread::sleep(std::time::Duration::from_secs(1));
-                stack_status = get_stack_status(&client, source_stack).await?;
-            } else {
-                if status != cloudformation::model::StackStatus::UpdateComplete {
-                    return Err(
-                        format!("Stack update failed {}", stack_status.unwrap().as_str()).into(),
-                    );
-                }
-                break;
-            }
-        }
-
-        println!(" {}", stack_status.unwrap().as_str());
-
-        //@TODO: if the template has been changed, update the stack and wait for completion
+        wait_for_stack_update_completion(&client, source_stack).await?;
     }
 
     let template_removed = remoce_resources(template.clone(), resource_ids_to_remove.clone());
+    print!("Removing resources {}", resource_ids_to_remove.join(", "));
+    update_stack(&client, source_stack, template_removed).await?;
+    wait_for_stack_update_completion(&client, source_stack).await?;
     //println!("Template removed: {}", template_removed);
     //@TODO: update the stack and wait for completion
     //@TODO: download the tempalte of the target stack
@@ -349,4 +332,32 @@ async fn get_stack_status(
             "Failed to determine stack status",
         )))
     }
+}
+
+async fn wait_for_stack_update_completion(
+    client: &cloudformation::Client,
+    stack_name: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut stack_status = get_stack_status(&client, stack_name).await?;
+
+    while let Some(status) = stack_status.clone() {
+        if status == cloudformation::model::StackStatus::UpdateInProgress
+            || status == cloudformation::model::StackStatus::UpdateCompleteCleanupInProgress
+        {
+            print!(".");
+            std::io::stdout().flush()?;
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            stack_status = get_stack_status(&client, stack_name).await?;
+        } else {
+            if status != cloudformation::model::StackStatus::UpdateComplete {
+                return Err(
+                    format!("Stack update failed {}", stack_status.unwrap().as_str()).into(),
+                );
+            }
+            break;
+        }
+    }
+
+    println!(" {}", stack_status.unwrap().as_str());
+    Ok(())
 }
