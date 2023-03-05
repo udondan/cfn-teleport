@@ -1,6 +1,7 @@
 use aws_sdk_cloudformation as cloudformation;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, MultiSelect, Select};
 use std::error::Error;
+use uuid::Uuid;
 mod supported_resource_types;
 use std::collections::HashMap;
 use std::io;
@@ -399,25 +400,29 @@ async fn create_stack_changeset(
             cloudformation::model::ResourceToImport::builder()
                 .resource_type(resource_type.to_string())
                 .logical_resource_id(logical_id.to_string())
-                .set_resource_identifier(
-                    'BucketName',
-                    physical_id.to_string()
-                )
+                .set_resource_identifier(Some(
+                    // @TODO: we need to support more than just BucketName
+                    vec![("BucketName".to_string(), physical_id.to_string())]
+                        .into_iter()
+                        .collect(),
+                ))
                 .build()
         })
-        .collect();
+        .collect::<Vec<_>>();
+
+    let change_set_name = format!("{}-{}", stack_name, Uuid::new_v4());
 
     match client
         .create_change_set()
         .stack_name(stack_name)
-        .change_set_name("stack-update")
+        .change_set_name(change_set_name)
         .template_body(serde_json::to_string(&template).unwrap())
         .change_set_type(cloudformation::model::ChangeSetType::Import)
-        .set_resources_to_import(resources)
+        .set_resources_to_import(resources.into())
         .send()
         .await
     {
-        Ok(_output) => Ok(()),
+        Ok(_) => Ok(()),
         Err(err) => Err(err.into()),
     }
 }
