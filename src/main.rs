@@ -392,10 +392,10 @@ async fn wait_for_stack_update_completion(
     Ok(())
 }
 
-async fn get_template_summary(
+async fn get_resource_identifier_mapping(
     client: &cloudformation::Client,
     template_body: &str,
-) -> Result<HashMap<&&[std::string::String], &&[std::string::String]>, cloudformation::Error> {
+) -> Result<HashMap<String, String>, cloudformation::Error> {
     match client
         .get_template_summary()
         .template_body(template_body)
@@ -406,16 +406,19 @@ async fn get_template_summary(
             let mut map = HashMap::new();
             for item in output.resource_identifier_summaries().iter() {
                 item.iter().for_each(|item| {
-                    println!("{:?}", item);
-                    item.logical_resource_ids().iter().for_each(|id| {
-                        item.resource_identifiers().iter().for_each(|name| {
-                            map.insert(id, name);
+                    item.logical_resource_ids()
+                        .unwrap()
+                        .iter()
+                        .for_each(|logical_id| {
+                            item.resource_identifiers()
+                                .unwrap()
+                                .iter()
+                                .for_each(|resource_id| {
+                                    map.insert(logical_id.to_string(), resource_id.to_string());
+                                });
                         });
-                    });
                 });
             }
-
-            println!("{:?}", map);
             Ok(map)
         }
         Err(err) => Err(err.into()),
@@ -429,25 +432,20 @@ async fn create_changeset(
     resources_to_import: Vec<&cloudformation::model::StackResourceSummary>,
 ) -> Result<std::string::String, cloudformation::Error> {
     let template_string = serde_json::to_string(&template).unwrap();
-    let info = get_template_summary(&client, &template_string).await?;
-
-    //println!("{:?} resources in stack", info);
-
-    let sum = info.resource_identifier_summaries().unwrap_or_default();
-    println!("{:?} resources in stack", sum);
+    let resource_identifiers = get_resource_identifier_mapping(&client, &template_string).await?;
     let resources = resources_to_import
         .iter()
         .map(|resource| {
             let resource_type = resource.resource_type().unwrap_or_default();
             let logical_id = resource.logical_resource_id().unwrap_or_default();
             let physical_id = resource.physical_resource_id().unwrap_or_default();
+            let resouce_identifier = resource_identifiers.get(logical_id).unwrap();
 
             cloudformation::model::ResourceToImport::builder()
                 .resource_type(resource_type.to_string())
                 .logical_resource_id(logical_id.to_string())
                 .set_resource_identifier(Some(
-                    // @TODO: we need to support more than just BucketName
-                    vec![("BucketName".to_string(), physical_id.to_string())]
+                    vec![(resouce_identifier.to_string(), physical_id.to_string())]
                         .into_iter()
                         .collect(),
                 ))
