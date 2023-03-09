@@ -392,12 +392,49 @@ async fn wait_for_stack_update_completion(
     Ok(())
 }
 
+async fn get_template_summary(
+    client: &cloudformation::Client,
+    template_body: &str,
+) -> Result<HashMap<&&[std::string::String], &&[std::string::String]>, cloudformation::Error> {
+    match client
+        .get_template_summary()
+        .template_body(template_body)
+        .send()
+        .await
+    {
+        Ok(output) => {
+            let mut map = HashMap::new();
+            for item in output.resource_identifier_summaries().iter() {
+                item.iter().for_each(|item| {
+                    println!("{:?}", item);
+                    item.logical_resource_ids().iter().for_each(|id| {
+                        item.resource_identifiers().iter().for_each(|name| {
+                            map.insert(id, name);
+                        });
+                    });
+                });
+            }
+
+            println!("{:?}", map);
+            Ok(map)
+        }
+        Err(err) => Err(err.into()),
+    }
+}
+
 async fn create_changeset(
     client: &cloudformation::Client,
     stack_name: &str,
     template: serde_json::Value,
     resources_to_import: Vec<&cloudformation::model::StackResourceSummary>,
 ) -> Result<std::string::String, cloudformation::Error> {
+    let template_string = serde_json::to_string(&template).unwrap();
+    let info = get_template_summary(&client, &template_string).await?;
+
+    //println!("{:?} resources in stack", info);
+
+    let sum = info.resource_identifier_summaries().unwrap_or_default();
+    println!("{:?} resources in stack", sum);
     let resources = resources_to_import
         .iter()
         .map(|resource| {
@@ -424,7 +461,7 @@ async fn create_changeset(
         .create_change_set()
         .stack_name(stack_name)
         .change_set_name(change_set_name.clone())
-        .template_body(serde_json::to_string(&template).unwrap())
+        .template_body(template_string)
         .change_set_type(cloudformation::model::ChangeSetType::Import)
         .set_resources_to_import(resources.into())
         .send()
