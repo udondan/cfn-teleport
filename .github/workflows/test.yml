@@ -16,7 +16,9 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.2.1
         with:
-          shared-key: shared
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
       - name: Build
         run: cargo build --verbose
       - name: Run tests
