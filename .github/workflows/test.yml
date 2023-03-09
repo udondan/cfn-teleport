@@ -16,7 +16,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2.2.1
         with:
-          sharedKey: ci
+          shared-key: ci
       - name: Build
         run: cargo build --verbose
       - name: Run tests
