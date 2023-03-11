@@ -1,9 +1,12 @@
 ---
 name: Check PR title
 on:
-  pull_request:
-    branches:
-      - main
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
 
 jobs:
   lint:
