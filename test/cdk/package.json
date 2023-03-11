@@ -1,0 +1,19 @@
+{
+  "name": "test",
+  "version": "0.1.0",
+  "bin": {
+    "ami-lifecycle": "bin/app.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "cdk": "cdk"
+  },
+  "dependencies": {
+    "@types/aws-lambda": "^8.10.92",
+    "@types/node": "17.0.18",
+    "ts-node": "^10.5.0",
+    "typescript": "^4.5.5",
+    "aws-cdk-lib": "2.67.0",
+    "constructs": "^10.0.0"
+  }
+}
