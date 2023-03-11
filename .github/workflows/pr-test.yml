@@ -41,10 +41,10 @@ jobs:
           rustc --version
           [ "${{ matrix.rust-toolchain }}" == 'stable' ] && cargo clippy --version || :
 
-      - name: Restore target cache
+      - name: Dependency cache
         uses: actions/cache@v3
         with:
-          path: ~/target
+          path: target
           key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-
@@ -63,9 +63,3 @@ jobs:
       - name: Build
         run: |
           cargo build --release
-
-      - name: Save target cache
-        uses: actions/cache@v3
-        with:
-          path: ~/target
-          key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
