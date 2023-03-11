@@ -144,13 +144,13 @@ async fn get_stacks(
         .collect::<Vec<_>>();
 
     // Sort the stacks by name
-    let mut sorted_stacks = stacks.clone();
+    let mut sorted_stacks = stacks;
     sorted_stacks.sort_by_key(|stack| stack.stack_name().unwrap_or_default().to_string());
 
     Ok(sorted_stacks)
 }
 
-fn select_stack<'a>(prompt: &str, items: &'a Vec<&str>) -> Result<&'a str, Box<dyn Error>> {
+fn select_stack<'a>(prompt: &str, items: &'a [&str]) -> Result<&'a str, Box<dyn Error>> {
     let selection = Select::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .items(items)
@@ -186,7 +186,7 @@ async fn get_resources(
         .collect::<Vec<_>>();
 
     // Sort the resources by type, logical ID, and name
-    let mut sorted_resources = filtered_resources.clone();
+    let mut sorted_resources = filtered_resources;
     sorted_resources.sort_by_key(|resource| {
         (
             resource.resource_type().unwrap_or_default().to_string(),
@@ -206,7 +206,7 @@ async fn get_resources(
 
 async fn select_resources<'a>(
     prompt: &str,
-    resources: &'a Vec<&aws_sdk_cloudformation::model::StackResourceSummary>,
+    resources: &'a [&aws_sdk_cloudformation::model::StackResourceSummary],
 ) -> Result<Vec<&'a aws_sdk_cloudformation::model::StackResourceSummary>, Box<dyn Error>> {
     let items = format_resources(resources).await?;
     let selection = MultiSelect::with_theme(&ColorfulTheme::default())
@@ -242,12 +242,12 @@ async fn get_template(
 ) -> Result<serde_json::Value, Box<dyn Error>> {
     let resp = client.get_template().stack_name(stack_name).send().await?;
     let template = resp.template_body().ok_or("No template found")?;
-    let parsed_template = serde_json::from_str(&template)?;
+    let parsed_template = serde_json::from_str(template)?;
     Ok(parsed_template)
 }
 
 async fn format_resources(
-    resources: &Vec<&cloudformation::model::StackResourceSummary>,
+    resources: &[&cloudformation::model::StackResourceSummary],
 ) -> Result<Vec<String>, io::Error> {
     let mut max_lengths = [0; 3];
     let mut formatted_resources = Vec::new();
@@ -365,7 +365,7 @@ async fn wait_for_stack_update_completion(
     client: &cloudformation::Client,
     stack_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut stack_status = get_stack_status(&client, stack_name).await?;
+    let mut stack_status = get_stack_status(client, stack_name).await?;
 
     while let Some(status) = stack_status.clone() {
         if status == cloudformation::model::StackStatus::UpdateInProgress
@@ -375,7 +375,7 @@ async fn wait_for_stack_update_completion(
             print!(".");
             std::io::stdout().flush()?;
             std::thread::sleep(std::time::Duration::from_secs(1));
-            stack_status = get_stack_status(&client, stack_name).await?;
+            stack_status = get_stack_status(client, stack_name).await?;
         } else {
             if status != cloudformation::model::StackStatus::UpdateComplete
                 && status != cloudformation::model::StackStatus::ImportComplete
@@ -432,7 +432,7 @@ async fn create_changeset(
     resources_to_import: Vec<&cloudformation::model::StackResourceSummary>,
 ) -> Result<std::string::String, cloudformation::Error> {
     let template_string = serde_json::to_string(&template).unwrap();
-    let resource_identifiers = get_resource_identifier_mapping(&client, &template_string).await?;
+    let resource_identifiers = get_resource_identifier_mapping(client, &template_string).await?;
     let resources = resources_to_import
         .iter()
         .map(|resource| {
@@ -503,7 +503,7 @@ async fn get_changeset_status(
         Err(err) => return Err(Box::new(err)),
     };
 
-    Ok(change_set.status.clone())
+    Ok(change_set.status)
 }
 
 async fn wait_for_changeset_created(
@@ -511,7 +511,7 @@ async fn wait_for_changeset_created(
     stack_name: &str,
     changeset_name: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut changeset_status = get_changeset_status(&client, stack_name, changeset_name).await?;
+    let mut changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
 
     while let Some(status) = changeset_status.clone() {
         if status == cloudformation::model::ChangeSetStatus::CreateInProgress
@@ -520,7 +520,7 @@ async fn wait_for_changeset_created(
             print!(".");
             std::io::stdout().flush()?;
             std::thread::sleep(std::time::Duration::from_secs(1));
-            changeset_status = get_changeset_status(&client, stack_name, changeset_name).await?;
+            changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
         } else {
             if status != cloudformation::model::ChangeSetStatus::CreateComplete {
                 return Err(format!(

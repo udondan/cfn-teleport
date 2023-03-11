@@ -1,0 +1,65 @@
+---
+name: Test
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust-toolchain:
+          - stable
+          - nightly
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Update local toolchain
+        run: |
+          rustup update
+
+      - name: Install nightly
+        if: matrix.rust-toolchain == 'nightly'
+        run: |
+          rustup install nightly
+          rustup default ${{ matrix.rust-toolchain }}
+
+      - name: Install clippy
+        if: matrix.rust-toolchain == 'stable'
+        run: |
+          rustup component add clippy
+
+      - name: Toolchain info
+        run: |
+          cargo --version --verbose
+          rustc --version
+          [ "${{ matrix.rust-toolchain }}" == 'stable' ] && cargo clippy --version || :
+
+      - name: Dependency cache
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-
+
+      - name: Lint
+        if: matrix.rust-toolchain == 'stable'
+        run: |
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+
+      - name: Test
+        run: |
+          cargo check
+          cargo test --all
+
+      - name: Build
+        run: |
+          cargo build --release
