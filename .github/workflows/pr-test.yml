@@ -1,0 +1,32 @@
+---
+name: Rust CI
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        rust-toolchain:
+          - stable
+          - nightly
+    steps:
+      - name: Setup Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          rustup default ${{ matrix.rust-toolchain }}
+          rustup component add clippy
+
+      - name: Build project
+        run: |
+          cargo build --verbose --all
+
+      - name: Lint project
+        run: |
+          cargo clippy --verbose --all-targets
+
+      - name: Test project
+        run: |
+          cargo test --verbose --all-targets -- --nocapture
