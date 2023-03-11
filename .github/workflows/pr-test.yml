@@ -23,17 +23,26 @@ jobs:
       - name: Update local toolchain
         run: |
           rustup update
+
+      - name: Install nightly
+        if: matrix.rust-toolchain == 'nightly'
+        run: |
           rustup install nightly
           rustup default ${{ matrix.rust-toolchain }}
+
+      - name: Install clippy
+        if: matrix.rust-toolchain == 'stable'
+        run: |
           rustup component add clippy
 
       - name: Toolchain info
         run: |
           cargo --version --verbose
           rustc --version
-          cargo clippy --version
+          [ "${{ matrix.rust-toolchain }}" == 'stable' ] && cargo clippy --version || :
 
       - name: Lint
+        if: matrix.rust-toolchain == 'stable'
         run: |
           cargo fmt -- --check
           cargo clippy -- -D warnings
