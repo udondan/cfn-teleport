@@ -14,14 +14,17 @@ jobs:
           - stable
           - nightly
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
       - name: Setup Rust
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           rustup default ${{ matrix.rust-toolchain }}
           rustup component add clippy
-
-      - name: Debug
-        run: tree
 
       - name: Build project
         run: |
