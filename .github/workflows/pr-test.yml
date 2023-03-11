@@ -63,3 +63,12 @@ jobs:
       - name: Build
         run: |
           cargo build --release
+
+  report-status:
+    name: success
+    runs-on: ubuntu-latest
+    needs:
+      - test
+    steps:
+      - name: Report success
+        run: echo 'Success'
