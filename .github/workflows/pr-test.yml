@@ -24,8 +24,8 @@ jobs:
         run: |
           rustup update
           rustup component add clippy
-          rustup install nightly
           rustup default ${{ matrix.rust-toolchain }}
+          rustup install nightly
 
       - name: Toolchain info
         run: |
