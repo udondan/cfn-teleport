@@ -1,5 +1,5 @@
 ---
-name: Rust CI
+name: Test
 on:
   pull_request:
     branches:
@@ -20,20 +20,29 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Setup Rust
+      - name: Update local toolchain
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          rustup default ${{ matrix.rust-toolchain }}
+          rustup update
           rustup component add clippy
+          rustup install nightly
+          rustup default ${{ matrix.rust-toolchain }}
 
-      - name: Build project
+      - name: Toolchain info
         run: |
-          cargo build --verbose --all
+          cargo --version --verbose
+          rustc --version
+          cargo clippy --version
 
-      - name: Lint project
+      - name: Lint
         run: |
-          cargo clippy --verbose --all-targets
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
 
-      - name: Test project
+      - name: Test
         run: |
-          cargo test --verbose --all-targets -- --nocapture
+          cargo check
+          cargo test --all
+
+      - name: Build
+        run: |
+          cargo build --release
