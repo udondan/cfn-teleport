@@ -1,11 +1,18 @@
 pre_bump_hooks = [
     "echo {{version}}",
+#    "cargo test",
+#    "cargo clippy",
+#    "cargo build --release",
+#    "cargo fmt --all",
+#    "cargo bump {{version}}",
 ]
 
 post_bump_hooks = [
     "git push",
     "git push origin {{version}}",
 ]
+
+tag_prefix = "v"
 
 [changelog]
 path = "CHANGELOG.md"
