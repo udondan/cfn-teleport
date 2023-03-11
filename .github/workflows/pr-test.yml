@@ -20,7 +20,7 @@ jobs:
           rustup default ${{ matrix.rust-toolchain }}
           rustup component add clippy
 
-      - name: Debug:
+      - name: Debug
         run: tree
 
       - name: Build project
