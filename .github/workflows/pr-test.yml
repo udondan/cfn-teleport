@@ -88,11 +88,6 @@ jobs:
         with:
           node-version: 16
 
-      - name: Install CDK dependencies
-        if: matrix.rust-toolchain == 'stable'
-        run: npm ci
-        working-directory: test/cdk
-
       - name: Prepare test stacks
         if: matrix.rust-toolchain == 'stable'
         run: |
