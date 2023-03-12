@@ -12,7 +12,6 @@ keywords = ["aws", "cfn", "CloudFormation", "migration", "resources"]
 categories = ["command-line-utilities"]
 publish = false
 
-
 [dependencies]
 aws-config = "0.54.1"
 aws-sdk-cloudformation = "0.24.0"
