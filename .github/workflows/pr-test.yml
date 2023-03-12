@@ -15,9 +15,9 @@ jobs:
         with:
           filters: |
             src:
-              - src/**
-              - Cargo.toml
-              - Cargo.lock
+              - "src/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
 
   test:
     needs: changes
