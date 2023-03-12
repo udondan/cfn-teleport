@@ -6,7 +6,22 @@ on:
       - main
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dorny/paths-filter@v2
+        id: filter
+        with:
+          filters: |
+            src:
+              - src/**
+              - Cargo.toml
+              - Cargo.lock
+
   test:
+    needs: changes
+    if: needs.changes.outputs.src == "true"
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -25,13 +40,13 @@ jobs:
           rustup update
 
       - name: Install nightly
-        if: matrix.rust-toolchain == 'nightly'
+        if: matrix.rust-toolchain == "nightly"
         run: |
           rustup install nightly
           rustup default ${{ matrix.rust-toolchain }}
 
       - name: Install clippy
-        if: matrix.rust-toolchain == 'stable'
+        if: matrix.rust-toolchain == "stable"
         run: |
           rustup component add clippy
 
@@ -39,18 +54,18 @@ jobs:
         run: |
           cargo --version --verbose
           rustc --version
-          [ "${{ matrix.rust-toolchain }}" == 'stable' ] && cargo clippy --version || :
+          [ "${{ matrix.rust-toolchain }}" == "stable" ] && cargo clippy --version || :
 
       - name: Dependency cache
         uses: actions/cache@v3
         with:
           path: target
-          key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles("**/Cargo.lock") }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-
 
       - name: Lint
-        if: matrix.rust-toolchain == 'stable'
+        if: matrix.rust-toolchain == "stable"
         run: |
           cargo fmt -- --check
           cargo clippy -- -D warnings
@@ -66,9 +81,10 @@ jobs:
 
   report-status:
     name: success
+    if: ${{ ! failure() }}
     runs-on: ubuntu-latest
     needs:
       - test
     steps:
       - name: Report success
-        run: echo 'Success'
+        run: echo "Success"
