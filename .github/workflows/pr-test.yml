@@ -9,7 +9,7 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
-      diff-true: ${{ steps.changes.outputs.src }}
+      changes: ${{ steps.changes.outputs.src }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
