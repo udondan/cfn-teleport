@@ -104,7 +104,14 @@ jobs:
         run: |
           make test
 
-        #@TODO: run the test
+      - name: Run test migrations
+        if: matrix.rust-toolchain == 'stable'
+        run: |
+          cfn-teleport --source A1 --target A2 --resource Bucket21D68F7E8 --resource Bucket182C536A1
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Delete test stacks
         if: matrix.rust-toolchain == 'stable'
