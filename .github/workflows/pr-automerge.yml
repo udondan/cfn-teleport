@@ -1,35 +1,30 @@
 ---
-name: Automerge
-
-concurrency: automerge
+name: Dependabot Automerge
 
 on:
   pull_request_target:
     types: [labeled, synchronize]
 
+concurrency: automerge
+
+permissions:
+  contents: write
+  pull-requests: write
+
 jobs:
-  automerge_dependabot:
-    name: Automerge Dependabot
+  dependabot:
     runs-on: ubuntu-latest
     if: |
-      github.actor == 'dependabot[bot]' &&
-      contains(github.event.pull_request.labels.*.name, 'dependencies')
+      github.actor == "dependabot[bot]" &&
+      contains(github.event.pull_request.labels.*.name, "dependencies")
     steps:
-      - name: Wait for tests to succeed
-        uses: fountainhead/action-wait-for-check@v1.1.0
-        id: wait-for-ci
+      - name: Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v1.3.0
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          checkName: success
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          timeoutSeconds: 1200
-          intervalSeconds: 30
-
-      - name: Automerge
-        uses: pascalgn/automerge-action@v0.15.3
-        if: steps.wait-for-ci.outputs.conclusion == 'success'
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+      - name: Enable auto-merge for Dependabot PRs
+        run: gh pr merge --auto --merge "$PR_URL"
         env:
-          MERGE_LABELS: dependencies
-          UPDATE_LABELS: dependencies
-          GITHUB_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
-          MERGE_DELETE_BRANCH: true
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
