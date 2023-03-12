@@ -82,18 +82,24 @@ jobs:
           cargo install --path .
 
       - uses: actions/setup-node@v3
+        if: matrix.rust-toolchain == 'stable'
         with:
           node-version: 16
 
       - name: Install CDK dependencies
+        if: matrix.rust-toolchain == 'stable'
         run: npm ci
         working-directory: test/cdk
 
       - name: Prepare test stacks
+        if: matrix.rust-toolchain == 'stable'
         run: |
           make test
 
-      - name: Prepare test stacks
+        #@TODO: run the test
+
+      - name: Delete test stacks
+        if: matrix.rust-toolchain == 'stable'
         run: |
           make test-reset
 
