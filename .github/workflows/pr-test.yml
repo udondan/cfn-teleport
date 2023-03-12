@@ -61,7 +61,9 @@ jobs:
       - name: Dependency cache
         uses: actions/cache@v3
         with:
-          path: target
+          path:
+            - target
+            - test/cdk/node_modules
           key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-
