@@ -23,4 +23,4 @@ clean:
 	@rm -rf node_modules package-lock.json
 
 install:
-	@npm ci
+	@@npm ci --cache .npm  --logs-dir .npm/$${CI_JOB_ID} --prefer-offline
