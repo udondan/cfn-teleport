@@ -5,22 +5,22 @@ build:
 	@npm run build
 
 diff: build
-	@cdk diff
+	@npx cdk diff
 
 synth: build
-	@cdk synth
+	@npx cdk synth
 
 deploy: build
-	@cdk deploy --require-approval never "*"
+	@npx cdk deploy --require-approval never "*"
 
 DESTROY:
-	@cdk destroy --force "*"
+	@npx cdk destroy --force "*"
 
 info:
-	@cdk doctor
+	@npx cdk doctor
 
 clean:
 	@rm -rf node_modules package-lock.json
 
 install:
-	@npm i
+	@@npm ci --cache .npm  --logs-dir .npm/$${CI_JOB_ID} --prefer-offline

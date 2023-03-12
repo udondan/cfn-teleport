@@ -1,14 +1,38 @@
 use aws_sdk_cloudformation as cloudformation;
+use clap::Parser;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, MultiSelect, Select};
 use std::error::Error;
+use std::process;
 use uuid::Uuid;
 mod supported_resource_types;
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Name of the source stack
+    #[arg(short, long)]
+    source: Option<String>,
+
+    /// Name of the target stack
+    #[arg(short, long)]
+    target: Option<String>,
+
+    /// Logical ID of a resource from the source stack - optionally with a new ID for the target stack
+    #[arg(short, long, value_name = "ID[:NEW_ID]")]
+    resource: Option<Vec<String>>,
+
+    /// Automatically confirm all prompts
+    #[arg(short, long)]
+    yes: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let args = Args::parse();
+
     let config = aws_config::load_from_env().await;
     let client = cloudformation::Client::new(&config);
     let stacks = get_stacks(&client).await?;
@@ -18,44 +42,98 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(|s| s.stack_name().unwrap_or_default())
         .collect();
 
-    let source_stack = select_stack("Select source stack", &stack_names)?;
+    let source_stack = args.source.unwrap_or_else(|| {
+        select_stack("Select source stack", &stack_names)
+            .unwrap()
+            .to_string()
+    });
 
-    let resources = get_resources(&client, source_stack).await?;
+    let resources = get_resources(&client, &source_stack).await?;
 
     if resources.is_empty() {
         return Err(format!("No resources found in stack '{}'", source_stack).into());
     }
 
-    let target_stack = select_stack("Select target stack", &stack_names)?;
+    let target_stack = args.target.unwrap_or_else(|| {
+        select_stack("Select target stack", &stack_names)
+            .unwrap()
+            .to_string()
+    });
 
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
-    let selected_resources = select_resources("Select resources to copy", resource_refs).await?;
+    let selected_resources = match args.resource.clone() {
+        Some(resource) => {
+            let source_ids = resource
+                .iter()
+                .map(|r| split_ids(r.clone()).0)
+                .collect::<Vec<_>>();
+
+            let non_existing_ids: Vec<String> = source_ids
+                .iter()
+                .filter(|id| {
+                    !resource_refs
+                        .iter()
+                        .any(|r| r.logical_resource_id().unwrap_or_default() == **id)
+                })
+                .map(|id| id.to_string())
+                .collect();
+
+            if !non_existing_ids.is_empty() {
+                eprintln!(
+                    "ERROR: The following resources do not exist on stack '{}':\n - {}",
+                    source_stack,
+                    non_existing_ids.to_owned().join("\n - "),
+                );
+                process::exit(1);
+            }
+            filter_resources(resource_refs, &source_ids).await?
+        }
+        None => select_resources("Select resources to copy", resource_refs).await?,
+    };
 
     if selected_resources.is_empty() {
         return Err("No resources have been selected".into());
     }
 
+    //let mut new_logical_ids_map: HashMap<&String, String> = HashMap::new();
     let mut new_logical_ids_map = HashMap::new();
 
-    for resource in selected_resources.clone() {
-        let old_logical_id = resource.logical_resource_id().unwrap_or_default();
-        let mut new_logical_id = String::new();
+    match args.resource.clone() {
+        None => {
+            for resource in selected_resources.clone() {
+                let old_logical_id = resource
+                    .logical_resource_id()
+                    .unwrap_or_default()
+                    .to_owned();
+                let mut new_logical_id = String::new();
 
-        println!(
-            "Provide a new logical ID for resource '{}', or leave blank to use the original ID:",
-            old_logical_id
-        );
-        io::stdin().read_line(&mut new_logical_id)?;
-        new_logical_id = new_logical_id.trim().to_string();
-        if new_logical_id.is_empty() {
-            new_logical_id = resource
-                .logical_resource_id()
-                .unwrap_or_default()
-                .to_string();
+                println!(
+                    "Provide a new logical ID for resource '{}', or leave blank to use the original ID:",
+                    old_logical_id
+                );
+                io::stdin().read_line(&mut new_logical_id)?;
+                new_logical_id = new_logical_id.trim().to_string();
+                if new_logical_id.is_empty() {
+                    new_logical_id = resource
+                        .logical_resource_id()
+                        .unwrap_or_default()
+                        .to_string();
+                }
+                new_logical_ids_map.insert(old_logical_id, new_logical_id);
+            }
         }
-        new_logical_ids_map.insert(old_logical_id, new_logical_id);
-    }
+        Some(resources) => {
+            for resource in resources {
+                let ids = split_ids(resource.clone());
+                let source_id = ids.0.clone();
+                let target_id = ids.1.clone();
+                new_logical_ids_map.insert(source_id, target_id);
+
+                //new_logical_ids_map.insert(&f, new_logical_id.to_owned());
+            }
+        }
+    };
 
     if source_stack == target_stack {
         let mut duplicate_ids = Vec::new();
@@ -89,9 +167,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("  {}", resource);
     }
 
-    user_confirm()?;
+    if !args.yes {
+        user_confirm()?;
+    }
 
-    let template_source = get_template(&client, source_stack).await?;
+    let template_source = get_template(&client, &source_stack).await?;
     let template_source_str = serde_json::to_string(&template_source)?;
 
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
@@ -103,32 +183,41 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if template_source_str != template_retained_str {
         //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
         print!("Retaining resources {}", resource_ids_to_remove.join(", "));
-        update_stack(&client, source_stack, template_retained).await?;
-        wait_for_stack_update_completion(&client, source_stack).await?;
+        update_stack(&client, &source_stack, template_retained).await?;
+        wait_for_stack_update_completion(&client, &source_stack).await?;
     }
 
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
     print!("Removing resources {}", resource_ids_to_remove.join(", "));
-    update_stack(&client, source_stack, template_removed).await?;
-    wait_for_stack_update_completion(&client, source_stack).await?;
+    update_stack(&client, &source_stack, template_removed).await?;
+    wait_for_stack_update_completion(&client, &source_stack).await?;
 
     let template_target = add_resources(
-        get_template(&client, target_stack).await?,
+        get_template(&client, &target_stack).await?,
         template_source.clone(),
         new_logical_ids_map,
     );
 
     let changeset_name =
-        create_changeset(&client, target_stack, template_target, selected_resources).await?;
+        create_changeset(&client, &target_stack, template_target, selected_resources).await?;
     print!("Creating changeset {}", changeset_name);
-    wait_for_changeset_created(&client, target_stack, &changeset_name).await?;
+    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
 
     print!("Executing changeset {}", changeset_name);
-    execute_changeset(&client, target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, target_stack).await?;
+    execute_changeset(&client, &target_stack, &changeset_name).await?;
+    wait_for_stack_update_completion(&client, &target_stack).await?;
 
     Ok(())
+}
+
+fn split_ids(id: String) -> (String, String) {
+    if id.contains(&":".to_string()) {
+        let parts: Vec<String> = id.split(':').map(String::from).collect();
+        (parts[0].clone(), parts[1].clone())
+    } else {
+        (id.clone(), id)
+    }
 }
 
 async fn get_stacks(
@@ -202,6 +291,23 @@ async fn get_resources(
     });
 
     Ok(sorted_resources)
+}
+
+async fn filter_resources<'a>(
+    resources: &'a [&aws_sdk_cloudformation::model::StackResourceSummary],
+    filter: &[String],
+) -> Result<Vec<&'a aws_sdk_cloudformation::model::StackResourceSummary>, Box<dyn Error>> {
+    let mut filtered_resources = Vec::new();
+
+    for resource in resources {
+        let logical_id = resource.logical_resource_id().unwrap_or_default();
+
+        if filter.contains(&logical_id.to_owned()) {
+            filtered_resources.push(resource.to_owned());
+        }
+    }
+
+    Ok(filtered_resources)
 }
 
 async fn select_resources<'a>(
@@ -282,11 +388,14 @@ async fn format_resources(
     Ok(formatted_resources)
 }
 
-fn retain_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) -> serde_json::Value {
+fn retain_resources(
+    mut template: serde_json::Value,
+    resource_ids: Vec<String>,
+) -> serde_json::Value {
     let resources = template["Resources"].as_object_mut().unwrap();
 
     for resource_id in resource_ids {
-        if let Some(resource) = resources.get_mut(resource_id) {
+        if let Some(resource) = resources.get_mut(&resource_id) {
             resource["DeletionPolicy"] = serde_json::Value::String("Retain".to_string());
         }
     }
@@ -294,11 +403,14 @@ fn retain_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) ->
     template
 }
 
-fn remove_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) -> serde_json::Value {
+fn remove_resources(
+    mut template: serde_json::Value,
+    resource_ids: Vec<String>,
+) -> serde_json::Value {
     let resources = template["Resources"].as_object_mut().unwrap();
 
     for resource_id in resource_ids {
-        resources.remove(resource_id);
+        resources.remove(&resource_id);
     }
 
     template
@@ -307,13 +419,13 @@ fn remove_resources(mut template: serde_json::Value, resource_ids: Vec<&str>) ->
 fn add_resources(
     mut target_template: serde_json::Value,
     source_template: serde_json::Value,
-    resource_id_map: HashMap<&str, String>,
+    resource_id_map: HashMap<String, String>,
 ) -> serde_json::Value {
     let target_resources = target_template["Resources"].as_object_mut().unwrap();
     let source_resources = source_template["Resources"].as_object().unwrap();
 
     for (resource_id, new_resource_id) in resource_id_map {
-        if let Some(resource) = source_resources.get(resource_id) {
+        if let Some(resource) = source_resources.get(&resource_id) {
             target_resources.insert(new_resource_id, resource.clone());
         }
     }

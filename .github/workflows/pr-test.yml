@@ -79,7 +79,51 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --release
+          cargo install --path .
+
+      - uses: actions/setup-node@v3
+        if: matrix.rust-toolchain == 'stable'
+        with:
+          node-version: 16
+
+      - name: npm dependency cache
+        if: matrix.rust-toolchain == 'stable'
+        uses: actions/cache@v3
+        with:
+          path: test/cdk/.npm
+          key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.rust-toolchain }}-node-
+
+      - name: Prepare test stacks
+        if: matrix.rust-toolchain == 'stable'
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          make test
+
+      - name: Run test migrations
+        if: matrix.rust-toolchain == 'stable'
+        run: |
+          echo "######### Testing migration from A1 to A2 #########"
+          cfn-teleport --source A1 --target A2 --resource Bucket21D68F7E8 --resource Bucket182C536A1 --yes
+          echo "######### Testing migration from A2 to A1 #########"
+          cfn-teleport --source A2 --target A1 --resource Bucket21D68F7E8 --resource Bucket182C536A1 --yes
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Delete test stacks
+        if: matrix.rust-toolchain == 'stable'
+        run: |
+          make test-reset
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   report-status:
     name: success
