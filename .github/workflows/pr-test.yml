@@ -21,7 +21,7 @@ jobs:
 
   test:
     needs: changes
-    if: needs.changes.outputs.src == "true"
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,13 +40,13 @@ jobs:
           rustup update
 
       - name: Install nightly
-        if: matrix.rust-toolchain == "nightly"
+        if: matrix.rust-toolchain == 'nightly'
         run: |
           rustup install nightly
           rustup default ${{ matrix.rust-toolchain }}
 
       - name: Install clippy
-        if: matrix.rust-toolchain == "stable"
+        if: matrix.rust-toolchain == 'stable'
         run: |
           rustup component add clippy
 
@@ -54,7 +54,7 @@ jobs:
         run: |
           cargo --version --verbose
           rustc --version
-          [ "${{ matrix.rust-toolchain }}" == "stable" ] && cargo clippy --version || :
+          [ "${{ matrix.rust-toolchain }}" == 'stable' ] && cargo clippy --version || :
 
       - name: Dependency cache
         uses: actions/cache@v3
@@ -65,7 +65,7 @@ jobs:
             ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-
 
       - name: Lint
-        if: matrix.rust-toolchain == "stable"
+        if: matrix.rust-toolchain == 'stable'
         run: |
           cargo fmt -- --check
           cargo clippy -- -D warnings
@@ -87,4 +87,4 @@ jobs:
       - test
     steps:
       - name: Report success
-        run: echo "Success"
+        run: echo 'Success'
