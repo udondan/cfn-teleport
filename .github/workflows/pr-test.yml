@@ -8,6 +8,8 @@ on:
 jobs:
   changes:
     runs-on: ubuntu-latest
+    outputs:
+      diff-true: ${{ steps.changes.outputs.src }}
     steps:
       - uses: actions/checkout@v3
       - uses: dorny/paths-filter@v2
@@ -21,7 +23,7 @@ jobs:
 
   test:
     needs: changes
-    if: steps.changes.outputs.src == 'true'
+    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
