@@ -79,7 +79,23 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --release
+          cargo install --path .
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Install CDK dependencies
+        run: npm ci
+        working-directory: test/cdk
+
+      - name: Prepare test stacks
+        run: |
+          make test
+
+      - name: Prepare test stacks
+        run: |
+          make test-reset
 
   report-status:
     name: success
