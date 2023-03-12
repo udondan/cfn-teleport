@@ -147,7 +147,7 @@ async fn get_stacks(
     let mut sorted_stacks = stacks;
     sorted_stacks.sort_by_key(|stack| stack.stack_name().unwrap_or_default().to_string());
 
-    Ok(sorted_stacksx)
+    Ok(sorted_stacks)
 }
 
 fn select_stack<'a>(prompt: &str, items: &'a [&str]) -> Result<&'a str, Box<dyn Error>> {
