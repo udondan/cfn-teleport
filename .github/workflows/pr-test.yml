@@ -61,9 +61,7 @@ jobs:
       - name: Dependency cache
         uses: actions/cache@v3
         with:
-          path:
-            - target
-            - test/cdk/node_modules
+          path: target
           key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-
@@ -87,6 +85,15 @@ jobs:
         if: matrix.rust-toolchain == 'stable'
         with:
           node-version: 16
+
+      - name: npm dependency cache
+        if: matrix.rust-toolchain == 'stable'
+        uses: actions/cache@v3
+        with:
+          path: test/cdk/node_modules
+          key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.rust-toolchain }}-node-
 
       - name: Prepare test stacks
         if: matrix.rust-toolchain == 'stable'
