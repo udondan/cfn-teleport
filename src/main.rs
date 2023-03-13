@@ -8,7 +8,7 @@ mod supported_resource_types;
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
-
+// bump
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
