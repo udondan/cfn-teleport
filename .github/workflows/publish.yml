@@ -1,4 +1,8 @@
 ---
+# Based on https://github.com/nicolas-van/rust-cross-compile-example - Thanks!
+
+name: Publish
+
 on:
   release:
     types:
@@ -29,20 +33,32 @@ jobs:
         include:
           - TARGET: x86_64-unknown-linux-gnu # tested in a debian container on a mac
             OS: ubuntu-latest
+
+          # disabled, because ring package does not support musl
           - TARGET: x86_64-unknown-linux-musl # test in an alpine container on a mac
             OS: ubuntu-latest
+
           - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
             OS: ubuntu-latest
-          - TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
-            OS: ubuntu-latest
+
+          # disabled, because ring package does not support musl
+          #- TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
+          #  OS: ubuntu-latest
+
           - TARGET: armv7-unknown-linux-gnueabihf # raspberry pi 2-3-4, not tested
             OS: ubuntu-latest
-          - TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4, not tested
-            OS: ubuntu-latest
+
+          # disabled, because ring package does not support musl
+          #- TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4, not tested
+          #  OS: ubuntu-latest
+
           - TARGET: arm-unknown-linux-gnueabihf # raspberry pi 0-1, not tested
             OS: ubuntu-latest
-          - TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1, not tested
-            OS: ubuntu-latest
+
+          # disabled, because ring package does not support musl
+          #- TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1, not tested
+          #  OS: ubuntu-latest
+
           - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
             OS: macos-latest
           - TARGET: x86_64-pc-windows-msvc # tested on a windows machine
@@ -94,6 +110,10 @@ jobs:
             sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
           fi
 
+          if [[ $TARGET =~ ^.*-musl(eabihf?)$ ]]; then
+            sudo apt-get install musl-tools
+          fi
+
           # some additional configuration for cross-compilation on linux
           cat >>~/.cargo/config <<EOF
           [target.aarch64-unknown-linux-gnu]
@@ -137,7 +157,7 @@ jobs:
           tar -czf ./artifacts/$NAME-$TARGET-$TAG.tar.gz $EXEC
 
       - name: Archive artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: result
           path: |
