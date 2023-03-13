@@ -106,15 +106,30 @@ jobs:
 
       - name: Run test migrations
         if: matrix.rust-toolchain == 'stable'
+        working-directory: test/cdk
         run: |
           echo "######### Testing migration from A1 to A2 #########"
-          cfn-teleport --source A1 --target A2 --resource Bucket21D68F7E8 --resource Bucket182C536A1 --yes
+          cfn-teleport --source A1 --target A2 --resource "${BUCKET1}" --yes
+          if npx cdk diff --fail; then
+            echo "Migration failed, cdk diff did not show changes"
+            exit 1
+          fi
+
+          cfn-teleport --source A1 --target A2 --resource "${BUCKET2}" --yes
+
           echo "######### Testing migration from A2 to A1 #########"
-          cfn-teleport --source A2 --target A1 --resource Bucket21D68F7E8 --resource Bucket182C536A1 --yes
+          cfn-teleport --source A2 --target A1 --resource "${BUCKET1}" --resource "${BUCKET2}" --yes
+
+          if ! npx cdk diff --fail; then
+            echo "Migration failed, cdk diff did show changes"
+            exit 1
+          fi
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          BUCKET1: Bucket182C536A1
+          BUCKET2: Bucket21D68F7E8
 
       - name: Delete test stacks
         if: matrix.rust-toolchain == 'stable'
