@@ -14,5 +14,5 @@ updates:
   - package-ecosystem: npm
     directory: /test/cdk
     schedule:
-      interval: daily
+      interval: weekly
     rebase-strategy: disabled
