@@ -69,11 +69,12 @@ jobs:
           - TARGET: x86_64-pc-windows-gnu
             OS: windows-latest
 
-          - TARGET: i686-pc-windows-gnu
+          - TARGET: i686-pc-windows-msvc
             OS: windows-latest
 
     #
     # TODO:
+    # i686-pc-windows-gnu
     # i686-pc-windows-msvc	32-bit MSVC (Windows 7+) 2
     # i686-unknown-linux-gnu	32-bit Linux (kernel 3.2+, glibc 2.17+)
 
