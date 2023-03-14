@@ -8,9 +8,11 @@ on:
     types:
       - published
   workflow_dispatch:
-  pull_request: # for testing
+  pull_request: # for testing, when we change the workflow
     branches:
       - main
+    files:
+      - .github/workflows/publish.yml
 
 env:
   CARGO_TERM_COLOR: always
@@ -143,7 +145,11 @@ jobs:
               EXEC=$NAME
           fi
           mv "./target/$TARGET/release/${EXEC}" "./${EXEC}"
-          tar -czf "./artifacts/${NAME}-${TARGET}-${GITHUB_REF_NAME}.tar.gz" "${EXEC}"
+          VERSION="${GITHUB_REF_NAME}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="TEST"
+          fi
+          tar -czf "./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz" "${EXEC}"
 
       - name: Archive artifact
         uses: actions/upload-artifact@v3
@@ -152,7 +158,8 @@ jobs:
           path: |
             ./artifacts
 
-      - name: Upload release artifacts
+      - name: Attach artifact to release
+        if: github.event_name != 'pull_request'
         run: |
           gh release upload "${GITHUB_REF_NAME}" "./artifacts/${NAME}-${TARGET}-${GITHUB_REF_NAME}.tar.gz"
         env:
