@@ -15,7 +15,7 @@ publish = false
 [dependencies]
 aws-config = "0.54.1"
 aws-sdk-cloudformation = "0.24.0"
-clap = { version = "4.1.8", features = ["derive"] }
+clap = { version = "4.1.9", features = ["derive"] }
 dialoguer = "0.10.3"
 serde_json = "1.0.94"
 tokio = { version = "1", features = ["full"] }
