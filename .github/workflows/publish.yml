@@ -124,19 +124,27 @@ jobs:
       - name: Compress
         run: |
           mkdir -p ./artifacts
-          # windows is the only OS using a different convention for executable file name
+
           if [[ $OS =~ ^windows.*$ ]]; then
               EXEC=$NAME.exe
           else
               EXEC=$NAME
           fi
+
           mv "./target/$TARGET/release/${EXEC}" "./${EXEC}"
+
           VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="TEST"
           fi
-          tar -czf "./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz" "${EXEC}"
-          ls -l ./artifacts "${EXEC}"
+
+          if [[ $OS =~ ^windows.*$ ]]; then
+              zip "./artifacts/${NAME}-${TARGET}-${VERSION}.zip" "${EXEC}"
+          else
+              tar -czf "./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz" "${EXEC}"
+          fi
+
+          ls -lh "${EXEC}" "./artifacts/${NAME}-${TARGET}-${VERSION}"
 
       - name: Archive artifact
         uses: actions/upload-artifact@v3
