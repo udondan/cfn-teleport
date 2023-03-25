@@ -133,6 +133,9 @@ jobs:
           if [[ $OS =~ ^windows.*$ ]]; then
               SRC=$NAME.exe
               FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.zip"
+          elif [[ $OS =~ ^macos.*$ ]]; then
+              SRC=$NAME
+              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.dmg"
           else
               SRC=$NAME
               FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz"
@@ -141,7 +144,12 @@ jobs:
           mv "./target/$TARGET/release/${SRC}" "./${SRC}"
 
           if [[ $OS =~ ^windows.*$ ]]; then
-              zip "${FILENAME}" "${SRC}"
+              tar.exe -a -c -f "${FILENAME}" "${SRC}"
+          elif [[ $OS =~ ^macos.*$ ]]; then
+              mkdir -p dmg
+              mv "./${SRC}" dmg
+              hdiutil create cfn-teleport.dmg -ov -volname "cfn-teleport" -fs HFS+ -srcfolder "dmg"
+              hdiutil convert "${FILENAME}" -format UDZO -o cfn-teleport2.dmg
           else
               tar -czf "${FILENAME}" "${SRC}"
           fi
