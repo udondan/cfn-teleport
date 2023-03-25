@@ -144,7 +144,7 @@ jobs:
               tar -czf "./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz" "${EXEC}"
           fi
 
-          ls -lh "${EXEC}" "./artifacts/${NAME}-${TARGET}-${VERSION}"
+          ls -lh "${EXEC}" "./artifacts/${NAME}-${TARGET}-${VERSION}.*"
 
       - name: Archive artifact
         uses: actions/upload-artifact@v3
