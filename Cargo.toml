@@ -10,7 +10,7 @@ authors = ["Daniel Schroeder"]
 readme = "README.md"
 keywords = ["aws", "cfn", "CloudFormation", "migration", "resources"]
 categories = ["command-line-utilities"]
-publish = false
+publish = true
 
 [dependencies]
 aws-config = "0.54.1"
