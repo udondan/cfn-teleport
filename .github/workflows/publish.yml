@@ -151,7 +151,7 @@ jobs:
               mkdir -p dmg
               mv "./${SRC}" dmg
               hdiutil create cfn-teleport.dmg -ov -volname "cfn-teleport" -fs HFS+ -srcfolder "dmg"
-              hdiutil convert "${FILENAME}" -format UDZO -o cfn-teleport2.dmg
+              hdiutil convert "${FILENAME}" -format UDZO -o "${FILENAME}"
           else
               tar -czf "${FILENAME}" "${SRC}"
           fi
