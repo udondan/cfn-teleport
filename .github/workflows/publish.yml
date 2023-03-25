@@ -132,7 +132,7 @@ jobs:
 
           if [[ $OS =~ ^windows.*$ ]]; then
               SRC=$NAME.exe
-              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.zip"
+              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.exe"
           elif [[ $OS =~ ^macos.*$ ]]; then
               SRC=$NAME
               FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.dmg"
@@ -144,7 +144,9 @@ jobs:
           mv "./target/$TARGET/release/${SRC}" "./${SRC}"
 
           if [[ $OS =~ ^windows.*$ ]]; then
-              tar.exe -a -c -f "${FILENAME}" "${SRC}"
+              # there is no reduction in size for the exe
+              # tar.exe -a -c -f "${FILENAME}" "${SRC}"
+              mv "${SRC}" "${FILENAME}"
           elif [[ $OS =~ ^macos.*$ ]]; then
               mkdir -p dmg
               mv "./${SRC}" dmg
