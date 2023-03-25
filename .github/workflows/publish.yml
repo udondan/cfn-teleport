@@ -125,26 +125,28 @@ jobs:
         run: |
           mkdir -p ./artifacts
 
-          if [[ $OS =~ ^windows.*$ ]]; then
-              EXEC=$NAME.exe
-          else
-              EXEC=$NAME
-          fi
-
-          mv "./target/$TARGET/release/${EXEC}" "./${EXEC}"
-
           VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="TEST"
           fi
 
           if [[ $OS =~ ^windows.*$ ]]; then
-              zip "./artifacts/${NAME}-${TARGET}-${VERSION}.zip" "${EXEC}"
+              SRC=$NAME.exe
+              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.zip"
           else
-              tar -czf "./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz" "${EXEC}"
+              SRC=$NAME
+              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz"
           fi
 
-          ls -lh "${EXEC}" "./artifacts/${NAME}-${TARGET}-${VERSION}.*"
+          mv "./target/$TARGET/release/${SRC}" "./${SRC}"
+
+          if [[ $OS =~ ^windows.*$ ]]; then
+              zip "${FILENAME}" "${SRC}"
+          else
+              tar -czf "${FILENAME}" "${SRC}"
+          fi
+
+          ls -lh "${SRC}" "${FILENAME}"
 
       - name: Archive artifact
         uses: actions/upload-artifact@v3
