@@ -136,6 +136,7 @@ jobs:
             VERSION="TEST"
           fi
           tar -czf "./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz" "${EXEC}"
+          ls -l ./artifacts "${EXEC}"
 
       - name: Archive artifact
         uses: actions/upload-artifact@v3
@@ -147,6 +148,6 @@ jobs:
       - name: Attach artifact to release
         if: github.event_name != 'pull_request'
         run: |
-          gh release upload "${GITHUB_REF_NAME}" "./artifacts/${NAME}-${TARGET}-${GITHUB_REF_NAME}.tar.gz"
+          gh release upload "${GITHUB_REF_NAME}" "./artifacts/${NAME}-${TARGET}-${GITHUB_REF_NAME}.*"
         env:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
