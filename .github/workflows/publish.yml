@@ -149,7 +149,7 @@ jobs:
               mv "./${SRC}" "${FILENAME}"
           elif [[ $OS =~ ^macos.*$ ]]; then
               mkdir -p dmg
-              mv "./${SRC}" dmg
+              cp "./${SRC}" dmg
               hdiutil create cfn-teleport.dmg -ov -volname "cfn-teleport" -fs HFS+ -srcfolder "dmg"
               hdiutil convert cfn-teleport.dmg -format UDZO -o "${FILENAME}"
           else
