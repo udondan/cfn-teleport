@@ -72,9 +72,6 @@ jobs:
           - TARGET: i686-pc-windows-msvc
             OS: windows-latest
 
-          - TARGET: i686-pc-windows-gnu
-            OS: windows-latest
-
           - TARGET: i686-unknown-linux-gnu
             OS: ubuntu-latest
 
