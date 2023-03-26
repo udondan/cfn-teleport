@@ -172,7 +172,6 @@ jobs:
             ./artifacts
 
       - name: Attach artifact to release
-        if: github.event_name != 'pull_request'
         run: |
           if [[ "${GH_EVENT}" != "pull_request" ]]; then
             gh release upload "${GITHUB_REF_NAME}" "${ARTIFACT}"
@@ -182,6 +181,7 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+          GH_EVENT: ${{ github.event_name }}
           ARTIFACT: ${{ steps.get_sha.outputs.ARTIFACT }}
 
   cargo-publish:
