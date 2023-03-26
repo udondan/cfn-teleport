@@ -182,7 +182,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
           GH_EVENT: ${{ github.event_name }}
-          ARTIFACT: ${{ steps.get_sha.outputs.ARTIFACT }}
+          ARTIFACT: ${{ steps.compress.outputs.ARTIFACT }}
 
   cargo-publish:
     needs: build
