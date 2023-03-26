@@ -1,6 +1,6 @@
 use aws_sdk_cloudformation as cloudformation;
 use clap::Parser;
-use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, MultiSelect, Select};
+use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::error::Error;
 use std::process;
 use uuid::Uuid;
@@ -97,7 +97,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Err("No resources have been selected".into());
     }
 
-    //let mut new_logical_ids_map: HashMap<&String, String> = HashMap::new();
     let mut new_logical_ids_map = HashMap::new();
 
     match args.resource.clone() {
@@ -107,14 +106,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .logical_resource_id()
                     .unwrap_or_default()
                     .to_owned();
-                let mut new_logical_id = String::new();
 
-                println!(
-                    "Provide a new logical ID for resource '{}', or leave blank to use the original ID:",
-                    old_logical_id
-                );
-                io::stdin().read_line(&mut new_logical_id)?;
-                new_logical_id = new_logical_id.trim().to_string();
+                let mut new_logical_id: String = Input::new()
+                    .with_prompt(format!(
+                        "Optionally provide a new logical ID for resource '{}'",
+                        old_logical_id
+                    ))
+                    .default(old_logical_id.clone())
+                    .interact_text()?;
+
                 if new_logical_id.is_empty() {
                     new_logical_id = resource
                         .logical_resource_id()
@@ -123,6 +123,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 new_logical_ids_map.insert(old_logical_id, new_logical_id);
             }
+            println!()
         }
         Some(resources) => {
             for resource in resources {
@@ -130,8 +131,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let source_id = ids.0.clone();
                 let target_id = ids.1.clone();
                 new_logical_ids_map.insert(source_id, target_id);
-
-                //new_logical_ids_map.insert(&f, new_logical_id.to_owned());
             }
         }
     };
@@ -399,6 +398,8 @@ fn user_confirm() -> Result<(), Box<dyn Error>> {
         .with_prompt("Please confirm your selection")
         .default(false)
         .interact_on_opt(&Term::stderr())?;
+
+    println!();
 
     match confirmed {
         Some(true) => Ok(()),
