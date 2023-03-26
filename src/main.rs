@@ -33,11 +33,10 @@ struct Args {
 }
 
 async fn make_spinner(t: Spinners, name: &str) {
-    let mut sp = Spinner::new(t, format!("Waiting for 3 seconds: {}", name).into());
+    let mut sp = Spinner::new(t, format!("Waiting for 3 seconds: {}", name));
     sleep(Duration::from_secs(3));
     //sp.stop_with_message(format!("Done {}!", name).into());
     sp.stop_with_newline();
-    return ();
 }
 
 #[tokio::main]
