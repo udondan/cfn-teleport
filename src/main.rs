@@ -163,7 +163,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
-    for resource in format_resources(&selected_resources).await? {
+    for resource in format_resources(&selected_resources, Some(new_logical_ids_map.clone())).await?
+    {
         println!("  {}", resource);
     }
 
@@ -377,7 +378,7 @@ async fn select_resources<'a>(
     prompt: &str,
     resources: &'a [&aws_sdk_cloudformation::model::StackResourceSummary],
 ) -> Result<Vec<&'a aws_sdk_cloudformation::model::StackResourceSummary>, Box<dyn Error>> {
-    let items = format_resources(resources).await?;
+    let items = format_resources(resources, None).await?;
     let selection = MultiSelect::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .report(false)
@@ -419,33 +420,71 @@ async fn get_template(
 
 async fn format_resources(
     resources: &[&cloudformation::model::StackResourceSummary],
+    resource_id_map: Option<HashMap<String, String>>,
 ) -> Result<Vec<String>, io::Error> {
     let mut max_lengths = [0; 3];
     let mut formatted_resources = Vec::new();
 
+    let mut renamed = false;
+
     for resource in resources.iter() {
         let resource_type = resource.resource_type().unwrap_or_default();
         let logical_id = resource.logical_resource_id().unwrap_or_default();
-        let physical_id = resource.physical_resource_id().unwrap_or_default();
+
+        let new_logical_id = match resource_id_map {
+            Some(ref map) => match map.get(logical_id) {
+                Some(new_id) => new_id.to_string(),
+                None => logical_id.to_string(),
+            },
+            None => logical_id.to_string(),
+        };
 
         max_lengths[0] = max_lengths[0].max(resource_type.len());
         max_lengths[1] = max_lengths[1].max(logical_id.len());
-        max_lengths[2] = max_lengths[2].max(physical_id.len());
+        if logical_id != new_logical_id {
+            max_lengths[2] = max_lengths[2].max(new_logical_id.len());
+            renamed = true;
+        }
     }
 
     for resource in resources.iter() {
         let resource_type = resource.resource_type().unwrap_or_default();
         let logical_id = resource.logical_resource_id().unwrap_or_default();
         let physical_id = resource.physical_resource_id().unwrap_or_default();
+        let new_logical_id = match resource_id_map {
+            Some(ref map) => match map.get(logical_id) {
+                Some(new_id) => new_id.to_string(),
+                None => logical_id.to_string(),
+            },
+            None => logical_id.to_string(),
+        };
 
-        let output = format!(
-            "{:<width1$}  {:<width2$}  {}",
-            resource_type,
-            logical_id,
-            physical_id,
-            width1 = max_lengths[0] + 2,
-            width2 = max_lengths[1] + 2
-        );
+        let output = if renamed {
+            let renamed = if logical_id != new_logical_id {
+                format!(" ► {}", new_logical_id)
+            } else {
+                "".to_string()
+            };
+            format!(
+                "{:<width1$}  {:<width2$}{:<width3$}   {}",
+                resource_type,
+                logical_id,
+                renamed,
+                physical_id,
+                width1 = max_lengths[0] + 2,
+                width2 = max_lengths[1],
+                width3 = max_lengths[2] + 4
+            )
+        } else {
+            format!(
+                "{:<width1$}  {:<width2$}  {}",
+                resource_type,
+                logical_id,
+                physical_id,
+                width1 = max_lengths[0] + 2,
+                width2 = max_lengths[1] + 2
+            )
+        };
 
         formatted_resources.push(output);
     }
