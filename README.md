@@ -6,7 +6,7 @@
 
 A command line tool which can migrate CloudFormation resources between stacks.
 
-![Demo](docs/demo.gif)
+![Demo](https://raw.githubusercontent.com/udondan/cfn-teleport/main/docs/demo.gif)
 
 ## Installation
 
