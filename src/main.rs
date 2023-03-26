@@ -4,14 +4,12 @@ use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, MultiSelect, Selec
 use std::error::Error;
 use std::process;
 use uuid::Uuid;
+mod spinner;
 mod supported_resource_types;
-use spinners::{Spinner, Spinners};
+
 use std::collections::HashMap;
 use std::io;
-use std::io::Write;
-use std::thread::sleep;
-use std::time::Duration;
-// bump
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -32,101 +30,9 @@ struct Args {
     yes: bool,
 }
 
-async fn make_spinner(t: Spinners, name: &str) {
-    let mut sp = Spinner::new(t, format!("Waiting for 3 seconds: {}", name));
-    sleep(Duration::from_secs(3));
-    //sp.stop_with_message(format!("Done {}!", name).into());
-    sp.stop_with_newline();
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-
-    // SimpleDotsScrolling
-
-    //make_spinner(Spinners::Dots, "Dots").await;
-    //make_spinner(Spinners::Dots2, "Dots2").await;
-    //make_spinner(Spinners::Dots3, "Dots3").await;
-    //make_spinner(Spinners::Dots4, "Dots4").await;
-    //make_spinner(Spinners::Dots5, "Dots5").await;
-    //make_spinner(Spinners::Dots6, "Dots6").await;
-    //make_spinner(Spinners::Dots7, "Dots7").await;
-    //make_spinner(Spinners::Dots8, "Dots8").await;
-    //make_spinner(Spinners::Dots9, "Dots9").await;
-    //make_spinner(Spinners::Dots10, "Dots10").await;
-    //make_spinner(Spinners::Dots11, "Dots11").await;
-    //make_spinner(Spinners::Dots12, "Dots12").await;
-    //make_spinner(Spinners::Dots8Bit, "Dots8Bit").await;
-    //make_spinner(Spinners::Line, "Line").await;
-    //make_spinner(Spinners::Line2, "Line2").await;
-    //make_spinner(Spinners::Pipe, "Pipe").await;
-    //make_spinner(Spinners::SimpleDots, "SimpleDots").await;
-    //make_spinner(Spinners::SimpleDotsScrolling, "SimpleDotsScrolling").await;
-    //make_spinner(Spinners::Star, "Star").await;
-    //make_spinner(Spinners::Star2, "Star2").await;
-    //make_spinner(Spinners::Flip, "Flip").await;
-    //make_spinner(Spinners::Hamburger, "Hamburger").await;
-    //make_spinner(Spinners::GrowVertical, "GrowVertical").await;
-    //make_spinner(Spinners::GrowHorizontal, "GrowHorizontal").await;
-    //make_spinner(Spinners::Balloon, "Balloon").await;
-    //make_spinner(Spinners::Balloon2, "Balloon2").await;
-    //make_spinner(Spinners::Noise, "Noise").await;
-    //make_spinner(Spinners::Bounce, "Bounce").await;
-    //make_spinner(Spinners::BoxBounce, "BoxBounce").await;
-    //make_spinner(Spinners::BoxBounce2, "BoxBounce2").await;
-    //make_spinner(Spinners::Triangle, "Triangle").await;
-    //make_spinner(Spinners::Arc, "Arc").await;
-    //make_spinner(Spinners::Circle, "Circle").await;
-    //make_spinner(Spinners::SquareCorners, "SquareCorners").await;
-    //make_spinner(Spinners::CircleQuarters, "CircleQuarters").await;
-    //make_spinner(Spinners::CircleHalves, "CircleHalves").await;
-    //make_spinner(Spinners::Squish, "Squish").await;
-    //make_spinner(Spinners::Toggle, "Toggle").await;
-    //make_spinner(Spinners::Toggle2, "Toggle2").await;
-    //make_spinner(Spinners::Toggle3, "Toggle3").await;
-    //make_spinner(Spinners::Toggle4, "Toggle4").await;
-    //make_spinner(Spinners::Toggle5, "Toggle5").await;
-    //make_spinner(Spinners::Toggle6, "Toggle6").await;
-    //make_spinner(Spinners::Toggle7, "Toggle7").await;
-    //make_spinner(Spinners::Toggle8, "Toggle8").await;
-    //make_spinner(Spinners::Toggle9, "Toggle9").await;
-    //make_spinner(Spinners::Toggle10, "Toggle10").await;
-    //make_spinner(Spinners::Toggle11, "Toggle11").await;
-    //make_spinner(Spinners::Toggle12, "Toggle12").await;
-    //make_spinner(Spinners::Toggle13, "Toggle13").await;
-    //make_spinner(Spinners::Arrow, "Arrow").await;
-    //make_spinner(Spinners::Arrow2, "Arrow2").await;
-    //make_spinner(Spinners::Arrow3, "Arrow3").await;
-    //make_spinner(Spinners::BouncingBar, "BouncingBar").await;
-    //make_spinner(Spinners::BouncingBall, "BouncingBall").await;
-    //make_spinner(Spinners::Smiley, "Smiley").await;
-    //make_spinner(Spinners::Monkey, "Monkey").await;
-    //make_spinner(Spinners::Hearts, "Hearts").await;
-    //make_spinner(Spinners::Clock, "Clock").await;
-    //make_spinner(Spinners::Earth, "Earth").await;
-    //make_spinner(Spinners::Material, "Material").await;
-    //make_spinner(Spinners::Moon, "Moon").await;
-    //make_spinner(Spinners::Runner, "Runner").await;
-    //make_spinner(Spinners::Pong, "Pong").await;
-    //make_spinner(Spinners::Shark, "Shark").await;
-    //make_spinner(Spinners::Dqpb, "Dqpb").await;
-    //make_spinner(Spinners::Weather, "Weather").await;
-    //make_spinner(Spinners::Christmas, "Christmas").await;
-    //make_spinner(Spinners::Grenade, "Grenade").await;
-    //make_spinner(Spinners::Point, "Point").await;
-    make_spinner(Spinners::Layer, "Layer").await;
-    //make_spinner(Spinners::BetaWave, "BetaWave").await;
-    //make_spinner(Spinners::FingerDance, "FingerDance").await;
-    //make_spinner(Spinners::FistBump, "FistBump").await;
-    //make_spinner(Spinners::SoccerHeader, "SoccerHeader").await;
-    //make_spinner(Spinners::Mindblown, "Mindblown").await;
-    //make_spinner(Spinners::Speaker, "Speaker").await;
-    //make_spinner(Spinners::OrangePulse, "OrangePulse").await;
-    //make_spinner(Spinners::BluePulse, "BluePulse").await;
-    //make_spinner(Spinners::OrangeBluePulse, "OrangeBluePulse").await;
-    //make_spinner(Spinners::TimeTravel, "TimeTravel").await;
-    //make_spinner(Spinners::Aesthetic, "Aesthetic").await;
 
     let config = aws_config::load_from_env().await;
     let client = cloudformation::Client::new(&config);
@@ -277,16 +183,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if template_source_str != template_retained_str {
         //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
-        print!("Retaining resources {}", resource_ids_to_remove.join(", "));
+
+        let spinner = spinner::Spin::new(&format!(
+            "Retaining resources in stack {}: {}",
+            source_stack,
+            resource_ids_to_remove.join(", ")
+        ));
         update_stack(&client, &source_stack, template_retained).await?;
-        wait_for_stack_update_completion(&client, &source_stack).await?;
+        wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
     }
 
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
-    print!("Removing resources {}", resource_ids_to_remove.join(", "));
+
+    let spinner = spinner::Spin::new(&format!(
+        "Removing resources from stack {}: {}",
+        source_stack,
+        resource_ids_to_remove.join(", ")
+    ));
+
     update_stack(&client, &source_stack, template_removed).await?;
-    wait_for_stack_update_completion(&client, &source_stack).await?;
+    wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
 
     let template_target = add_resources(
         get_template(&client, &target_stack).await?,
@@ -302,12 +219,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         new_logical_ids_map,
     )
     .await?;
-    print!("Creating changeset {}", changeset_name);
-    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
 
-    print!("Executing changeset {}", changeset_name);
+    let spinner = spinner::Spin::new(&format!("Creating changeset {}", changeset_name));
+    wait_for_changeset_created(&client, &target_stack, &changeset_name, spinner).await?;
+
+    let spinner = spinner::Spin::new(&format!("Executing changeset {}", changeset_name));
+
     execute_changeset(&client, &target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, &target_stack).await?;
+    wait_for_stack_update_completion(&client, &target_stack, spinner).await?;
 
     Ok(())
 }
@@ -621,6 +540,7 @@ async fn get_stack_status(
 async fn wait_for_stack_update_completion(
     client: &cloudformation::Client,
     stack_name: &str,
+    mut spinner: spinner::Spin,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stack_status = get_stack_status(client, stack_name).await?;
 
@@ -629,8 +549,6 @@ async fn wait_for_stack_update_completion(
             || status == cloudformation::model::StackStatus::UpdateCompleteCleanupInProgress
             || status == cloudformation::model::StackStatus::ImportInProgress
         {
-            print!(".");
-            std::io::stdout().flush()?;
             std::thread::sleep(std::time::Duration::from_secs(1));
             stack_status = get_stack_status(client, stack_name).await?;
         } else {
@@ -645,7 +563,8 @@ async fn wait_for_stack_update_completion(
         }
     }
 
-    println!(" {}", stack_status.unwrap().as_str());
+    spinner.complete();
+
     Ok(())
 }
 
@@ -774,6 +693,7 @@ async fn wait_for_changeset_created(
     client: &cloudformation::Client,
     stack_name: &str,
     changeset_name: &str,
+    mut spinner: spinner::Spin,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
 
@@ -781,8 +701,6 @@ async fn wait_for_changeset_created(
         if status == cloudformation::model::ChangeSetStatus::CreateInProgress
             || status == cloudformation::model::ChangeSetStatus::CreatePending
         {
-            print!(".");
-            std::io::stdout().flush()?;
             std::thread::sleep(std::time::Duration::from_secs(1));
             changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
         } else {
@@ -797,6 +715,6 @@ async fn wait_for_changeset_created(
         }
     }
 
-    println!(" {}", changeset_status.unwrap().as_str());
+    spinner.complete();
     Ok(())
 }
