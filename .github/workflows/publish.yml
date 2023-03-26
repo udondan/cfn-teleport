@@ -123,6 +123,7 @@ jobs:
         run: find ./target
 
       - name: Compress
+        id: compress
         run: |
           mkdir -p ./artifacts
 
@@ -133,33 +134,35 @@ jobs:
 
           if [[ $OS =~ ^windows.*$ ]]; then
               SRC=$NAME.exe
-              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.exe"
+              ARTIFACT="./artifacts/${NAME}-${TARGET}-${VERSION}.exe"
           elif [[ $OS =~ ^macos.*$ ]]; then
               SRC=$NAME
-              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.dmg"
+              ARTIFACT="./artifacts/${NAME}-${TARGET}-${VERSION}.dmg"
           else
               SRC=$NAME
-              FILENAME="./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz"
+              ARTIFACT="./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz"
           fi
 
           mv "./target/$TARGET/release/${SRC}" "./${SRC}"
 
           if [[ $OS =~ ^windows.*$ ]]; then
               # there is no reduction in size for the exe
-              # tar.exe -a -c -f "${FILENAME}" "${SRC}"
-              mv "./${SRC}" "${FILENAME}"
+              # tar.exe -a -c -f "${ARTIFACT}" "${SRC}"
+              mv "./${SRC}" "${ARTIFACT}"
           elif [[ $OS =~ ^macos.*$ ]]; then
               mkdir -p dmg
               cp "./${SRC}" dmg
               hdiutil create cfn-teleport.dmg -ov -volname "cfn-teleport" -fs HFS+ -srcfolder "dmg"
-              hdiutil convert cfn-teleport.dmg -format UDZO -o "${FILENAME}"
+              hdiutil convert cfn-teleport.dmg -format UDZO -o "${ARTIFACT}"
           else
-              tar -czf "${FILENAME}" "${SRC}"
+              tar -czf "${ARTIFACT}" "${SRC}"
           fi
 
           if [[ ! $OS =~ ^windows.*$ ]]; then
-            ls -lh "${SRC}" "${FILENAME}"
+            ls -lh "${SRC}" "${ARTIFACT}"
           fi
+
+          echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_OUTPUT
 
       - name: Archive artifact
         uses: actions/upload-artifact@v3
@@ -171,9 +174,10 @@ jobs:
       - name: Attach artifact to release
         if: github.event_name != 'pull_request'
         run: |
-          gh release upload "${GITHUB_REF_NAME}" "./artifacts/${NAME}-${TARGET}-${GITHUB_REF_NAME}.*"
+          gh release upload "${GITHUB_REF_NAME}" "${ARTIFACT}"
         env:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+          ARTIFACT: ${{ steps.get_sha.outputs.ARTIFACT }}
 
   cargo-publish:
     needs: build
