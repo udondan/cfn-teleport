@@ -1,0 +1,12 @@
+#!/bin/bash
+
+. "$HOME/code/github.com/paxtonhare/demo-magic/demo-magic.sh"
+
+make build
+
+clear
+echo -n "\$ "
+
+sleep 5
+clear
+pei "cfn-teleport"

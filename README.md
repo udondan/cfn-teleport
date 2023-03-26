@@ -6,6 +6,8 @@
 
 A command line tool which can migrate CloudFormation resources between stacks.
 
+![Demo](docs/demo.gif)
+
 ## Installation
 
 Pre-compiled binaries for various operating systems and architectures are [available for download][latest].
