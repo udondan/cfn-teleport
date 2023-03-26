@@ -4,11 +4,12 @@ use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, MultiSelect, Selec
 use std::error::Error;
 use std::process;
 use uuid::Uuid;
+mod spinner;
 mod supported_resource_types;
+
 use std::collections::HashMap;
 use std::io;
-use std::io::Write;
-// bump
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -182,16 +183,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if template_source_str != template_retained_str {
         //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
-        print!("Retaining resources {}", resource_ids_to_remove.join(", "));
+
+        let spinner = spinner::Spin::new(&format!(
+            "Retaining resources in stack {}: {}",
+            source_stack,
+            resource_ids_to_remove.join(", ")
+        ));
         update_stack(&client, &source_stack, template_retained).await?;
-        wait_for_stack_update_completion(&client, &source_stack).await?;
+        wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
     }
 
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
-    print!("Removing resources {}", resource_ids_to_remove.join(", "));
+
+    let spinner = spinner::Spin::new(&format!(
+        "Removing resources from stack {}: {}",
+        source_stack,
+        resource_ids_to_remove.join(", ")
+    ));
+
     update_stack(&client, &source_stack, template_removed).await?;
-    wait_for_stack_update_completion(&client, &source_stack).await?;
+    wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
 
     let template_target = add_resources(
         get_template(&client, &target_stack).await?,
@@ -207,12 +219,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         new_logical_ids_map,
     )
     .await?;
-    print!("Creating changeset {}", changeset_name);
-    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
 
-    print!("Executing changeset {}", changeset_name);
+    let spinner = spinner::Spin::new(&format!("Creating changeset {}", changeset_name));
+    wait_for_changeset_created(&client, &target_stack, &changeset_name, spinner).await?;
+
+    let spinner = spinner::Spin::new(&format!("Executing changeset {}", changeset_name));
+
     execute_changeset(&client, &target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, &target_stack).await?;
+    wait_for_stack_update_completion(&client, &target_stack, spinner).await?;
 
     Ok(())
 }
@@ -526,6 +540,7 @@ async fn get_stack_status(
 async fn wait_for_stack_update_completion(
     client: &cloudformation::Client,
     stack_name: &str,
+    mut spinner: spinner::Spin,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stack_status = get_stack_status(client, stack_name).await?;
 
@@ -534,8 +549,6 @@ async fn wait_for_stack_update_completion(
             || status == cloudformation::model::StackStatus::UpdateCompleteCleanupInProgress
             || status == cloudformation::model::StackStatus::ImportInProgress
         {
-            print!(".");
-            std::io::stdout().flush()?;
             std::thread::sleep(std::time::Duration::from_secs(1));
             stack_status = get_stack_status(client, stack_name).await?;
         } else {
@@ -550,7 +563,8 @@ async fn wait_for_stack_update_completion(
         }
     }
 
-    println!(" {}", stack_status.unwrap().as_str());
+    spinner.complete();
+
     Ok(())
 }
 
@@ -679,6 +693,7 @@ async fn wait_for_changeset_created(
     client: &cloudformation::Client,
     stack_name: &str,
     changeset_name: &str,
+    mut spinner: spinner::Spin,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
 
@@ -686,8 +701,6 @@ async fn wait_for_changeset_created(
         if status == cloudformation::model::ChangeSetStatus::CreateInProgress
             || status == cloudformation::model::ChangeSetStatus::CreatePending
         {
-            print!(".");
-            std::io::stdout().flush()?;
             std::thread::sleep(std::time::Duration::from_secs(1));
             changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
         } else {
@@ -702,6 +715,6 @@ async fn wait_for_changeset_created(
         }
     }
 
-    println!(" {}", changeset_status.unwrap().as_str());
+    spinner.complete();
     Ok(())
 }
