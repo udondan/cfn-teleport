@@ -18,6 +18,7 @@ aws-sdk-cloudformation = "0.24.0"
 clap = { version = "4.1.13", features = ["derive"] }
 dialoguer = "0.10.3"
 serde_json = "1.0.94"
+spinners = "4.1.0"
 tokio = { version = "1", features = ["full"] }
 
 [dependencies.uuid]

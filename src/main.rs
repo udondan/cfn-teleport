@@ -5,9 +5,12 @@ use std::error::Error;
 use std::process;
 use uuid::Uuid;
 mod supported_resource_types;
+use spinners::{Spinner, Spinners};
 use std::collections::HashMap;
 use std::io;
 use std::io::Write;
+use std::thread::sleep;
+use std::time::Duration;
 // bump
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -29,9 +32,102 @@ struct Args {
     yes: bool,
 }
 
+async fn make_spinner(t: Spinners, name: &str) {
+    let mut sp = Spinner::new(t, format!("Waiting for 3 seconds: {}", name).into());
+    sleep(Duration::from_secs(3));
+    //sp.stop_with_message(format!("Done {}!", name).into());
+    sp.stop_with_newline();
+    return ();
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+
+    // SimpleDotsScrolling
+
+    //make_spinner(Spinners::Dots, "Dots").await;
+    //make_spinner(Spinners::Dots2, "Dots2").await;
+    //make_spinner(Spinners::Dots3, "Dots3").await;
+    //make_spinner(Spinners::Dots4, "Dots4").await;
+    //make_spinner(Spinners::Dots5, "Dots5").await;
+    //make_spinner(Spinners::Dots6, "Dots6").await;
+    //make_spinner(Spinners::Dots7, "Dots7").await;
+    //make_spinner(Spinners::Dots8, "Dots8").await;
+    //make_spinner(Spinners::Dots9, "Dots9").await;
+    //make_spinner(Spinners::Dots10, "Dots10").await;
+    //make_spinner(Spinners::Dots11, "Dots11").await;
+    //make_spinner(Spinners::Dots12, "Dots12").await;
+    //make_spinner(Spinners::Dots8Bit, "Dots8Bit").await;
+    //make_spinner(Spinners::Line, "Line").await;
+    //make_spinner(Spinners::Line2, "Line2").await;
+    //make_spinner(Spinners::Pipe, "Pipe").await;
+    //make_spinner(Spinners::SimpleDots, "SimpleDots").await;
+    //make_spinner(Spinners::SimpleDotsScrolling, "SimpleDotsScrolling").await;
+    //make_spinner(Spinners::Star, "Star").await;
+    //make_spinner(Spinners::Star2, "Star2").await;
+    //make_spinner(Spinners::Flip, "Flip").await;
+    //make_spinner(Spinners::Hamburger, "Hamburger").await;
+    //make_spinner(Spinners::GrowVertical, "GrowVertical").await;
+    //make_spinner(Spinners::GrowHorizontal, "GrowHorizontal").await;
+    //make_spinner(Spinners::Balloon, "Balloon").await;
+    //make_spinner(Spinners::Balloon2, "Balloon2").await;
+    //make_spinner(Spinners::Noise, "Noise").await;
+    //make_spinner(Spinners::Bounce, "Bounce").await;
+    //make_spinner(Spinners::BoxBounce, "BoxBounce").await;
+    //make_spinner(Spinners::BoxBounce2, "BoxBounce2").await;
+    //make_spinner(Spinners::Triangle, "Triangle").await;
+    //make_spinner(Spinners::Arc, "Arc").await;
+    //make_spinner(Spinners::Circle, "Circle").await;
+    //make_spinner(Spinners::SquareCorners, "SquareCorners").await;
+    //make_spinner(Spinners::CircleQuarters, "CircleQuarters").await;
+    //make_spinner(Spinners::CircleHalves, "CircleHalves").await;
+    //make_spinner(Spinners::Squish, "Squish").await;
+    //make_spinner(Spinners::Toggle, "Toggle").await;
+    //make_spinner(Spinners::Toggle2, "Toggle2").await;
+    //make_spinner(Spinners::Toggle3, "Toggle3").await;
+    //make_spinner(Spinners::Toggle4, "Toggle4").await;
+    //make_spinner(Spinners::Toggle5, "Toggle5").await;
+    //make_spinner(Spinners::Toggle6, "Toggle6").await;
+    //make_spinner(Spinners::Toggle7, "Toggle7").await;
+    //make_spinner(Spinners::Toggle8, "Toggle8").await;
+    //make_spinner(Spinners::Toggle9, "Toggle9").await;
+    //make_spinner(Spinners::Toggle10, "Toggle10").await;
+    //make_spinner(Spinners::Toggle11, "Toggle11").await;
+    //make_spinner(Spinners::Toggle12, "Toggle12").await;
+    //make_spinner(Spinners::Toggle13, "Toggle13").await;
+    //make_spinner(Spinners::Arrow, "Arrow").await;
+    //make_spinner(Spinners::Arrow2, "Arrow2").await;
+    //make_spinner(Spinners::Arrow3, "Arrow3").await;
+    //make_spinner(Spinners::BouncingBar, "BouncingBar").await;
+    //make_spinner(Spinners::BouncingBall, "BouncingBall").await;
+    //make_spinner(Spinners::Smiley, "Smiley").await;
+    //make_spinner(Spinners::Monkey, "Monkey").await;
+    //make_spinner(Spinners::Hearts, "Hearts").await;
+    //make_spinner(Spinners::Clock, "Clock").await;
+    //make_spinner(Spinners::Earth, "Earth").await;
+    //make_spinner(Spinners::Material, "Material").await;
+    //make_spinner(Spinners::Moon, "Moon").await;
+    //make_spinner(Spinners::Runner, "Runner").await;
+    //make_spinner(Spinners::Pong, "Pong").await;
+    //make_spinner(Spinners::Shark, "Shark").await;
+    //make_spinner(Spinners::Dqpb, "Dqpb").await;
+    //make_spinner(Spinners::Weather, "Weather").await;
+    //make_spinner(Spinners::Christmas, "Christmas").await;
+    //make_spinner(Spinners::Grenade, "Grenade").await;
+    //make_spinner(Spinners::Point, "Point").await;
+    make_spinner(Spinners::Layer, "Layer").await;
+    //make_spinner(Spinners::BetaWave, "BetaWave").await;
+    //make_spinner(Spinners::FingerDance, "FingerDance").await;
+    //make_spinner(Spinners::FistBump, "FistBump").await;
+    //make_spinner(Spinners::SoccerHeader, "SoccerHeader").await;
+    //make_spinner(Spinners::Mindblown, "Mindblown").await;
+    //make_spinner(Spinners::Speaker, "Speaker").await;
+    //make_spinner(Spinners::OrangePulse, "OrangePulse").await;
+    //make_spinner(Spinners::BluePulse, "BluePulse").await;
+    //make_spinner(Spinners::OrangeBluePulse, "OrangeBluePulse").await;
+    //make_spinner(Spinners::TimeTravel, "TimeTravel").await;
+    //make_spinner(Spinners::Aesthetic, "Aesthetic").await;
 
     let config = aws_config::load_from_env().await;
     let client = cloudformation::Client::new(&config);
