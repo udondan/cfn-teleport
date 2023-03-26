@@ -564,10 +564,7 @@ async fn create_changeset(
 
             let physical_id = resource.physical_resource_id().unwrap_or_default();
 
-            let resouce_identifier = match new_logical_ids_map.get(logical_id) {
-                Some(key) => resource_identifiers.get(key).unwrap(),
-                None => resource_identifiers.get(logical_id).unwrap(),
-            };
+            let resouce_identifier = resource_identifiers.get(logical_id_new).unwrap();
 
             cloudformation::model::ResourceToImport::builder()
                 .resource_type(resource_type.to_string())
