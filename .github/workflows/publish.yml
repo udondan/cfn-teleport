@@ -174,7 +174,12 @@ jobs:
       - name: Attach artifact to release
         if: github.event_name != 'pull_request'
         run: |
-          gh release upload "${GITHUB_REF_NAME}" "${ARTIFACT}"
+          if [[ "${GH_EVENT}" != "pull_request" ]]; then
+            gh release upload "${GITHUB_REF_NAME}" "${ARTIFACT}"
+          else
+            echo "Not uploading artifact to release because this is a pull request"
+            ls -l "${ARTIFACT}"
+          fi
         env:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
           ARTIFACT: ${{ steps.get_sha.outputs.ARTIFACT }}
