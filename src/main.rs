@@ -229,9 +229,55 @@ fn split_ids(id: String) -> (String, String) {
 async fn get_stacks(
     client: &cloudformation::Client,
 ) -> Result<Vec<cloudformation::model::StackSummary>, cloudformation::Error> {
-    let resp = client.list_stacks().send().await?;
+    let mut stacks = Vec::new();
+    let mut token = None;
 
-    let stacks = resp.stack_summaries().unwrap_or_default().to_vec();
+    let stack_filter = vec![
+        cloudformation::model::StackStatus::CreateInProgress,
+        cloudformation::model::StackStatus::CreateFailed,
+        cloudformation::model::StackStatus::CreateComplete,
+        cloudformation::model::StackStatus::RollbackInProgress,
+        cloudformation::model::StackStatus::RollbackFailed,
+        cloudformation::model::StackStatus::RollbackComplete,
+        cloudformation::model::StackStatus::DeleteFailed,
+        cloudformation::model::StackStatus::UpdateInProgress,
+        cloudformation::model::StackStatus::UpdateCompleteCleanupInProgress,
+        cloudformation::model::StackStatus::UpdateComplete,
+        cloudformation::model::StackStatus::UpdateFailed,
+        cloudformation::model::StackStatus::UpdateRollbackInProgress,
+        cloudformation::model::StackStatus::UpdateRollbackFailed,
+        cloudformation::model::StackStatus::UpdateRollbackCompleteCleanupInProgress,
+        cloudformation::model::StackStatus::UpdateRollbackComplete,
+        cloudformation::model::StackStatus::ReviewInProgress,
+        cloudformation::model::StackStatus::ImportInProgress,
+        cloudformation::model::StackStatus::ImportComplete,
+        cloudformation::model::StackStatus::ImportRollbackInProgress,
+        cloudformation::model::StackStatus::ImportRollbackFailed,
+        cloudformation::model::StackStatus::ImportRollbackComplete,
+    ];
+
+    loop {
+        let query = match token {
+            Some(token) => client.list_stacks().next_token(token),
+            None => client.list_stacks(),
+        };
+
+        let resp = query
+            .set_stack_status_filter(Some(stack_filter.clone()))
+            .send()
+            .await?;
+
+        let new_stacks = resp.stack_summaries().unwrap_or_default().to_vec();
+        stacks.append(&mut new_stacks.clone());
+
+        if let Some(next_token) = resp.next_token() {
+            token = Some(next_token.to_owned());
+        } else {
+            break;
+        }
+    }
+
+    println!("Found {} stacks", stacks.len());
 
     let stacks = stacks
         .into_iter()
