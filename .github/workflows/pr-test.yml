@@ -113,23 +113,23 @@ jobs:
         working-directory: test/cdk
         run: |
           echo "######### Testing resource renaming in same stack #########"
-          cfn-teleport --source A1 --target A1 --resource "${BUCKET1}:NewBucketId" --yes
+          cfn-teleport --source "${STACK1}" --target "${STACK1}" --resource "${BUCKET1}:NewBucketId" --yes
           if npx cdk diff --fail; then
             echo "Migration failed, cdk diff did not show changes"
             exit 1
           fi
 
-          echo "######### Testing migration from A1 to A2 #########"
-          cfn-teleport --source A1 --target A2 --resource "NewBucketId:${BUCKET1}" --yes
+          echo "######### Testing migration from ${STACK1} to ${STACK2} #########"
+          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "NewBucketId:${BUCKET1}" --yes
           if npx cdk diff --fail; then
             echo "Migration failed, cdk diff did not show changes"
             exit 1
           fi
 
-          cfn-teleport --source A1 --target A2 --resource "${BUCKET2}" --yes
+          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "${BUCKET2}" --yes
 
-          echo "######### Testing migration from A2 to A1 #########"
-          cfn-teleport --source A2 --target A1 --resource "${BUCKET1}" --resource "${BUCKET2}" --yes
+          echo "######### Testing migration from ${STACK2} to ${STACK1} #########"
+          cfn-teleport --source "${STACK2}" --target "${STACK1}" --resource "${BUCKET1}" --resource "${BUCKET2}" --yes
 
           if ! npx cdk diff --fail; then
             echo "Migration failed, cdk diff did show changes"
@@ -139,6 +139,8 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          STACK1: CfnTeleportTest1
+          STACK2: CfnTeleportTest2
           BUCKET1: Bucket182C536A1
           BUCKET2: Bucket21D68F7E8
 

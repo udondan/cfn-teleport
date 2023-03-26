@@ -11,7 +11,7 @@ on:
   pull_request: # for testing, when we change the workflow
     branches:
       - main
-    files:
+    paths:
       - .github/workflows/publish.yml
 
 env:
