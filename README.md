@@ -1,8 +1,20 @@
-# WIP cfn-teleport
+# cfn-teleport
 
-**This is work-in-progress! There are many thing left to do.**
+[![Release](https://img.shields.io/github/v/release/udondan/cfn-teleport)][source]
+[![crates.io](https://img.shields.io/badge/crates.io-cfn--teleport-yellowgreen)][crate]
+[![License](https://img.shields.io/github/license/udondan/cfn-teleport)][license]
 
 A command line tool which can migrate CloudFormation resources between stacks.
+
+## Installation
+
+Pre-compiled binaries for various operating systems and architectures are [available for download][latest].
+
+If you have [rust/cargo installed](https://doc.rust-lang.org/cargo/getting-started/installation.html), you can simple install the [crate]:
+
+```bash
+cargo install cfn-teleport
+```
 
 ## Usage
 
@@ -34,3 +46,8 @@ If any of the required options is undefined, the program will ask for it during 
 Contributions are welcome!
 
 This project uses [conventional commits](https://www.conventionalcommits.org/). Please make sure all your merge request titles follow these specifications.
+
+   [source]: https://github.com/udondan/cfn-teleport
+   [license]: https://github.com/udondan/iam-floyd/blob/main/LICENSE
+   [crate]: https://crates.io/crates/cfn-teleport
+   [latest]: https://github.com/udondan/cfn-teleport/releases/latest
