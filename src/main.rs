@@ -196,11 +196,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let template_target = add_resources(
         get_template(&client, &target_stack).await?,
         template_source.clone(),
-        new_logical_ids_map,
+        new_logical_ids_map.clone(),
     );
 
-    let changeset_name =
-        create_changeset(&client, &target_stack, template_target, selected_resources).await?;
+    let changeset_name = create_changeset(
+        &client,
+        &target_stack,
+        template_target,
+        selected_resources,
+        new_logical_ids_map,
+    )
+    .await?;
     print!("Creating changeset {}", changeset_name);
     wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
 
@@ -542,6 +548,7 @@ async fn create_changeset(
     stack_name: &str,
     template: serde_json::Value,
     resources_to_import: Vec<&cloudformation::model::StackResourceSummary>,
+    new_logical_ids_map: HashMap<String, String>,
 ) -> Result<std::string::String, cloudformation::Error> {
     let template_string = serde_json::to_string(&template).unwrap();
     let resource_identifiers = get_resource_identifier_mapping(client, &template_string).await?;
@@ -550,12 +557,21 @@ async fn create_changeset(
         .map(|resource| {
             let resource_type = resource.resource_type().unwrap_or_default();
             let logical_id = resource.logical_resource_id().unwrap_or_default();
+            let logical_id_new = match new_logical_ids_map.get(logical_id) {
+                Some(key) => key,
+                None => logical_id,
+            };
+
             let physical_id = resource.physical_resource_id().unwrap_or_default();
-            let resouce_identifier = resource_identifiers.get(logical_id).unwrap();
+
+            let resouce_identifier = match new_logical_ids_map.get(logical_id) {
+                Some(key) => resource_identifiers.get(key).unwrap(),
+                None => resource_identifiers.get(logical_id).unwrap(),
+            };
 
             cloudformation::model::ResourceToImport::builder()
                 .resource_type(resource_type.to_string())
-                .logical_resource_id(logical_id.to_string())
+                .logical_resource_id(logical_id_new.to_string())
                 .set_resource_identifier(Some(
                     vec![(resouce_identifier.to_string(), physical_id.to_string())]
                         .into_iter()
