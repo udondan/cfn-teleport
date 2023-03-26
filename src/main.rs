@@ -277,8 +277,6 @@ async fn get_stacks(
         }
     }
 
-    println!("Found {} stacks", stacks.len());
-
     let stacks = stacks
         .into_iter()
         .filter(|stack| !stack.stack_status().unwrap().as_str().starts_with("DELETE"))
