@@ -2,7 +2,7 @@
 name = "cfn-teleport"
 version = "0.2.0"
 edition = "2021"
-description = "Migrate CloudFormation resources between stacks"
+description = "Moves CloudFormation resources between stacks"
 license = "Apache-2.0"
 homepage = "https://github.com/udondan/cfn-teleport/"
 repository = "https://github.com/udondan/cfn-teleport/"
