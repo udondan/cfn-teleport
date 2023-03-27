@@ -251,12 +251,17 @@ jobs:
           rm -rf artifacts
           git status
           git diff
-          git commit -am "Release ${VERSION:1}"
+          git add cfn-teleport.rb
+          git commit -m "Release ${VERSION:1}"
 
           #if [[ "${GH_EVENT}" != "pull_request" ]]; then
+            git config --global user.email "${EMAIL}"
+            git config --global user.name "${NAME}"
             git push
           #fi
         env:
+          EMAIL: ${{ secrets.EMAIL }}
+          NAME: ${{ secrets.NAME }}
           TEMPLATE: |
             # typed: false
             # frozen_string_literal: true
