@@ -222,10 +222,11 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: artifacts
+          path: artifacts
 
       - name: Update homebrew formula
         run: |
-          ls -alh artifacts
+          tree
           echo "${TEMPLATE}" | sed \
             -e 's!{{ version }}!1.2.3!g' \
             -e 's!{{ intel_url }}!A!g' \
