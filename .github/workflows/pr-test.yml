@@ -4,7 +4,7 @@ name: Test
 on:
   pull_request:
     branches:
-      - main
+      - mainX
 
 env:
   CARGO_TERM_COLOR: always

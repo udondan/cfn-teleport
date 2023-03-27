@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   pull_request: # for testing, when we change the workflow
     branches:
-      - main
+      - mainX
     paths:
       - .github/workflows/publish.yml
 
