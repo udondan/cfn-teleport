@@ -12,6 +12,11 @@ jobs:
   homebrew-publish:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+        with:
+          name: udondan/homebrew-software
+          token: ${{ secrets.OVERRIDE_TOKEN }}
+
       - name: Update homebrew formula
         run: |
           echo "${TEMPLATE}" | sed \
@@ -23,6 +28,8 @@ jobs:
             > cfn-teleport.rb
           cat cfn-teleport.rb
           shasum -a 256 *
+          git status
+          git diff
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GH_EVENT: ${{ github.event_name }}
