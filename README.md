@@ -10,6 +10,12 @@ A command line tool which can migrate CloudFormation resources between stacks.
 
 ## Installation
 
+On a Mac you can install via [Homebrew](https://brew.sh/):
+
+```bash
+brew install udondan/software/cfn-teleport
+```
+
 Pre-compiled binaries for various operating systems and architectures are [available for download][latest].
 
 If you have [rust/cargo installed](https://doc.rust-lang.org/cargo/getting-started/installation.html), you can simple install the [crate]:
