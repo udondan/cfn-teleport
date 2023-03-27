@@ -249,12 +249,13 @@ jobs:
           cat cfn-teleport.rb
 
           rm -rf artifacts
-          git status
           git diff
           git add cfn-teleport.rb
+          git status
           git commit -m "Release ${VERSION:1}"
 
           #if [[ "${GH_EVENT}" != "pull_request" ]]; then
+            set -x
             git config --global user.email "${EMAIL}"
             git config --global user.name "${NAME}"
             git push
