@@ -256,9 +256,9 @@ jobs:
           git config --global user.name "${NAME}"
           git commit -m "Release ${VERSION:1}"
 
-          #if [[ "${GH_EVENT}" != "pull_request" ]]; then
+          if [[ "${GH_EVENT}" != "pull_request" ]]; then
             git push
-          #fi
+          fi
         env:
           EMAIL: ${{ secrets.EMAIL }}
           NAME: ${{ secrets.NAME }}
@@ -273,11 +273,11 @@ jobs:
               license "Apache-2.0"
 
               if OS.mac? && Hardware::CPU.intel?
-                url "${{ github.server_url }}/${{ github.repository }}/releases/download/{{ version }}/{{ intel_file }}"
+                url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ intel_file }}"
                 sha256 "{{ intel_sha }}"
               end
               if OS.mac? && Hardware::CPU.arm?
-                url "${{ github.server_url }}/${{ github.repository }}/releases/download/{{ version }}/{{ arm_file }}"
+                url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ arm_file }}"
                 sha256 "{{ arm_sha }}"
               end
 
