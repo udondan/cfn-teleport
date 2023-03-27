@@ -14,8 +14,9 @@ jobs:
     steps:
       - name: Update homebrew formula
         run: |
-          echo "${TEMPLATE}" > Formula/cfn-teleport.rb
           pwd
+          ld -slh
+          echo "${TEMPLATE}" > Formula/cfn-teleport.rb
           ld -slh
           cat Formula/cfn-teleport.rb
         env:
