@@ -241,9 +241,9 @@ jobs:
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
-            -e "s!{{ intel_file }}!${INTEL[1]}!g" \
+            -e "s!{{ intel_file }}!$(basename ${INTEL[1]})!g" \
             -e "s!{{ intel_sha }}!${INTEL[0]}!g" \
-            -e "s!{{ arm_file }}!${ARM[1]}!g" \
+            -e "s!{{ arm_file }}!$(basename ${ARM[1]})!g" \
             -e "s!{{ arm_sha }}!${ARM[0]}!g" \
             > cfn-teleport.rb
           cat cfn-teleport.rb
