@@ -32,7 +32,7 @@ jobs:
             -e 's!{{ arm_sha }}!D!g' \
             > cfn-teleport.rb
           cat cfn-teleport.rb
-          shasum -a 256 Cargo.*
+          shasum -a 256 *
           git status
           git diff
         env:
