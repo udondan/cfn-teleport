@@ -231,18 +231,19 @@ jobs:
 
       - name: Update homebrew formula
         run: |
-          VERSION="${GITHUB_REF_NAME:1}"
+          VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            VERSION="1.2.3"
+            VERSION="TEST"
           fi
 
           tree
 
-          ARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-v${VERSION}.dmg))
-          INTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-v${VERSION}.dmg))
+          ARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
+          INTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
+          cfn-teleport-x86_64-apple-darwin-TEST.dmg
 
           echo "${TEMPLATE}" | sed \
-            -e "s!{{ version }}!${VERSION}!g" \
+            -e "s!{{ version }}!${VERSION:1}!g" \
             -e "s!{{ intel_url }}!${INTEL[1]})!g" \
             -e "s!{{ intel_sha }}!${INTEL[0]}!g" \
             -e "s!{{ arm_url }}!${ARM[1]})!g" \
