@@ -31,7 +31,7 @@ jobs:
 
             class CfnTeleport < Formula
               desc "A command line-tool which can migrate CloudFormation resources between stacks"
-              homepage "{{ github.server_url }}/{{ github.repository }}"
+              homepage "${{ github.server_url }}/${{ github.repository }}"
               version "{{ version }}"
               license "Apache-2.0"
 
