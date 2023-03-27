@@ -240,7 +240,6 @@ jobs:
 
           ARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
           INTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
-          cfn-teleport-x86_64-apple-darwin-TEST.dmg
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
