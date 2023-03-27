@@ -129,7 +129,7 @@ jobs:
 
           VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            VERSION="TEST"
+            VERSION="v9.9.9"
           fi
 
           if [[ $OS =~ ^windows.*$ ]]; then
@@ -233,43 +233,46 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            VERSION="TEST"
+            VERSION="v9.9.9"
           fi
-
-          tree
 
           ARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
           INTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
-            -e "s!{{ intel_url }}!${INTEL[1]})!g" \
+            -e "s!{{ intel_file }}!${INTEL[1]}!g" \
             -e "s!{{ intel_sha }}!${INTEL[0]}!g" \
-            -e "s!{{ arm_url }}!${ARM[1]})!g" \
-            -e "s!{{ arm_sha }}!${ARM[0]})!g" \
+            -e "s!{{ arm_file }}!${ARM[1]}!g" \
+            -e "s!{{ arm_sha }}!${ARM[0]}!g" \
             > cfn-teleport.rb
           cat cfn-teleport.rb
 
           rm -rf artifacts
           git status
           git diff
+          git commit -am "Release ${VERSION:1}"
+
+          #if [[ "${GH_EVENT}" != "pull_request" ]]; then
+            git push
+          #fi
         env:
           TEMPLATE: |
             # typed: false
             # frozen_string_literal: true
 
             class CfnTeleport < Formula
-              desc "A command line-tool which can migrate CloudFormation resources between stacks"
+              desc "A command line-tool which can move CloudFormation resources between stacks"
               homepage "${{ github.server_url }}/${{ github.repository }}"
               version "{{ version }}"
               license "Apache-2.0"
 
               if OS.mac? && Hardware::CPU.intel?
-                url "{{ intel_url }}"
+                url "${{ github.server_url }}/${{ github.repository }}/releases/download/{{ version }}/{{ intel_file }}"
                 sha256 "{{ intel_sha }}"
               end
               if OS.mac? && Hardware::CPU.arm?
-                url "{{ arm_url }}"
+                url "${{ github.server_url }}/${{ github.repository }}/releases/download/{{ version }}/{{ arm_file }}"
                 sha256 "{{ arm_sha }}"
               end
 

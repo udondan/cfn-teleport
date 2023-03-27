@@ -4,7 +4,7 @@
 [![crates.io](https://img.shields.io/badge/crates.io-cfn--teleport-yellowgreen)][crate]
 [![License](https://img.shields.io/github/license/udondan/cfn-teleport)][license]
 
-A command line tool which can migrate CloudFormation resources between stacks.
+A command-line tool which can move CloudFormation resources between stacks.
 
 ![Demo](https://raw.githubusercontent.com/udondan/cfn-teleport/main/docs/demo.gif)
 
@@ -28,7 +28,7 @@ cargo install cfn-teleport
 
 ```bash
 $ cfn-teleport --help
-Migrate CloudFormation resources between stacks
+Move CloudFormation resources between stacks
 
 Usage: cfn-teleport [OPTIONS]
 
