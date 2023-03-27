@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   pull_request: # for testing, when we change the workflow
     branches:
-      - mainX
+      - main
     paths:
       - .github/workflows/publish.yml
 
@@ -167,7 +167,7 @@ jobs:
       - name: Archive artifact
         uses: actions/upload-artifact@v3
         with:
-          name: result
+          name: artifacts
           path: |
             ./artifacts
 
@@ -219,18 +219,23 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
         with:
-          persist-credentials: false
-          fetch-depth: 0
+          name: artifacts
 
-      - name: Publish to crates.io
+      - name: Update homebrew formula
         run: |
+          ls -alh artifacts
+          echo "${TEMPLATE}" | sed \
+            -e 's!{{ version }}!1.2.3!g' \
+            -e 's!{{ intel_url }}!A!g' \
+            -e 's!{{ intel_sha }}!B!g' \
+            -e 's!{{ arm_url }}!C!g' \
+            -e 's!{{ arm_sha }}!D!g' \
+            > cfn-teleport.rb
+          cat cfn-teleport.rb
           if [[ "${GH_EVENT}" != "pull_request" ]]; then
-            cargo publish
-          else
-            cargo publish --dry-run
+            echo "@TODO: merge request"
           fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -241,17 +246,17 @@ jobs:
 
             class CfnTeleport < Formula
               desc "A command line-tool which can migrate CloudFormation resources between stacks"
-              homepage "https://github.com/udondan/cfn-teleport"
-              version "0.2.0"
+              homepage "${{ github.server_url }}/${{ github.repository }}"
+              version "{{ version }}"
               license "Apache-2.0"
 
               if OS.mac? && Hardware::CPU.intel?
-                url "https://github.com/udondan/cfn-teleport/releases/download/v0.2.0/cfn-teleport-x86_64-apple-darwin-v0.2.0.dmg"
-                sha256 "b46a111bc862d7421f9154bd3722b44e55e78aef37982fcf6ef539aa4f007f18"
+                url "{{ intel_url }}"
+                sha256 "{{ intel_sha }}"
               end
               if OS.mac? && Hardware::CPU.arm?
-                url "https://github.com/udondan/cfn-teleport/releases/download/v0.2.0/cfn-teleport-aarch64-apple-darwin-v0.2.0.dmg"
-                sha256 "5b94abd2c19101a5cc9d35c2a074251e90daed4afdc71f68def922e7c4c4d2e9"
+                url "{{ arm_url }}"
+                sha256 "{{ arm_sha }}"
               end
 
               def install
