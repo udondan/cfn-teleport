@@ -14,8 +14,6 @@ jobs:
     steps:
       - name: Update homebrew formula
         run: |
-          echo ${{ github.server_url }}/${{ github.repository }}
-          printenv
           echo "${TEMPLATE}" | sed \
             -e 's!{{ version }}!1.2.3!g' \
             -e 's!{{ intel_url }}!A!g' \
@@ -33,7 +31,7 @@ jobs:
 
             class CfnTeleport < Formula
               desc "A command line-tool which can migrate CloudFormation resources between stacks"
-              homepage "https://github.com/udondan/cfn-teleport"
+              homepage "{{ github.server_url }}/{{ github.repository }}"
               version "{{ version }}"
               license "Apache-2.0"
 
