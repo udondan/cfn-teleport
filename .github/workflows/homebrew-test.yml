@@ -14,7 +14,8 @@ jobs:
     steps:
       - name: Update homebrew formula
         run: |
-          echo $TEMPLATE
+          echo $TEMPLATE > Formula/cfn-teleport.rb
+          cat Formula/cfn-teleport.rb
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
           GH_EVENT: ${{ github.event_name }}
