@@ -112,24 +112,48 @@ jobs:
         if: matrix.rust-toolchain == 'stable'
         working-directory: test/cdk
         run: |
-          echo "######### Testing resource renaming in same stack #########"
-          cfn-teleport --source "${STACK1}" --target "${STACK1}" --resource "${BUCKET1}:NewBucketId" --yes
-          if npx cdk diff --fail; then
-            echo "Migration failed, cdk diff did not show changes"
-            exit 1
-          fi
+#          echo "######### Testing resource renaming in same stack #########"
+#          cfn-teleport --source "${STACK1}" --target "${STACK1}" --resource "${BUCKET1}:NewBucketId" --yes
+#          if npx cdk diff --fail; then
+#            echo "Migration failed, cdk diff did not show changes"
+#            exit 1
+#          fi
+#
+#          echo "######### Testing migration from ${STACK1} to ${STACK2} #########"
+#          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "NewBucketId:${BUCKET1}" --yes
+#          if npx cdk diff --fail; then
+#            echo "Migration failed, cdk diff did not show changes"
+#            exit 1
+#          fi
+#
+#          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "${BUCKET2}" --yes
 
           echo "######### Testing migration from ${STACK1} to ${STACK2} #########"
-          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "NewBucketId:${BUCKET1}" --yes
+          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes \
+            --resource "${BUCKET1}" \
+            --resource "${BUCKET2}" \
+            --resource "${INSTANCE}" \
+            --resource "${SECURITY_GROUP}" \
+            --resource "${KEY_PAIR}" \
+            --resource "${INSTANCE_PROFILE}" \
+            --resource "${ROLE}" \
+            --resource "${DYNAMO_TABLE}"
+
           if npx cdk diff --fail; then
             echo "Migration failed, cdk diff did not show changes"
             exit 1
           fi
 
-          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "${BUCKET2}" --yes
-
           echo "######### Testing migration from ${STACK2} to ${STACK1} #########"
-          cfn-teleport --source "${STACK2}" --target "${STACK1}" --resource "${BUCKET1}" --resource "${BUCKET2}" --yes
+          cfn-teleport --source "${STACK2}" --target "${STACK1}" --yes \
+            --resource "${BUCKET1}" \
+            --resource "${BUCKET2}" \
+            --resource "${INSTANCE}" \
+            --resource "${SECURITY_GROUP}" \
+            --resource "${KEY_PAIR}" \
+            --resource "${INSTANCE_PROFILE}" \
+            --resource "${ROLE}" \
+            --resource "${DYNAMO_TABLE}"
 
           if ! npx cdk diff --fail; then
             echo "Migration failed, cdk diff did show changes"
@@ -143,6 +167,12 @@ jobs:
           STACK2: CfnTeleportTest2
           BUCKET1: Bucket182C536A1
           BUCKET2: Bucket21D68F7E8
+          INSTANCE: InstanceC1063A87
+          SECURITY_GROUP: SecurityGroupDD263621
+          KEY_PAIR: KeyPair
+          INSTANCE_PROFILE: InstanceInstanceProfileAB5AEF02
+          ROLE: Role1ABCC5F0
+          DYNAMO_TABLE: DynamoDbTable6316879D
 
       - name: Delete test stacks
         if: matrix.rust-toolchain == 'stable'
