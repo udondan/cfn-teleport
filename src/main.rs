@@ -5,10 +5,9 @@ use std::error::Error;
 use std::process;
 use uuid::Uuid;
 mod spinner;
-mod supported_resource_types;
-
 use std::collections::HashMap;
 use std::io;
+mod supported_resource_types;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -643,12 +642,9 @@ async fn get_resource_identifier_mapping(
                         .unwrap()
                         .iter()
                         .for_each(|logical_id| {
-                            item.resource_identifiers()
-                                .unwrap()
-                                .iter()
-                                .for_each(|resource_id| {
-                                    map.insert(logical_id.to_string(), resource_id.to_string());
-                                });
+                            let resource_identifier =
+                                item.resource_identifiers().unwrap().first().unwrap();
+                            map.insert(logical_id.to_string(), resource_identifier.to_string());
                         });
                 });
             }
