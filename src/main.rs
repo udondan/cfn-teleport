@@ -588,7 +588,7 @@ fn add_resources(
     let target_resources = target_template["Resources"].as_object_mut().unwrap();
     let source_resources = source_template["Resources"].as_object().unwrap();
 
-    for (resource_id, new_resource_id) in resource_id_map {
+    for (resource_id, new_resource_id) in resource_id_map.clone() {
         if let Some(resource) = source_resources.get(&resource_id) {
             target_resources.insert(new_resource_id, resource.clone());
         }
@@ -600,6 +600,21 @@ fn add_resources(
     );
 
     target_template
+}
+
+async fn validate_template(
+    client: &cloudformation::Client,
+    template: serde_json::Value,
+) -> Result<(), cloudformation::Error> {
+    match client
+        .validate_template()
+        .template_body(serde_json::to_string(&template).unwrap())
+        .send()
+        .await
+    {
+        Ok(_output) => Ok(()),
+        Err(err) => Err(err.into()),
+    }
 }
 
 async fn update_stack(
@@ -649,7 +664,7 @@ async fn get_stack_status(
 async fn wait_for_stack_update_completion(
     client: &cloudformation::Client,
     stack_name: &str,
-    mut spinner: spinner::Spin,
+    mut spinner: Option<spinner::Spin>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stack_status = get_stack_status(client, stack_name).await?;
 
@@ -672,7 +687,9 @@ async fn wait_for_stack_update_completion(
         }
     }
 
-    spinner.complete();
+    if let Some(spinner) = spinner.as_mut() {
+        spinner.complete();
+    }
 
     Ok(())
 }
@@ -796,6 +813,11 @@ async fn get_changeset_status(
         Err(err) => return Err(Box::new(err)),
     };
 
+    if change_set.status == Some(cloudformation::model::ChangeSetStatus::Failed) {
+        println!("{:?}", change_set);
+        return Err(change_set.status_reason().unwrap().to_string().into());
+    }
+
     Ok(change_set.status)
 }
 
@@ -803,7 +825,6 @@ async fn wait_for_changeset_created(
     client: &cloudformation::Client,
     stack_name: &str,
     changeset_name: &str,
-    mut spinner: spinner::Spin,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
 
@@ -825,6 +846,5 @@ async fn wait_for_changeset_created(
         }
     }
 
-    spinner.complete();
     Ok(())
 }
