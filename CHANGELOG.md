@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.3.0](https://github.com/udondan/cfn-teleport/compare/v0.2.0...v0.3.0) (2023-03-30)
+
+
+### Features
+
+* show renamed resources in summary ([#66](https://github.com/udondan/cfn-teleport/issues/66)) ([09c17d5](https://github.com/udondan/cfn-teleport/commit/09c17d5c16c483454e62bc14757f693ca1393a7c))
+* validating all templates before execution and optimize output ([f6b88c5](https://github.com/udondan/cfn-teleport/commit/f6b88c51b2691c8d620c7a1e1ddac0c54b89b25d))
+
+
+### Bug Fixes
+
+* adds all capabilities to the changeset, so we can process all possible resources and templates ([2f7e39f](https://github.com/udondan/cfn-teleport/commit/2f7e39f4609558160b563e344f5de886a2fae61c))
+* adds DeletionPolicy to all resources as required by CFN import ([4b25a57](https://github.com/udondan/cfn-teleport/commit/4b25a57be2d97d653f59de2cc77ff295af803e5d))
+* fixes invalid pipeline yaml ([416d747](https://github.com/udondan/cfn-teleport/commit/416d747c71751d67004594bfa60bd94c880aafe6))
+* removes useless method call ([723dd04](https://github.com/udondan/cfn-teleport/commit/723dd04231b2d70e2ccb52a6c91bfbcb05e3f15a))
+* select correct (first) resource identifier, for resources that have multiple possible identifier keys ([9e9e628](https://github.com/udondan/cfn-teleport/commit/9e9e6289099f259d7397e11c5637974cd0b8fce7))
+* various fixes ([f5c5f47](https://github.com/udondan/cfn-teleport/commit/f5c5f476f657d8bb7f8b211e62dcb8540c49d09c))
+
+
+### Reverts
+
+* currently cannot delete resources, lacking permissions ([f54fdaa](https://github.com/udondan/cfn-teleport/commit/f54fdaa8317577f3f76c6e372316b88548b09ad7))
+* for now, disable renaming of resources ([0f7a8db](https://github.com/udondan/cfn-teleport/commit/0f7a8dbd8843b7c2b3f2c5add51cc6f482c87dc2))
+
 ## [0.2.0](https://github.com/udondan/cfn-teleport/compare/v0.1.1...v0.2.0) (2023-03-26)
 
 
