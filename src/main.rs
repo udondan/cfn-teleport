@@ -9,6 +9,8 @@ use std::collections::HashMap;
 use std::io;
 mod supported_resource_types;
 
+const DEMO: bool = false;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -135,7 +137,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                 new_logical_ids_map.insert(old_logical_id, new_logical_id);
             }
-            println!()
+            //            println!()
         }
         Some(resources) => {
             for resource in resources {
@@ -316,10 +318,23 @@ async fn get_stacks(
         }
     }
 
-    let stacks = stacks
+    let mut stacks = stacks
         .into_iter()
         .filter(|stack| !stack.stack_status().unwrap().as_str().starts_with("DELETE"))
         .collect::<Vec<_>>();
+
+    if DEMO {
+        // filter by name, for demo purposes
+        stacks = stacks
+            .into_iter()
+            .filter(|stack| {
+                stack
+                    .stack_name()
+                    .unwrap_or_default()
+                    .contains("CfnTeleportTest")
+            })
+            .collect::<Vec<_>>();
+    }
 
     // Sort the stacks by name
     let mut sorted_stacks = stacks;
