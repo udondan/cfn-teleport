@@ -193,35 +193,46 @@ async fn main() -> Result<(), Box<dyn Error>> {
         retain_resources(template_source.clone(), resource_ids_to_remove.clone());
     let template_retained_str = serde_json::to_string(&template_retained)?;
 
-    if template_source_str != template_retained_str {
-        //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
-
-        let spinner = spinner::Spin::new(&format!(
-            "Retaining resources in stack {}: {}",
-            source_stack,
-            resource_ids_to_remove.join(", ")
-        ));
-        update_stack(&client, &source_stack, template_retained).await?;
-        wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
-    }
-
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
-
-    let spinner = spinner::Spin::new(&format!(
-        "Removing resources from stack {}: {}",
-        source_stack,
-        resource_ids_to_remove.join(", ")
-    ));
-
-    update_stack(&client, &source_stack, template_removed).await?;
-    wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
 
     let template_target = add_resources(
         get_template(&client, &target_stack).await?,
         template_source.clone(),
         new_logical_ids_map.clone(),
     );
+
+    for template in vec![
+        template_retained.clone(),
+        template_removed.clone(),
+        template_target.clone(),
+    ] {
+        let result = validate_template(&client, template).await;
+        if result.is_err() {
+            return Err(format!(
+                "Unable to proceed, because the template is invalid: {}",
+                result.err().unwrap()
+            )
+            .into());
+        }
+    }
+
+    let spinner = spinner::Spin::new(
+        format!(
+            "Removing {} resources from stack {}",
+            resource_ids_to_remove.len(),
+            source_stack
+        )
+        .as_str(),
+    );
+
+    if template_source_str != template_retained_str {
+        update_stack(&client, &source_stack, template_retained).await?;
+        wait_for_stack_update_completion(&client, &source_stack, None).await?;
+    }
+
+    update_stack(&client, &source_stack, template_removed).await?;
+    wait_for_stack_update_completion(&client, &source_stack, Some(spinner)).await?;
 
     let changeset_name = create_changeset(
         &client,
@@ -232,13 +243,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await?;
 
-    let spinner = spinner::Spin::new(&format!("Creating changeset {}", changeset_name));
-    wait_for_changeset_created(&client, &target_stack, &changeset_name, spinner).await?;
-
-    let spinner = spinner::Spin::new(&format!("Executing changeset {}", changeset_name));
+    let spinner = spinner::Spin::new(&format!(
+        "Importing {} resources into stack {}",
+        resource_ids_to_remove.len(),
+        target_stack,
+    ));
+    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
 
     execute_changeset(&client, &target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, &target_stack, spinner).await?;
+    wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
 
     Ok(())
 }
