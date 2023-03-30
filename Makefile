@@ -19,6 +19,7 @@ test: phony
 
 test-clean-all:
 	@\
+	set -x; \
 	aws resourcegroupstaggingapi get-resources \
 			--tag-filters Key=ApplicationName,Values=cfn-teleport-test \
 			--resource-type-filters s3:bucket \
