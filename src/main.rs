@@ -559,6 +559,10 @@ async fn update_stack(
         .update_stack()
         .stack_name(stack_name)
         .template_body(serde_json::to_string(&template).unwrap())
+        // @TODO: we can detect the required capabilities from the output of validate_template()
+        .capabilities(cloudformation::model::Capability::CapabilityIam)
+        .capabilities(cloudformation::model::Capability::CapabilityNamedIam)
+        .capabilities(cloudformation::model::Capability::CapabilityAutoExpand)
         .send()
         .await
     {
@@ -698,6 +702,10 @@ async fn create_changeset(
         .template_body(template_string)
         .change_set_type(cloudformation::model::ChangeSetType::Import)
         .set_resources_to_import(resources.into())
+        // @TODO: we can detect the required capabilities from the output of validate_template()
+        .capabilities(cloudformation::model::Capability::CapabilityIam)
+        .capabilities(cloudformation::model::Capability::CapabilityNamedIam)
+        .capabilities(cloudformation::model::Capability::CapabilityAutoExpand)
         .send()
         .await
     {
