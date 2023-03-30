@@ -35,10 +35,10 @@ test-clean-all:
 		echo "Deleting table "$$arn"..."; \
 		aws dynamodb delete-table --table-name "$${arn##*/}" --output text > /dev/null; \
 	done; \
-	aws resourcegroupstaggingapi get-resources \
-			--tag-filters Key=ApplicationName,Values=cfn-teleport-test \
-			--resource-type-filters ec2:instance \
-			--query 'ResourceTagMappingList[].[ResourceARN]' \
+	aws ec2 describe-instances \
+			--filters "Name=tag:ApplicationName,Values=cfn-teleport-test" \
+			          "Name=instance-state-code,Values=16" \
+			--query 'Reservations[].Instances[].[InstanceId]' \
 			--output text | while read -r arn; do \
 		echo "Deleting instance "$$arn"..."; \
 		aws ec2 terminate-instances --instance-ids "$${arn##*/}" --output text > /dev/null; \
