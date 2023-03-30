@@ -112,22 +112,6 @@ jobs:
         if: matrix.rust-toolchain == 'stable'
         working-directory: test/cdk
         run: |
-#          echo "######### Testing resource renaming in same stack #########"
-#          cfn-teleport --source "${STACK1}" --target "${STACK1}" --resource "${BUCKET1}:NewBucketId" --yes
-#          if npx cdk diff --fail; then
-#            echo "Migration failed, cdk diff did not show changes"
-#            exit 1
-#          fi
-#
-#          echo "######### Testing migration from ${STACK1} to ${STACK2} #########"
-#          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "NewBucketId:${BUCKET1}" --yes
-#          if npx cdk diff --fail; then
-#            echo "Migration failed, cdk diff did not show changes"
-#            exit 1
-#          fi
-#
-#          cfn-teleport --source "${STACK1}" --target "${STACK2}" --resource "${BUCKET2}" --yes
-
           echo "######### Testing migration from ${STACK1} to ${STACK2} #########"
           cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes \
             --resource "${BUCKET1}" \
