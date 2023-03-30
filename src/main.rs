@@ -532,6 +532,41 @@ fn retain_resources(
     template
 }
 
+// for reasons unknown, importing resource requires a DeletionPolicy to be set. Se we add the documented defaults
+// https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html
+fn set_default_deletion_policy(
+    mut template: serde_json::Value,
+    resource_ids: Vec<String>,
+) -> serde_json::Value {
+    let resources = template["Resources"].as_object_mut().unwrap();
+
+    for resource_id in resource_ids {
+        if let Some(resource) = resources.get_mut(&resource_id) {
+            if resource.is_object() {
+                let resource_object = resource.as_object_mut().unwrap();
+                if !resource_object.contains_key("DeletionPolicy") {
+                    let resource_type = resource_object["Type"].as_str().unwrap();
+                    let deletion_policy = match resource_type {
+                        "AWS::RDS::DBCluster" => "Snapshot",
+                        "AWS::RDS::DBInstance" => {
+                            if resource_object.contains_key("DBClusterIdentifier") {
+                                "Retain"
+                            } else {
+                                "Delete"
+                            }
+                        }
+                        _ => "Retain",
+                    };
+                    resource["DeletionPolicy"] =
+                        serde_json::Value::String(deletion_policy.to_string());
+                }
+            }
+        }
+    }
+
+    template
+}
+
 fn remove_resources(
     mut template: serde_json::Value,
     resource_ids: Vec<String>,
@@ -558,6 +593,11 @@ fn add_resources(
             target_resources.insert(new_resource_id, resource.clone());
         }
     }
+
+    let target_template = set_default_deletion_policy(
+        target_template.clone(),
+        resource_id_map.values().map(|x| x.to_string()).collect(),
+    );
 
     target_template
 }
