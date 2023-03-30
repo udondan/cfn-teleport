@@ -9,7 +9,7 @@ new TestStack(app, 'CfnTeleportTest1', {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
   },
-  bucket: true,
+  resources: true,
 });
 
 new TestStack(app, 'CfnTeleportTest2', {
@@ -17,5 +17,5 @@ new TestStack(app, 'CfnTeleportTest2', {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
   },
-  bucket: false,
+  resources: false,
 });
