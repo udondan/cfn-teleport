@@ -5,10 +5,11 @@ use std::error::Error;
 use std::process;
 use uuid::Uuid;
 mod spinner;
-mod supported_resource_types;
-
 use std::collections::HashMap;
 use std::io;
+mod supported_resource_types;
+
+const DEMO: bool = false;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -61,6 +62,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .to_string()
     });
 
+    if source_stack == target_stack {
+        return Err("Source and target stack must be different".into());
+    }
+
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
     let selected_resources = match args.resource.clone() {
@@ -98,6 +103,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut new_logical_ids_map = HashMap::new();
+    //let mut resource_has_been_renamed = false;
 
     match args.resource.clone() {
         None => {
@@ -106,24 +112,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .logical_resource_id()
                     .unwrap_or_default()
                     .to_owned();
+                let mut new_logical_id: String;
+                if false {
+                    // resource renaming is disabled for now
+                    new_logical_id = Input::new()
+                        .with_prompt(format!(
+                            "Optionally provide a new logical ID for resource '{}'",
+                            old_logical_id
+                        ))
+                        .default(old_logical_id.clone())
+                        .interact_text()?;
 
-                let mut new_logical_id: String = Input::new()
-                    .with_prompt(format!(
-                        "Optionally provide a new logical ID for resource '{}'",
-                        old_logical_id
-                    ))
-                    .default(old_logical_id.clone())
-                    .interact_text()?;
-
-                if new_logical_id.is_empty() {
-                    new_logical_id = resource
-                        .logical_resource_id()
-                        .unwrap_or_default()
-                        .to_string();
+                    if new_logical_id.is_empty() {
+                        new_logical_id = resource
+                            .logical_resource_id()
+                            .unwrap_or_default()
+                            .to_string();
+                    } else {
+                        //resource_has_been_renamed = true;
+                    }
+                } else {
+                    new_logical_id = old_logical_id.clone();
                 }
+
                 new_logical_ids_map.insert(old_logical_id, new_logical_id);
             }
-            println!()
+            //            println!()
         }
         Some(resources) => {
             for resource in resources {
@@ -181,35 +195,46 @@ async fn main() -> Result<(), Box<dyn Error>> {
         retain_resources(template_source.clone(), resource_ids_to_remove.clone());
     let template_retained_str = serde_json::to_string(&template_retained)?;
 
-    if template_source_str != template_retained_str {
-        //@TODO: this output is not accurate. if the tmeplate has changed, it only means at least one of the resource will be rateind, not neccessarily all selecteed resources
-
-        let spinner = spinner::Spin::new(&format!(
-            "Retaining resources in stack {}: {}",
-            source_stack,
-            resource_ids_to_remove.join(", ")
-        ));
-        update_stack(&client, &source_stack, template_retained).await?;
-        wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
-    }
-
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
-
-    let spinner = spinner::Spin::new(&format!(
-        "Removing resources from stack {}: {}",
-        source_stack,
-        resource_ids_to_remove.join(", ")
-    ));
-
-    update_stack(&client, &source_stack, template_removed).await?;
-    wait_for_stack_update_completion(&client, &source_stack, spinner).await?;
 
     let template_target = add_resources(
         get_template(&client, &target_stack).await?,
         template_source.clone(),
         new_logical_ids_map.clone(),
     );
+
+    for template in vec![
+        template_retained.clone(),
+        template_removed.clone(),
+        template_target.clone(),
+    ] {
+        let result = validate_template(&client, template).await;
+        if result.is_err() {
+            return Err(format!(
+                "Unable to proceed, because the template is invalid: {}",
+                result.err().unwrap()
+            )
+            .into());
+        }
+    }
+
+    let spinner = spinner::Spin::new(
+        format!(
+            "Removing {} resources from stack {}",
+            resource_ids_to_remove.len(),
+            source_stack
+        )
+        .as_str(),
+    );
+
+    if template_source_str != template_retained_str {
+        update_stack(&client, &source_stack, template_retained).await?;
+        wait_for_stack_update_completion(&client, &source_stack, None).await?;
+    }
+
+    update_stack(&client, &source_stack, template_removed).await?;
+    wait_for_stack_update_completion(&client, &source_stack, Some(spinner)).await?;
 
     let changeset_name = create_changeset(
         &client,
@@ -220,13 +245,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     )
     .await?;
 
-    let spinner = spinner::Spin::new(&format!("Creating changeset {}", changeset_name));
-    wait_for_changeset_created(&client, &target_stack, &changeset_name, spinner).await?;
-
-    let spinner = spinner::Spin::new(&format!("Executing changeset {}", changeset_name));
+    let spinner = spinner::Spin::new(&format!(
+        "Importing {} resources into stack {}",
+        resource_ids_to_remove.len(),
+        target_stack,
+    ));
+    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
 
     execute_changeset(&client, &target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, &target_stack, spinner).await?;
+    wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
 
     Ok(())
 }
@@ -291,10 +318,23 @@ async fn get_stacks(
         }
     }
 
-    let stacks = stacks
+    let mut stacks = stacks
         .into_iter()
         .filter(|stack| !stack.stack_status().unwrap().as_str().starts_with("DELETE"))
         .collect::<Vec<_>>();
+
+    if DEMO {
+        // filter by name, for demo purposes
+        stacks = stacks
+            .into_iter()
+            .filter(|stack| {
+                stack
+                    .stack_name()
+                    .unwrap_or_default()
+                    .contains("CfnTeleportTest")
+            })
+            .collect::<Vec<_>>();
+    }
 
     // Sort the stacks by name
     let mut sorted_stacks = stacks;
@@ -507,6 +547,41 @@ fn retain_resources(
     template
 }
 
+// for reasons unknown, importing resource requires a DeletionPolicy to be set. Se we add the documented defaults
+// https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-attribute-deletionpolicy.html
+fn set_default_deletion_policy(
+    mut template: serde_json::Value,
+    resource_ids: Vec<String>,
+) -> serde_json::Value {
+    let resources = template["Resources"].as_object_mut().unwrap();
+
+    for resource_id in resource_ids {
+        if let Some(resource) = resources.get_mut(&resource_id) {
+            if resource.is_object() {
+                let resource_object = resource.as_object_mut().unwrap();
+                if !resource_object.contains_key("DeletionPolicy") {
+                    let resource_type = resource_object["Type"].as_str().unwrap();
+                    let deletion_policy = match resource_type {
+                        "AWS::RDS::DBCluster" => "Snapshot",
+                        "AWS::RDS::DBInstance" => {
+                            if resource_object.contains_key("DBClusterIdentifier") {
+                                "Retain"
+                            } else {
+                                "Delete"
+                            }
+                        }
+                        _ => "Retain",
+                    };
+                    resource["DeletionPolicy"] =
+                        serde_json::Value::String(deletion_policy.to_string());
+                }
+            }
+        }
+    }
+
+    template
+}
+
 fn remove_resources(
     mut template: serde_json::Value,
     resource_ids: Vec<String>,
@@ -528,13 +603,33 @@ fn add_resources(
     let target_resources = target_template["Resources"].as_object_mut().unwrap();
     let source_resources = source_template["Resources"].as_object().unwrap();
 
-    for (resource_id, new_resource_id) in resource_id_map {
+    for (resource_id, new_resource_id) in resource_id_map.clone() {
         if let Some(resource) = source_resources.get(&resource_id) {
             target_resources.insert(new_resource_id, resource.clone());
         }
     }
 
+    let target_template = set_default_deletion_policy(
+        target_template.clone(),
+        resource_id_map.values().map(|x| x.to_string()).collect(),
+    );
+
     target_template
+}
+
+async fn validate_template(
+    client: &cloudformation::Client,
+    template: serde_json::Value,
+) -> Result<(), cloudformation::Error> {
+    match client
+        .validate_template()
+        .template_body(serde_json::to_string(&template).unwrap())
+        .send()
+        .await
+    {
+        Ok(_output) => Ok(()),
+        Err(err) => Err(err.into()),
+    }
 }
 
 async fn update_stack(
@@ -546,6 +641,10 @@ async fn update_stack(
         .update_stack()
         .stack_name(stack_name)
         .template_body(serde_json::to_string(&template).unwrap())
+        // @TODO: we can detect the required capabilities from the output of validate_template()
+        .capabilities(cloudformation::model::Capability::CapabilityIam)
+        .capabilities(cloudformation::model::Capability::CapabilityNamedIam)
+        .capabilities(cloudformation::model::Capability::CapabilityAutoExpand)
         .send()
         .await
     {
@@ -580,7 +679,7 @@ async fn get_stack_status(
 async fn wait_for_stack_update_completion(
     client: &cloudformation::Client,
     stack_name: &str,
-    mut spinner: spinner::Spin,
+    mut spinner: Option<spinner::Spin>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut stack_status = get_stack_status(client, stack_name).await?;
 
@@ -603,7 +702,9 @@ async fn wait_for_stack_update_completion(
         }
     }
 
-    spinner.complete();
+    if let Some(spinner) = spinner.as_mut() {
+        spinner.complete();
+    }
 
     Ok(())
 }
@@ -626,12 +727,9 @@ async fn get_resource_identifier_mapping(
                         .unwrap()
                         .iter()
                         .for_each(|logical_id| {
-                            item.resource_identifiers()
-                                .unwrap()
-                                .iter()
-                                .for_each(|resource_id| {
-                                    map.insert(logical_id.to_string(), resource_id.to_string());
-                                });
+                            let resource_identifier =
+                                item.resource_identifiers().unwrap().first().unwrap();
+                            map.insert(logical_id.to_string(), resource_identifier.to_string());
                         });
                 });
             }
@@ -685,6 +783,10 @@ async fn create_changeset(
         .template_body(template_string)
         .change_set_type(cloudformation::model::ChangeSetType::Import)
         .set_resources_to_import(resources.into())
+        // @TODO: we can detect the required capabilities from the output of validate_template()
+        .capabilities(cloudformation::model::Capability::CapabilityIam)
+        .capabilities(cloudformation::model::Capability::CapabilityNamedIam)
+        .capabilities(cloudformation::model::Capability::CapabilityAutoExpand)
         .send()
         .await
     {
@@ -726,6 +828,11 @@ async fn get_changeset_status(
         Err(err) => return Err(Box::new(err)),
     };
 
+    if change_set.status == Some(cloudformation::model::ChangeSetStatus::Failed) {
+        println!("{:?}", change_set);
+        return Err(change_set.status_reason().unwrap().to_string().into());
+    }
+
     Ok(change_set.status)
 }
 
@@ -733,7 +840,6 @@ async fn wait_for_changeset_created(
     client: &cloudformation::Client,
     stack_name: &str,
     changeset_name: &str,
-    mut spinner: spinner::Spin,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
 
@@ -755,6 +861,5 @@ async fn wait_for_changeset_created(
         }
     }
 
-    spinner.complete();
     Ok(())
 }
