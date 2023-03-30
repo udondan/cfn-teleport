@@ -61,6 +61,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .to_string()
     });
 
+    if source_stack == target_stack {
+        return Err("Source and target stack must be different".into());
+    }
+
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
     let selected_resources = match args.resource.clone() {
@@ -98,6 +102,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let mut new_logical_ids_map = HashMap::new();
+    //let mut resource_has_been_renamed = false;
 
     match args.resource.clone() {
         None => {
@@ -106,21 +111,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .logical_resource_id()
                     .unwrap_or_default()
                     .to_owned();
+                let mut new_logical_id: String;
+                if false {
+                    // resource renaming is disabled for now
+                    new_logical_id = Input::new()
+                        .with_prompt(format!(
+                            "Optionally provide a new logical ID for resource '{}'",
+                            old_logical_id
+                        ))
+                        .default(old_logical_id.clone())
+                        .interact_text()?;
 
-                let mut new_logical_id: String = Input::new()
-                    .with_prompt(format!(
-                        "Optionally provide a new logical ID for resource '{}'",
-                        old_logical_id
-                    ))
-                    .default(old_logical_id.clone())
-                    .interact_text()?;
-
-                if new_logical_id.is_empty() {
-                    new_logical_id = resource
-                        .logical_resource_id()
-                        .unwrap_or_default()
-                        .to_string();
+                    if new_logical_id.is_empty() {
+                        new_logical_id = resource
+                            .logical_resource_id()
+                            .unwrap_or_default()
+                            .to_string();
+                    } else {
+                        //resource_has_been_renamed = true;
+                    }
+                } else {
+                    new_logical_id = old_logical_id.clone();
                 }
+
                 new_logical_ids_map.insert(old_logical_id, new_logical_id);
             }
             println!()
