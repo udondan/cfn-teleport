@@ -27,7 +27,7 @@ impl Spin {
     }
 
     pub fn complete(&mut self) {
-        let success_prefix = style("✔".to_string()).for_stderr().green();
+        let success_prefix = style("✔".to_string()).green();
 
         if let Some(mut spinner) = self.spinner.take() {
             spinner.stop_with_message(format!("{} {}", success_prefix, self.message.clone()));
