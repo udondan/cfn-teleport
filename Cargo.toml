@@ -14,7 +14,7 @@ publish = true
 
 [dependencies]
 atty = "0.2.14"
-aws-config = "0.54.1"
+aws-config = "0.55.0"
 aws-sdk-cloudformation = "0.24.0"
 clap = { version = "4.2.1", features = ["derive"] }
 console = "0.15.5"
