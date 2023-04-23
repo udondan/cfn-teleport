@@ -16,10 +16,10 @@ publish = true
 atty = "0.2.14"
 aws-config = "0.55.0"
 aws-sdk-cloudformation = "0.26.0"
-clap = { version = "4.2.1", features = ["derive"] }
+clap = { version = "4.2.4", features = ["derive"] }
 console = "0.15.5"
 dialoguer = "0.10.4"
-serde_json = "1.0.95"
+serde_json = "1.0.96"
 spinners = "4.1.0"
 tokio = { version = "1", features = ["full"] }
 
