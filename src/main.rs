@@ -269,32 +269,32 @@ fn split_ids(id: String) -> (String, String) {
 
 async fn get_stacks(
     client: &cloudformation::Client,
-) -> Result<Vec<cloudformation::model::StackSummary>, cloudformation::Error> {
+) -> Result<Vec<cloudformation::types::StackSummary>, cloudformation::Error> {
     let mut stacks = Vec::new();
     let mut token = None;
 
     let stack_filter = vec![
-        cloudformation::model::StackStatus::CreateInProgress,
-        cloudformation::model::StackStatus::CreateFailed,
-        cloudformation::model::StackStatus::CreateComplete,
-        cloudformation::model::StackStatus::RollbackInProgress,
-        cloudformation::model::StackStatus::RollbackFailed,
-        cloudformation::model::StackStatus::RollbackComplete,
-        cloudformation::model::StackStatus::DeleteFailed,
-        cloudformation::model::StackStatus::UpdateInProgress,
-        cloudformation::model::StackStatus::UpdateCompleteCleanupInProgress,
-        cloudformation::model::StackStatus::UpdateComplete,
-        cloudformation::model::StackStatus::UpdateFailed,
-        cloudformation::model::StackStatus::UpdateRollbackInProgress,
-        cloudformation::model::StackStatus::UpdateRollbackFailed,
-        cloudformation::model::StackStatus::UpdateRollbackCompleteCleanupInProgress,
-        cloudformation::model::StackStatus::UpdateRollbackComplete,
-        cloudformation::model::StackStatus::ReviewInProgress,
-        cloudformation::model::StackStatus::ImportInProgress,
-        cloudformation::model::StackStatus::ImportComplete,
-        cloudformation::model::StackStatus::ImportRollbackInProgress,
-        cloudformation::model::StackStatus::ImportRollbackFailed,
-        cloudformation::model::StackStatus::ImportRollbackComplete,
+        cloudformation::types::StackStatus::CreateInProgress,
+        cloudformation::types::StackStatus::CreateFailed,
+        cloudformation::types::StackStatus::CreateComplete,
+        cloudformation::types::StackStatus::RollbackInProgress,
+        cloudformation::types::StackStatus::RollbackFailed,
+        cloudformation::types::StackStatus::RollbackComplete,
+        cloudformation::types::StackStatus::DeleteFailed,
+        cloudformation::types::StackStatus::UpdateInProgress,
+        cloudformation::types::StackStatus::UpdateCompleteCleanupInProgress,
+        cloudformation::types::StackStatus::UpdateComplete,
+        cloudformation::types::StackStatus::UpdateFailed,
+        cloudformation::types::StackStatus::UpdateRollbackInProgress,
+        cloudformation::types::StackStatus::UpdateRollbackFailed,
+        cloudformation::types::StackStatus::UpdateRollbackCompleteCleanupInProgress,
+        cloudformation::types::StackStatus::UpdateRollbackComplete,
+        cloudformation::types::StackStatus::ReviewInProgress,
+        cloudformation::types::StackStatus::ImportInProgress,
+        cloudformation::types::StackStatus::ImportComplete,
+        cloudformation::types::StackStatus::ImportRollbackInProgress,
+        cloudformation::types::StackStatus::ImportRollbackFailed,
+        cloudformation::types::StackStatus::ImportRollbackComplete,
     ];
 
     loop {
@@ -360,7 +360,7 @@ fn select_stack<'a>(prompt: &str, items: &'a [&str]) -> Result<&'a str, Box<dyn 
 async fn get_resources(
     client: &cloudformation::Client,
     stack_name: &str,
-) -> Result<Vec<cloudformation::model::StackResourceSummary>, cloudformation::Error> {
+) -> Result<Vec<cloudformation::types::StackResourceSummary>, cloudformation::Error> {
     let resp = client
         .list_stack_resources()
         .stack_name(stack_name)
@@ -398,9 +398,9 @@ async fn get_resources(
 }
 
 async fn filter_resources<'a>(
-    resources: &'a [&aws_sdk_cloudformation::model::StackResourceSummary],
+    resources: &'a [&aws_sdk_cloudformation::types::StackResourceSummary],
     filter: &[String],
-) -> Result<Vec<&'a aws_sdk_cloudformation::model::StackResourceSummary>, Box<dyn Error>> {
+) -> Result<Vec<&'a aws_sdk_cloudformation::types::StackResourceSummary>, Box<dyn Error>> {
     let mut filtered_resources = Vec::new();
 
     for resource in resources {
@@ -416,8 +416,8 @@ async fn filter_resources<'a>(
 
 async fn select_resources<'a>(
     prompt: &str,
-    resources: &'a [&aws_sdk_cloudformation::model::StackResourceSummary],
-) -> Result<Vec<&'a aws_sdk_cloudformation::model::StackResourceSummary>, Box<dyn Error>> {
+    resources: &'a [&aws_sdk_cloudformation::types::StackResourceSummary],
+) -> Result<Vec<&'a aws_sdk_cloudformation::types::StackResourceSummary>, Box<dyn Error>> {
     let items = format_resources(resources, None).await?;
     let selection = MultiSelect::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
@@ -459,7 +459,7 @@ async fn get_template(
 }
 
 async fn format_resources(
-    resources: &[&cloudformation::model::StackResourceSummary],
+    resources: &[&cloudformation::types::StackResourceSummary],
     resource_id_map: Option<HashMap<String, String>>,
 ) -> Result<Vec<String>, io::Error> {
     let mut max_lengths = [0; 3];
@@ -642,9 +642,9 @@ async fn update_stack(
         .stack_name(stack_name)
         .template_body(serde_json::to_string(&template).unwrap())
         // @TODO: we can detect the required capabilities from the output of validate_template()
-        .capabilities(cloudformation::model::Capability::CapabilityIam)
-        .capabilities(cloudformation::model::Capability::CapabilityNamedIam)
-        .capabilities(cloudformation::model::Capability::CapabilityAutoExpand)
+        .capabilities(cloudformation::types::Capability::CapabilityIam)
+        .capabilities(cloudformation::types::Capability::CapabilityNamedIam)
+        .capabilities(cloudformation::types::Capability::CapabilityAutoExpand)
         .send()
         .await
     {
@@ -656,7 +656,7 @@ async fn update_stack(
 async fn get_stack_status(
     client: &cloudformation::Client,
     stack_name: &str,
-) -> Result<Option<cloudformation::model::StackStatus>, Box<dyn std::error::Error>> {
+) -> Result<Option<cloudformation::types::StackStatus>, Box<dyn std::error::Error>> {
     let describe_stacks_output = match client.describe_stacks().stack_name(stack_name).send().await
     {
         Ok(output) => output,
@@ -684,15 +684,15 @@ async fn wait_for_stack_update_completion(
     let mut stack_status = get_stack_status(client, stack_name).await?;
 
     while let Some(status) = stack_status.clone() {
-        if status == cloudformation::model::StackStatus::UpdateInProgress
-            || status == cloudformation::model::StackStatus::UpdateCompleteCleanupInProgress
-            || status == cloudformation::model::StackStatus::ImportInProgress
+        if status == cloudformation::types::StackStatus::UpdateInProgress
+            || status == cloudformation::types::StackStatus::UpdateCompleteCleanupInProgress
+            || status == cloudformation::types::StackStatus::ImportInProgress
         {
             std::thread::sleep(std::time::Duration::from_secs(1));
             stack_status = get_stack_status(client, stack_name).await?;
         } else {
-            if status != cloudformation::model::StackStatus::UpdateComplete
-                && status != cloudformation::model::StackStatus::ImportComplete
+            if status != cloudformation::types::StackStatus::UpdateComplete
+                && status != cloudformation::types::StackStatus::ImportComplete
             {
                 return Err(
                     format!("Stack update failed {}", stack_status.unwrap().as_str()).into(),
@@ -743,7 +743,7 @@ async fn create_changeset(
     client: &cloudformation::Client,
     stack_name: &str,
     template: serde_json::Value,
-    resources_to_import: Vec<&cloudformation::model::StackResourceSummary>,
+    resources_to_import: Vec<&cloudformation::types::StackResourceSummary>,
     new_logical_ids_map: HashMap<String, String>,
 ) -> Result<std::string::String, cloudformation::Error> {
     let template_string = serde_json::to_string(&template).unwrap();
@@ -762,7 +762,7 @@ async fn create_changeset(
 
             let resouce_identifier = resource_identifiers.get(logical_id_new).unwrap();
 
-            cloudformation::model::ResourceToImport::builder()
+            cloudformation::types::ResourceToImport::builder()
                 .resource_type(resource_type.to_string())
                 .logical_resource_id(logical_id_new.to_string())
                 .set_resource_identifier(Some(
@@ -781,12 +781,12 @@ async fn create_changeset(
         .stack_name(stack_name)
         .change_set_name(change_set_name.clone())
         .template_body(template_string)
-        .change_set_type(cloudformation::model::ChangeSetType::Import)
+        .change_set_type(cloudformation::types::ChangeSetType::Import)
         .set_resources_to_import(resources.into())
         // @TODO: we can detect the required capabilities from the output of validate_template()
-        .capabilities(cloudformation::model::Capability::CapabilityIam)
-        .capabilities(cloudformation::model::Capability::CapabilityNamedIam)
-        .capabilities(cloudformation::model::Capability::CapabilityAutoExpand)
+        .capabilities(cloudformation::types::Capability::CapabilityIam)
+        .capabilities(cloudformation::types::Capability::CapabilityNamedIam)
+        .capabilities(cloudformation::types::Capability::CapabilityAutoExpand)
         .send()
         .await
     {
@@ -816,7 +816,7 @@ async fn get_changeset_status(
     client: &cloudformation::Client,
     stack_name: &str,
     changeset_name: &str,
-) -> Result<Option<cloudformation::model::ChangeSetStatus>, Box<dyn std::error::Error>> {
+) -> Result<Option<cloudformation::types::ChangeSetStatus>, Box<dyn std::error::Error>> {
     let change_set = match client
         .describe_change_set()
         .stack_name(stack_name)
@@ -828,7 +828,7 @@ async fn get_changeset_status(
         Err(err) => return Err(Box::new(err)),
     };
 
-    if change_set.status == Some(cloudformation::model::ChangeSetStatus::Failed) {
+    if change_set.status == Some(cloudformation::types::ChangeSetStatus::Failed) {
         println!("{:?}", change_set);
         return Err(change_set.status_reason().unwrap().to_string().into());
     }
@@ -844,13 +844,13 @@ async fn wait_for_changeset_created(
     let mut changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
 
     while let Some(status) = changeset_status.clone() {
-        if status == cloudformation::model::ChangeSetStatus::CreateInProgress
-            || status == cloudformation::model::ChangeSetStatus::CreatePending
+        if status == cloudformation::types::ChangeSetStatus::CreateInProgress
+            || status == cloudformation::types::ChangeSetStatus::CreatePending
         {
             std::thread::sleep(std::time::Duration::from_secs(1));
             changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
         } else {
-            if status != cloudformation::model::ChangeSetStatus::CreateComplete {
+            if status != cloudformation::types::ChangeSetStatus::CreateComplete {
                 return Err(format!(
                     "Changeset creation failed {}",
                     changeset_status.unwrap().as_str()
