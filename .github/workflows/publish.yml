@@ -302,4 +302,5 @@ jobs:
       - name: Get current PKGBUILD
         run: |
           git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
+          cd cfn-teleport
           cat PKGBUILD .SRCINFO
