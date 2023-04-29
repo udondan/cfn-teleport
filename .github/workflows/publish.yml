@@ -299,6 +299,7 @@ jobs:
       - name: Install and configure requirements
         run: |
           pacman -Sy --noconfirm --needed base-devel git openssh
+          yay -S --noconfirm aurutils pkgbuild-introspection
           mkdir -p ~/.ssh/tmp
           echo "${SSH_CONF}" > /etc/ssh/ssh_config
           echo "${{ secrets.AUR_SSH_KEY }}" > /etc/ssh/id_ed25519
@@ -358,8 +359,8 @@ jobs:
           EMAIL_CHRIS: ${{ secrets.EMAIL_CHRIS }}
           NAME: ${{ secrets.NAME }}
           TEMPLATE: |
-            # Maintainer: Daniel Schroeder <${EMAIL}>
-            # Maintainer: Chris Lahaye <{EMAIL_CHRIS}>
+            # Maintainer: ${NAME} <${EMAIL}>
+            # Maintainer: Chris Lahaye <${EMAIL_CHRIS}>
 
             pkgname=cfn-teleport
             pkgver={{ version }}
