@@ -300,9 +300,14 @@ jobs:
         run: |
           pacman -Sy --noconfirm --needed base-devel git openssh
 
+          useradd foo -d /home/foo
+          echo "foo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/foo
+
+
           git clone https://aur.archlinux.org/yay.git /tmp/yay
           cd /tmp/yay
-          makepkg -si --noconfirm
+          runuser -l foo -c 'makepkg -si --noconfirm'
+
 
           yay -S --noconfirm pkgbuild-introspection
 
