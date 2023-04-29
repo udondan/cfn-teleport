@@ -354,7 +354,7 @@ jobs:
 
           echo XXXX
 
-          aurbuild -c
+          makepkg --printsrcinfo > .SRCINFO
           echo YYYY
           cat .SRCINFO
 
@@ -370,7 +370,7 @@ jobs:
           NAME: ${{ secrets.NAME }}
           TEMPLATE: |
             # Maintainer: ${NAME} <${EMAIL}>
-            # Maintainer: Chris Lahaye <${EMAIL_CHRIS}>
+            # Maintainer: ${NAME2} <${EMAIL2}>
 
             pkgname=cfn-teleport
             pkgver={{ version }}
