@@ -352,7 +352,10 @@ jobs:
             > PKGBUILD
           cat PKGBUILD
 
+          echo XXXX
+
           aurbuild -c
+          echo YYYY
           cat .SRCINFO
 
           git status
