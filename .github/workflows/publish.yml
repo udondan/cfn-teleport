@@ -298,20 +298,12 @@ jobs:
 
       - name: Install and configure requirements
         run: |
-          pacman -Sy --noconfirm --needed base-devel git openssh
+          pacman -Sy --noconfirm --needed base-devel git openssh devtools
 
           mkdir /home/foo
           useradd foo -d /home/foo
           chown foo:foo /home/foo
           echo "foo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/foo
-
-          git clone https://aur.archlinux.org/yay.git /tmp/yay
-          chown -R foo:foo /tmp/yay
-          runuser -l foo -c 'cd /tmp/yay;makepkg -si --noconfirm'
-
-          echo XXXXX
-
-          yay -S --noconfirm pkgbuild-introspection
 
           mkdir -p ~/.ssh/tmp
           echo "${SSH_CONF}" > /etc/ssh/ssh_config
@@ -360,7 +352,8 @@ jobs:
             > PKGBUILD
           cat PKGBUILD
 
-          mksrcinfo
+          aurbuild -c
+          cat .SRCINFO
 
           git status
           git commit -m "Release ${VERSION:1}"
