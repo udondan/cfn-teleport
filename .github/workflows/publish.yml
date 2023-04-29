@@ -309,6 +309,8 @@ jobs:
           chown -R foo:foo /tmp/yay
           runuser -l foo -c 'cd /tmp/yay;makepkg -si --noconfirm'
 
+          echo XXXXX
+
           yay -S --noconfirm pkgbuild-introspection
 
           mkdir -p ~/.ssh/tmp
