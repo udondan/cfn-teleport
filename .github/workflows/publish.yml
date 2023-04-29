@@ -298,7 +298,7 @@ jobs:
 
       - name: Install and configure requirements
         run: |
-          pacman -Sy --noconfirm --needed base-devel git openssh devtools
+          pacman -Sy --noconfirm --needed base-devel git openssh
 
           mkdir /home/foo
           useradd foo -d /home/foo
