@@ -300,11 +300,21 @@ jobs:
         run: |
           pacman -Sy --noconfirm --needed base-devel git openssh
           mkdir -p ~/.ssh
+          echo "${SSH_CONF}" > ~/.ssh/config
           echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
           git config --global user.email "${EMAIL}"
           git config --global user.name "${NAME}"
+        env:
+          SSH_CONF: |
+            Host aur.archlinux.org
+              User aur
+              IdentityFile ~/.ssh/id_ed25519
+              PreferredAuthentications publickey
+              AddKeysToAgent yes
+              UseRoaming no
+              StrictHostKeyChecking no
 
       - name: Update PKGBUILD
         run: |
