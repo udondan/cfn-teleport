@@ -327,11 +327,12 @@ jobs:
       - name: Update PKGBUILD
         run: |
           echo "DEBUG"
+          echo "####################"
+          ls -alh ~/.ssh
+          echo "####################"
           cat ~/.ssh/known_hosts
           echo "####################"
           ~/.ssh/config
-          echo "####################"
-          ls -alh ~/.ssh
           echo "####################"
           export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
           git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
