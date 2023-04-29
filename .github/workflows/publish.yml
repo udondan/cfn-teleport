@@ -304,8 +304,6 @@ jobs:
           git config --global user.email "${EMAIL}"
           git config --global user.name "${NAME}"
 
-          ls -alh artifacts
-
       - name: Update PKGBUILD
         run: |
           git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
@@ -317,11 +315,11 @@ jobs:
             VERSION="v9.9.9"
           fi
 
-          ARM=($(shasum -a 256 artifacts/cfn-teleport-arm-unknown-linux-gnueabihf-${VERSION}.tar.gz))
-          X86_64=($(shasum -a 256 artifacts/cfn-teleport-x86_64-unknown-linux-gnu-${VERSION}.tar.gz))
-          AARCH64=($(shasum -a 256 artifacts/cfn-teleport-aarch64-unknown-linux-gnu-${VERSION}.tar.gz))
-          ARMV7H=($(shasum -a 256 artifacts/cfn-teleport-armv7-unknown-linux-gnueabihf-${VERSION}.tar.gz))
-          I686=($(shasum -a 256 artifacts/cfn-teleport-i686-unknown-linux-gnu-${VERSION}.tar.gz))
+          ARM=($(shasum -a 256 ../artifacts/cfn-teleport-arm-unknown-linux-gnueabihf-${VERSION}.tar.gz))
+          X86_64=($(shasum -a 256 ../artifacts/cfn-teleport-x86_64-unknown-linux-gnu-${VERSION}.tar.gz))
+          AARCH64=($(shasum -a 256 ../artifacts/cfn-teleport-aarch64-unknown-linux-gnu-${VERSION}.tar.gz))
+          ARMV7H=($(shasum -a 256 ../artifacts/cfn-teleport-armv7-unknown-linux-gnueabihf-${VERSION}.tar.gz))
+          I686=($(shasum -a 256 ../artifacts/cfn-teleport-i686-unknown-linux-gnu-${VERSION}.tar.gz))
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
