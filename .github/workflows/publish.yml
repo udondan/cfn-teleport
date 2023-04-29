@@ -332,7 +332,7 @@ jobs:
           echo "####################"
           cat ~/.ssh/known_hosts
           echo "####################"
-          ~/.ssh/config
+          cat ~/.ssh/config
           echo "####################"
           export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
           git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
