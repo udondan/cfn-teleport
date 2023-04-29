@@ -350,15 +350,19 @@ jobs:
             -e "s!{{ i686_file }}!$(basename ${I686[1]})!g" \
             -e "s!{{ i686_sha }}!${I686[0]}!g" \
             > PKGBUILD
+          echo ##### PKGBUILD #####
           cat PKGBUILD
 
           chown -R foo:foo .
           runuser -l foo -c "cd $PWD;makepkg --printsrcinfo > .SRCINFO"
           chown -R root:root .
+          echo ##### .SRCINFO #####
           cat .SRCINFO
 
+          echo ####################
           git status
-          git commit -m "Release ${VERSION:1}"
+          git diff
+          git commit -am "Release ${VERSION:1}"
 
           if [[ "${GH_EVENT}" != "pull_request" ]]; then
             git push
