@@ -306,8 +306,7 @@ jobs:
           echo "foo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/foo
 
           git clone https://aur.archlinux.org/yay.git /tmp/yay
-          cd /tmp/yay
-          runuser -l foo -c 'makepkg -si --noconfirm'
+          runuser -l foo -c 'cd /tmp/yay;makepkg -si --noconfirm'
 
           yay -S --noconfirm pkgbuild-introspection
 
