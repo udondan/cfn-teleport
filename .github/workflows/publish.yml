@@ -354,7 +354,7 @@ jobs:
 
           echo XXXX
 
-          runuser -l foo -c 'cd /tmp;makepkg --printsrcinfo > .SRCINFO'
+          runuser -l foo -c "cd $PWD;makepkg --printsrcinfo > .SRCINFO"
           echo YYYY
           cat .SRCINFO
 
