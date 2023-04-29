@@ -299,7 +299,7 @@ jobs:
       - name: Install and configure requirements
         run: |
           pacman -Sy --noconfirm --needed base-devel git openssh
-          mkdir -p ~/.ssh
+          mkdir -p ~/.ssh/tmp
           echo "${SSH_CONF}" > ~/.ssh/config
           echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
@@ -308,13 +308,21 @@ jobs:
           git config --global user.name "${NAME}"
         env:
           SSH_CONF: |
+            ControlMaster auto
+            ControlPath ~/.ssh/tmp/%C
+            ControlPersist 3600
+            ConnectTimeout 3600
+
             Host aur.archlinux.org
               User aur
               IdentityFile ~/.ssh/id_ed25519
               PreferredAuthentications publickey
               AddKeysToAgent yes
               UseRoaming no
+              ServerAliveInterval 10
+              ServerAliveCountMax 500
               StrictHostKeyChecking no
+              KeepAlive yes
 
       - name: Update PKGBUILD
         run: |
