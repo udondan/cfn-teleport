@@ -310,9 +310,6 @@ jobs:
           echo "${{ secrets.AUR_SSH_KEY }}" > /etc/ssh/id_ed25519
           chmod 600 /etc/ssh/id_ed25519
           ssh-keyscan aur.archlinux.org >> /etc/ssh/ssh_known_hosts
-
-          git config --global user.email "${EMAIL}"
-          git config --global user.name "${NAME}"
         env:
           SSH_CONF: |
             Host aur.archlinux.org
@@ -350,18 +347,20 @@ jobs:
             -e "s!{{ i686_file }}!$(basename ${I686[1]})!g" \
             -e "s!{{ i686_sha }}!${I686[0]}!g" \
             > PKGBUILD
-          echo ##### PKGBUILD #####
+          echo "##### PKGBUILD #####"
           cat PKGBUILD
 
           chown -R foo:foo .
           runuser -l foo -c "cd $PWD;makepkg --printsrcinfo > .SRCINFO"
           chown -R root:root .
-          echo ##### .SRCINFO #####
+          echo "##### .SRCINFO #####"
           cat .SRCINFO
 
-          echo ####################
+          echo "####################"
           git status
           git diff
+          git config --global user.email "${EMAIL}"
+          git config --global user.name "${NAME}"
           git commit -am "Release ${VERSION:1}"
 
           if [[ "${GH_EVENT}" != "pull_request" ]]; then
@@ -369,11 +368,10 @@ jobs:
           fi
         env:
           EMAIL: ${{ secrets.EMAIL }}
-          EMAIL_CHRIS: ${{ secrets.EMAIL_CHRIS }}
           NAME: ${{ secrets.NAME }}
           TEMPLATE: |
             # Maintainer: ${NAME} <${EMAIL}>
-            # Maintainer: ${NAME2} <${EMAIL2}>
+            # Maintainer: ${{ secrets.NAME2 }} <${{ secrets.EMAIL2 }}>
 
             pkgname=cfn-teleport
             pkgver={{ version }}
