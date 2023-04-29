@@ -296,8 +296,9 @@ jobs:
           name: artifacts
           path: artifacts
 
-      - name: Configure SSH and git
+      - name: Install and configure requirements
         run: |
+          pacman -Sy --noconfirm --needed base-devel git openssh
           mkdir -p ~/.ssh
           echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
