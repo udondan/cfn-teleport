@@ -337,6 +337,13 @@ jobs:
           cat PKGBUILD
 
           mksrcinfo
+
+          git status
+          git commit -m "Release ${VERSION:1}"
+
+          if [[ "${GH_EVENT}" != "pull_request" ]]; then
+            git push
+          fi
         env:
           EMAIL: ${{ secrets.EMAIL }}
           EMAIL_CHRIS: ${{ secrets.EMAIL_CHRIS }}
