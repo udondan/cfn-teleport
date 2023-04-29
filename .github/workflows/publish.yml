@@ -289,6 +289,7 @@ jobs:
   aur-publish:
     needs: build
     runs-on: ubuntu-latest
+    container: archlinux:latest
     steps:
       - uses: actions/download-artifact@v3
         with:
@@ -308,7 +309,6 @@ jobs:
         run: |
           git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
           cd cfn-teleport
-          cat PKGBUILD .SRCINFO
 
           VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -335,6 +335,8 @@ jobs:
             -e "s!{{ i686_sha }}!${I686[0]}!g" \
             > PKGBUILD
           cat PKGBUILD
+
+          mksrcinfo
         env:
           EMAIL: ${{ secrets.EMAIL }}
           EMAIL_CHRIS: ${{ secrets.EMAIL_CHRIS }}
@@ -349,7 +351,7 @@ jobs:
             pkgdesc="A command-line tool which can move CloudFormation resources between stacks"
             arch=("aarch64" "arm" "armv7h" "i686" "x86_64")
             url="${{ github.server_url }}/${{ github.repository }}"
-            license=("Apache")
+            license=("APACHE")
 
             # Source files
             source_aarch64=("${url}/releases/download/v${pkgver}/cfn-teleport-aarch64-unknown-linux-gnu-v${pkgver}.tar.gz")
@@ -374,13 +376,13 @@ jobs:
             package() {
               # Extract the package based on the current architecture
               case "$CARCH" in
-                'aarch64') tar xvf "${srcdir}/cfn-teleport-aarch64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
-                'arm') tar xvf "${srcdir}/cfn-teleport-arm-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
-                'armv7h') tar xvf "${srcdir}/cfn-teleport-armv7-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
-                'i686') tar xvf "${srcdir}/cfn-teleport-i686-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
-                'x86_64') tar xvf "${srcdir}/cfn-teleport-x86_64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
+                'aarch64') tar -xzf "${srcdir}/cfn-teleport-aarch64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'arm')     tar -xzf "${srcdir}/cfn-teleport-arm-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'armv7h')  tar -xzf "${srcdir}/cfn-teleport-armv7-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'i686')    tar -xzf "${srcdir}/cfn-teleport-i686-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'x86_64')  tar -xzf "${srcdir}/cfn-teleport-x86_64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
               esac
 
               # Move the binary to /usr/bin
-              install -Dm755 "${pkgdir}/cfn-teleport" "${pkgdir}/usr/bin/cfn-teleport"
+              install -Dm755 "${srcdir}/cfn-teleport" "${pkgdir}/usr/bin/cfn-teleport"
             }
