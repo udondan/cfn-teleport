@@ -329,6 +329,8 @@ jobs:
           echo "DEBUG"
           cat ~/.ssh/known_hosts
           echo "####################"
+          ~/.ssh/config
+          echo "####################"
           ls -alh ~/.ssh
           echo "####################"
           export GIT_SSH_COMMAND="ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
