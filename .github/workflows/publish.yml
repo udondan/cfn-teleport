@@ -299,8 +299,83 @@ jobs:
           git config --global user.email "${EMAIL}"
           git config --global user.name "${NAME}"
 
-      - name: Get current PKGBUILD
+      - name: Update PKGBUILD
         run: |
           git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
           cd cfn-teleport
           cat PKGBUILD .SRCINFO
+
+          VERSION="${GITHUB_REF_NAME}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+
+          ARM=($(shasum -a 256 artifacts/cfn-teleport-arm-unknown-linux-gnueabihf-${VERSION}.tar.gz))
+          X86_64=($(shasum -a 256 artifacts/cfn-teleport-x86_64-unknown-linux-gnu-${VERSION}.tar.gz))
+          AARCH64=($(shasum -a 256 artifacts/cfn-teleport-aarch64-unknown-linux-gnu-${VERSION}.tar.gz))
+          ARMV7H=($(shasum -a 256 artifacts/cfn-teleport-armv7-unknown-linux-gnueabihf-${VERSION}.tar.gz))
+          I686=($(shasum -a 256 artifacts/cfn-teleport-i686-unknown-linux-gnu-${VERSION}.tar.gz))
+
+          echo "${TEMPLATE}" | sed \
+            -e "s!{{ version }}!${VERSION:1}!g" \
+            -e "s!{{ arm_file }}!$(basename ${ARM[1]})!g" \
+            -e "s!{{ arm_sha }}!${ARM[0]}!g" \
+            -e "s!{{ x86_64_file }}!$(basename ${X86_64[1]})!g" \
+            -e "s!{{ x86_64_sha }}!${X86_64[0]}!g" \
+            -e "s!{{ aarch64_file }}!$(basename ${AARCH64[1]})!g" \
+            -e "s!{{ aarch64_sha }}!${AARCH64[0]}!g" \
+            -e "s!{{ armv7h_file }}!$(basename ${ARMV7H[1]})!g" \
+            -e "s!{{ armv7h_sha }}!${ARMV7H[0]}!g" \
+            -e "s!{{ i686_file }}!$(basename ${I686[1]})!g" \
+            -e "s!{{ i686_sha }}!${I686[0]}!g" \
+            > PKGBUILD
+          cat PKGBUILD
+        env:
+          EMAIL: ${{ secrets.EMAIL }}
+          EMAIL_CHRIS: ${{ secrets.EMAIL_CHRIS }}
+          NAME: ${{ secrets.NAME }}
+          TEMPLATE: |
+            # Maintainer: Daniel Schroeder <${EMAIL}>
+            # Maintainer: Chris Lahaye <{EMAIL_CHRIS}>
+
+            pkgname=cfn-teleport
+            pkgver={{ version }}
+            pkgrel=1
+            pkgdesc="A command-line tool which can move CloudFormation resources between stacks"
+            arch=("aarch64" "arm" "armv7h" "i686" "x86_64")
+            url="${{ github.server_url }}/${{ github.repository }}"
+            license=("Apache")
+
+            # Source files
+            source_aarch64=("${url}/releases/download/v${pkgver}/cfn-teleport-aarch64-unknown-linux-gnu-v${pkgver}.tar.gz")
+            source_arm=("${url}/releases/download/v${pkgver}/cfn-teleport-arm-unknown-linux-gnueabihf-v${pkgver}.tar.gz")
+            source_armv7h=("${url}/releases/download/v${pkgver}/cfn-teleport-armv7-unknown-linux-gnueabihf-v${pkgver}.tar.gz")
+            source_i686=("${url}/releases/download/v${pkgver}/cfn-teleport-i686-unknown-linux-gnu-v${pkgver}.tar.gz")
+            source_x86_64=("${url}/releases/download/v${pkgver}/cfn-teleport-x86_64-unknown-linux-gnu-v${pkgver}.tar.gz")
+
+            # Checksums
+            sha256sums_aarch64=("{{ aarch64_sha }}")
+            sha256sums_arm=("{{ arm_sha }}")
+            sha256sums_armv7h=("{{ armv7h_sha }}")
+            sha256sums_i686=("{{ i686_sha }}")
+            sha256sums_x86_64=("{{ x86_64_sha }}")
+
+            # Build function
+            build() {
+              return 0
+            }
+
+            # Package functions
+            package() {
+              # Extract the package based on the current architecture
+              case "$CARCH" in
+                'aarch64') tar xvf "${srcdir}/cfn-teleport-aarch64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
+                'arm') tar xvf "${srcdir}/cfn-teleport-arm-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
+                'armv7h') tar xvf "${srcdir}/cfn-teleport-armv7-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
+                'i686') tar xvf "${srcdir}/cfn-teleport-i686-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
+                'x86_64') tar xvf "${srcdir}/cfn-teleport-x86_64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${pkgdir}/" ;;
+              esac
+
+              # Move the binary to /usr/bin
+              install -Dm755 "${pkgdir}/cfn-teleport" "${pkgdir}/usr/bin/cfn-teleport"
+            }
