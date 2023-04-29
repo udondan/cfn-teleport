@@ -369,6 +369,7 @@ jobs:
         env:
           EMAIL: ${{ secrets.EMAIL }}
           NAME: ${{ secrets.NAME }}
+          GH_EVENT: ${{ github.event_name }}
           TEMPLATE: |
             # Maintainer: ${NAME} <${EMAIL}>
             # Maintainer: ${{ secrets.NAME2 }} <${{ secrets.EMAIL2 }}>
