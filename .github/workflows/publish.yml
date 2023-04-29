@@ -352,10 +352,9 @@ jobs:
             > PKGBUILD
           cat PKGBUILD
 
-          echo XXXX
-
+          chown foo:foo .SRCINFO
           runuser -l foo -c "cd $PWD;makepkg --printsrcinfo > .SRCINFO"
-          echo YYYY
+          chown root:root .SRCINFO
           cat .SRCINFO
 
           git status
