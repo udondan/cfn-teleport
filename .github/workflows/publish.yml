@@ -300,10 +300,10 @@ jobs:
         run: |
           pacman -Sy --noconfirm --needed base-devel git openssh
           mkdir -p ~/.ssh/tmp
-          echo "${SSH_CONF}" > ~/.ssh/config
+          echo "${SSH_CONF}" > /etc/ssh/ssh_config
           echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          ssh-keyscan aur.archlinux.org >> /etc/ssh/ssh_known_hosts
           git config --global user.email "${EMAIL}"
           git config --global user.name "${NAME}"
         env:
@@ -330,9 +330,9 @@ jobs:
           echo "####################"
           ls -alh ~/.ssh
           echo "####################"
-          cat ~/.ssh/known_hosts
+          cat /etc/ssh/ssh_known_hosts
           echo "####################"
-          cat ~/.ssh/config
+          cat /etc/ssh/ssh_config
           echo "####################"
           export GIT_SSH_COMMAND="ssh -vvv -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
           git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
