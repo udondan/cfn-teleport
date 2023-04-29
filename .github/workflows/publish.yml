@@ -299,12 +299,19 @@ jobs:
       - name: Install and configure requirements
         run: |
           pacman -Sy --noconfirm --needed base-devel git openssh
-          yay -S --noconfirm aurutils pkgbuild-introspection
+
+          git clone https://aur.archlinux.org/yay.git /tmp/yay
+          cd /tmp/yay
+          makepkg -si --noconfirm
+
+          yay -S --noconfirm pkgbuild-introspection
+
           mkdir -p ~/.ssh/tmp
           echo "${SSH_CONF}" > /etc/ssh/ssh_config
           echo "${{ secrets.AUR_SSH_KEY }}" > /etc/ssh/id_ed25519
           chmod 600 /etc/ssh/id_ed25519
           ssh-keyscan aur.archlinux.org >> /etc/ssh/ssh_known_hosts
+
           git config --global user.email "${EMAIL}"
           git config --global user.name "${NAME}"
         env:
@@ -317,7 +324,7 @@ jobs:
 
       - name: Update PKGBUILD
         run: |
-          git clone "ssh://aur@aur.archlinux.org/cfn-teleport.git" --depth=1
+          git clone "ssh://aur.archlinux.org/cfn-teleport.git" --depth=1
           cd cfn-teleport
 
           VERSION="${GITHUB_REF_NAME}"
