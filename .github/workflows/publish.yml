@@ -245,7 +245,7 @@ jobs:
 
           AARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
           AINTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
-          LARM32=($(shasum -a 256 artifacts/arm-unknown-linux-gnueabih-${VERSION}.tar.gz))
+          LARM32=($(shasum -a 256 artifacts/arm-unknown-linux-gnueabihf-${VERSION}.tar.gz))
           LARM64=($(shasum -a 256 artifacts/aarch64-unknown-linux-gnu-${VERSION}.tar.gz))
           LINTEL32=($(shasum -a 256 artifacts/i686-unknown-linux-gnu-${VERSION}.tar.gz))
           LINTEL64=($(shasum -a 256 artifacts/x86_64-unknown-linux-gnu-${VERSION}.tar.gz))
