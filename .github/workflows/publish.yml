@@ -27,15 +27,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # a list of all the targets
         include:
-          - TARGET: x86_64-unknown-linux-gnu # tested in a debian container on a mac
+          # 64-bit version of the x86 architecture for Linux-based systems with the GNU C Library (glibc)
+          - TARGET: x86_64-unknown-linux-gnu
             OS: ubuntu-latest
 
           # disabled, because ring package does not support musl
           #- TARGET: x86_64-unknown-linux-musl # test in an alpine container on a mac
           #  OS: ubuntu-latest
 
+          # 64-bit version of the ARM architecture for Linux-based systems with the GNU C Library (glibc)
           - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
             OS: ubuntu-latest
 
@@ -43,35 +44,43 @@ jobs:
           #- TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
           #  OS: ubuntu-latest
 
-          - TARGET: armv7-unknown-linux-gnueabihf # raspberry pi 2-3-4, not tested
+          # 32-bit version of the ARM architecture for Linux-based systems with the GNU C Library (glibc) and hardware floating-point support
+          - TARGET: armv7-unknown-linux-gnueabihf
             OS: ubuntu-latest
 
           # disabled, because ring package does not support musl
           #- TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4, not tested
           #  OS: ubuntu-latest
 
-          - TARGET: arm-unknown-linux-gnueabihf # raspberry pi 0-1, not tested
+          # 32-bit version of the ARM architecture for Linux-based systems with the GNU C Library (glibc) and hardware floating-point support
+          - TARGET: arm-unknown-linux-gnueabihf
             OS: ubuntu-latest
 
           # disabled, because ring package does not support musl
           #- TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1, not tested
           #  OS: ubuntu-latest
 
-          - TARGET: x86_64-apple-darwin # tested on a mac, is not properly signed so there are security warnings
+          # 64-bit version of the x86 architecture for macOS
+          - TARGET: x86_64-apple-darwin
             OS: macos-latest
 
+          # 64-bit version of the ARM architecture for macOS
           - target: aarch64-apple-darwin
             OS: macos-latest
 
+          # 64-bit version of the x86 architecture for Windows-based systems with the Microsoft Visual C++ (MSVC) runtime
           - TARGET: x86_64-pc-windows-msvc
             OS: windows-latest
 
+          # 64-bit version of the x86 architecture for Windows-based systems with the GNU C Library (glibc) and GNU Compiler Collection (GCC)
           - TARGET: x86_64-pc-windows-gnu
             OS: windows-latest
 
+          # 32-bit version of the x86 architecture for Windows-based systems with the Microsoft Visual C++ (MSVC) runtime
           - TARGET: i686-pc-windows-msvc
             OS: windows-latest
 
+          # 32-bit version of the x86 architecture for Linux-based systems with the GNU C Library (glibc)
           - TARGET: i686-unknown-linux-gnu
             OS: ubuntu-latest
 
@@ -234,15 +243,27 @@ jobs:
             VERSION="v9.9.9"
           fi
 
-          ARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
-          INTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
+          AARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
+          AINTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
+          LARM32=($(shasum -a 256 artifacts/arm-unknown-linux-gnueabih-${VERSION}.tar.gz))
+          LARM64=($(shasum -a 256 artifacts/aarch64-unknown-linux-gnu-${VERSION}.tar.gz))
+          LINTEL32=($(shasum -a 256 artifacts/i686-unknown-linux-gnu-${VERSION}.tar.gz))
+          LINTEL64=($(shasum -a 256 artifacts/x86_64-unknown-linux-gnu-${VERSION}.tar.gz))
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
-            -e "s!{{ intel_file }}!$(basename ${INTEL[1]})!g" \
-            -e "s!{{ intel_sha }}!${INTEL[0]}!g" \
-            -e "s!{{ arm_file }}!$(basename ${ARM[1]})!g" \
-            -e "s!{{ arm_sha }}!${ARM[0]}!g" \
+            -e "s!{{ a_intel_file }}!$(basename ${AINTEL[1]})!g" \
+            -e "s!{{ a_intel_sha }}!${AINTEL[0]}!g" \
+            -e "s!{{ a_arm_file }}!$(basename ${AARM[1]})!g" \
+            -e "s!{{ a_arm_sha }}!${AARM[0]}!g" \
+            -e "s!{{ l_intel32_file }}!$(basename ${LINTEL32[1]})!g" \
+            -e "s!{{ l_intel32_sha }}!${LINTEL32[0]}!g" \
+            -e "s!{{ l_intel64_file }}!$(basename ${LINTEL64[1]})!g" \
+            -e "s!{{ l_intel64_sha }}!${LINTEL64[0]}!g" \
+            -e "s!{{ l_arm32_file }}!$(basename ${LARM32[1]})!g" \
+            -e "s!{{ l_arm32_sha }}!${LARM32[0]}!g" \
+            -e "s!{{ l_arm64_file }}!$(basename ${LARM64[1]})!g" \
+            -e "s!{{ l_arm64_sha }}!${LARM64[0]}!g" \
             > cfn-teleport.rb
           cat cfn-teleport.rb
 
@@ -270,13 +291,32 @@ jobs:
               version "{{ version }}"
               license "Apache-2.0"
 
-              if OS.mac? && Hardware::CPU.intel?
-                url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ intel_file }}"
-                sha256 "{{ intel_sha }}"
-              end
-              if OS.mac? && Hardware::CPU.arm?
-                url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ arm_file }}"
-                sha256 "{{ arm_sha }}"
+              if OS.mac?
+                if Hardware::CPU.intel?
+                  url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ a_intel_file }}"
+                  sha256 "{{ a_intel_sha }}"
+                elsif Hardware::CPU.arm?
+                  url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ a_arm_file }}"
+                  sha256 "{{ a_arm_sha }}"
+                end
+              elsif OS.linux?
+                if Hardware::CPU.arm?
+                  if Hardware::CPU.is_64_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_arm64_file }}"
+                    sha256 "{{ l_arm64_sha }}"
+                  elsif Hardware::CPU.is_32_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_arm32_file }}"
+                    sha256 "{{ l_arm32_sha }}"
+                  end
+                elsif Hardware::CPU.intel?
+                  if Hardware::CPU.is_64_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_intel64_file }}"
+                    sha256 "{{ l_intel64_sha }}"
+                  elsif Hardware::CPU.is_32_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_intel32_file }}"
+                    sha256 "{{ l_intel32_sha }}"
+                  end
+                end
               end
 
               def install

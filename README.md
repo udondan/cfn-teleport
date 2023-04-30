@@ -10,7 +10,7 @@ A command-line tool which can move CloudFormation resources between stacks.
 
 ## Installation
 
-On MacOS you can install via [Homebrew](https://brew.sh/):
+On MacOS and Linux you can install via [Homebrew](https://brew.sh/):
 
 ```bash
 brew install udondan/software/cfn-teleport
