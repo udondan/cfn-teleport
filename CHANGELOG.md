@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/udondan/cfn-teleport/compare/v0.3.0...v0.3.1) (2023-04-30)
+
+
+### Bug Fixes
+
+* set correct default values for DeletionPolicy, when importing resources ([#111](https://github.com/udondan/cfn-teleport/issues/111)) ([c8be9a4](https://github.com/udondan/cfn-teleport/commit/c8be9a4fc0f61817517c50638149e602c3bb8588))
+
 ## [0.3.0](https://github.com/udondan/cfn-teleport/compare/v0.2.0...v0.3.0) (2023-03-30)
 
 
