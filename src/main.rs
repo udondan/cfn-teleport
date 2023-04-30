@@ -565,12 +565,12 @@ fn set_default_deletion_policy(
                         "AWS::RDS::DBCluster" => "Snapshot",
                         "AWS::RDS::DBInstance" => {
                             if resource_object.contains_key("DBClusterIdentifier") {
-                                "Retain"
-                            } else {
                                 "Delete"
+                            } else {
+                                "Snapshot"
                             }
                         }
-                        _ => "Retain",
+                        _ => "Delete",
                     };
                     resource["DeletionPolicy"] =
                         serde_json::Value::String(deletion_policy.to_string());

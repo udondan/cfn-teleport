@@ -173,7 +173,7 @@ jobs:
 
       - name: Attach artifact to release
         run: |
-          if [[ "${GH_EVENT}" != "pull_request" ]]; then
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             gh release upload "${GITHUB_REF_NAME}" "${ARTIFACT}"
           else
             echo "Not uploading artifact to release because this is a pull request"
@@ -181,7 +181,6 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
-          GH_EVENT: ${{ github.event_name }}
           ARTIFACT: ${{ steps.compress.outputs.ARTIFACT }}
 
   cargo-publish:
@@ -206,14 +205,13 @@ jobs:
 
       - name: Publish to crates.io
         run: |
-          if [[ "${GH_EVENT}" != "pull_request" ]]; then
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             cargo publish
           else
             cargo publish --dry-run
           fi
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          GH_EVENT: ${{ github.event_name }}
 
   homebrew-publish:
     needs: build
@@ -256,7 +254,7 @@ jobs:
           git config --global user.name "${NAME}"
           git commit -m "Release ${VERSION:1}"
 
-          if [[ "${GH_EVENT}" != "pull_request" ]]; then
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             git push
           fi
         env:
@@ -363,13 +361,12 @@ jobs:
           git config --global user.name "${NAME}"
           git commit -am "Release ${VERSION:1}"
 
-          if [[ "${GH_EVENT}" != "pull_request" ]]; then
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             git push
           fi
         env:
           EMAIL: ${{ secrets.EMAIL }}
           NAME: ${{ secrets.NAME }}
-          GH_EVENT: ${{ github.event_name }}
           TEMPLATE: |
             # Maintainer: ${NAME} <${EMAIL}>
             # Maintainer: ${{ secrets.NAME2 }} <${{ secrets.EMAIL2 }}>
