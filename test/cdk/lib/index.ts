@@ -33,7 +33,7 @@ export class TestStack extends Stack {
 
       new aws_s3.Bucket(this, 'Bucket-2', {
         bucketName: `${this.account}-cfn-teleport-test-2`,
-        removalPolicy: RemovalPolicy.RETAIN,
+        removalPolicy: RemovalPolicy.DESTROY,
       });
 
       new aws_dynamodb.Table(this, 'DynamoDbTable', {
