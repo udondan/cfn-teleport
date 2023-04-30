@@ -24,7 +24,7 @@ yay -S cfn-teleport
 
 Pre-compiled binaries for various operating systems and architectures are [available for download][latest].
 
-If you have [rust/cargo installed](https://doc.rust-lang.org/cargo/getting-started/installation.html), you can simple install the [crate]:
+If you have [rust/cargo installed](https://doc.rust-lang.org/cargo/getting-started/installation.html), you can install the [crate]:
 
 ```bash
 cargo install cfn-teleport
