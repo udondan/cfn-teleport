@@ -456,6 +456,9 @@ jobs:
   chocolatey-publish:
     needs: build
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: powershell
     steps:
       - uses: actions/download-artifact@v3
         with:
