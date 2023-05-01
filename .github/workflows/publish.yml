@@ -518,9 +518,11 @@ jobs:
           echo "$uninstallScriptContent"
 
           # Create package
-          choco pack -Id cfn-teleport -s .
+          echo "Creating package..."
+          choco pack $nuspecPath
 
           # Test installation, will not work, but i want to see the output
+          echo "Installing package..."
           choco install cfn-teleport --source cfn-teleport.{{ version }}.nupkg --yes
         env:
           NUSPEC: |
