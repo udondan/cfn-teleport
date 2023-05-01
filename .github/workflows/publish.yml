@@ -462,9 +462,6 @@ jobs:
           name: artifacts
           path: artifacts
 
-      - name: Set up Chocolatey environment
-        uses: chocolatey/setup-chocolatey@v1
-
       - name: Generate nuspec file
         run: |
           $nuspec = $env:NUSPEC
