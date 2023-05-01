@@ -520,7 +520,7 @@ jobs:
 
             # Test installation
             echo "Installing package..."
-            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
+            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}" -f $version
             choco install cfn-teleport --source $nupgkFile --yes
 
             # Check if installation was successful
