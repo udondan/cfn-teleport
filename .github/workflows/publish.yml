@@ -492,7 +492,7 @@ jobs:
           $url64 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-x86_64-pc-windows-msvc-{0}.exe" -f $version
 
           # Replace the placeholders in the nuspec file
-          $nuspecContent = $Env.NUSPEC.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+          $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
 
           # Write the nuspec file
           $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
