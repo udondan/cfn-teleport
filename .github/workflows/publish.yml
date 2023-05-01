@@ -510,7 +510,12 @@ jobs:
           Set-Content -Path $uninstallScriptPath -Value $uninstallScriptContent
 
           # Output file content
+          echo "#### cfn-teleport.nuspec ####"
           echo "$nuspecContent"
+          echo "#### chocolateyInstall.ps1 ####"
+          echo "$installScriptContent"
+          echo "#### chocolateyUninstall.ps1 ####"
+          echo "$uninstallScriptContent"
 
           # Validate nuspec
           choco pack $nuspecPath --dry-run
