@@ -517,11 +517,11 @@ jobs:
           echo "#### chocolateyUninstall.ps1 ####"
           echo "$uninstallScriptContent"
 
-          # Validate nuspec
-          choco pack $nuspecPath --dry-run
+          # Create package
+          choco pack -Id cfn-teleport -s .
 
           # Test installation, will not work, but i want to see the output
-          choco install cfn-teleport --source $nuspecPath --yes
+          choco install cfn-teleport --source cfn-teleport.{{ version }}.nupkg --yes
         env:
           NUSPEC: |
             <?xml version="1.0"?>
@@ -580,6 +580,3 @@ jobs:
             }
 
             Uninstall-ChocolateyPackage @packageArgs
-
-      - name: Create Chocolatey package
-        run: choco pack
