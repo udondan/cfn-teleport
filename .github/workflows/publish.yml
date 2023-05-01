@@ -574,17 +574,17 @@ jobs:
             }
             Get-ChocolateyWebFile @fileArgs
 
-            $pathArgs = @{
-              pathToInstall = Join-Path $installDir 'bin'
-            }
-            Install-ChocolateyPath @pathArgs
+            #$pathArgs = @{
+            #  pathToInstall = Join-Path $installDir 'bin'
+            #}
+            #Install-ChocolateyPath @pathArgs
           UNINSTALL_SCRIPT: |
             $packageName = 'cfn-teleport'
             $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
 
-            $pathArgs = @{
-              pathToInstall = Join-Path $installDir 'bin'
-            }
+            #$pathArgs = @{
+            #  pathToInstall = Join-Path $installDir 'bin'
+            #}
 
-            Uninstall-ChocolateyPath @pathArgs
-            Remove-Item -Path $installDir -Recurse -Force
+            #Uninstall-ChocolateyPath @pathArgs
+            #Remove-Item -Path $installDir -Recurse -Force
