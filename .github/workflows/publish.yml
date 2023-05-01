@@ -562,7 +562,7 @@ jobs:
 
             $fileArgs = @{
               packageName    = $packageName
-              fileFullPath   = "$toolsDir\cfn-teleport.exe"
+              fileFullPath   = Join-Path $toolsDir 'cfn-teleport.exe'
               url            = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-x86_64-pc-windows-msvc-v0.3.1.exe'
               checksum       = '3a666472ac16244839210fe888fb975e2433745cf0c3ad8a698152e4dfebb49d'
               url64bit       = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-i686-pc-windows-msvc-v0.3.1.exe'
