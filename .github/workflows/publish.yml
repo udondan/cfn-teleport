@@ -506,8 +506,6 @@ jobs:
           echo "$nuspecContent"
           echo "#### chocolateyInstall.ps1 ####"
           echo "$installScriptContent"
-          echo "#### chocolateyUninstall.ps1 ####"
-          echo "$uninstallScriptContent"
 
           # Create package
           echo "Creating package..."
@@ -537,7 +535,7 @@ jobs:
 
             # Push package
             echo "Pushing package..."
-            #choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
         env:
           NUSPEC: |
             <?xml version="1.0"?>
