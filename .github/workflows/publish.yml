@@ -474,7 +474,6 @@ jobs:
 
           $nuspec = $Env:NUSPEC
           $installScript = $Env:INSTALL_SCRIPT
-          $uninstallScript = $Env:UNINSTALL_SCRIPT
 
           $version = $Env:GITHUB_REF_NAME -replace '^v', ''
           if ($version -notmatch '^v\d+\.\d+\.\d+$') {
@@ -492,7 +491,6 @@ jobs:
           # Replace the placeholders in the nuspec and script files
           $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
           $installScriptContent = $installScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
-          $uninstallScriptContent = $uninstallScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
 
           # Write nuspec and script files
           $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
@@ -501,9 +499,7 @@ jobs:
           $toolsDir = "${{ github.workspace }}/tools"
           New-Item -ItemType Directory -Force -Path $toolsDir
           $installScriptPath = "${{ github.workspace }}/tools/chocolateyInstall.ps1"
-          $uninstallScriptPath = "${{ github.workspace }}/tools/chocolateyUninstall.ps1"
           Set-Content -Path $installScriptPath -Value $installScriptContent
-          #Set-Content -Path $uninstallScriptPath -Value $uninstallScriptContent
 
           # Output file content
           echo "#### cfn-teleport.nuspec ####"
@@ -524,6 +520,7 @@ jobs:
             choco install cfn-teleport --source $nupgkFile --yes --version $version
 
             # Check if installation was successful
+            echo "Checking if package was installed..."
             Get-Command cfn-teleport
             cfn-teleport.exe --version
 
@@ -532,7 +529,8 @@ jobs:
             choco uninstall cfn-teleport --yes
 
             # Ensure package is uninstalled
-            if (Get-Command cfn-teleport) {
+            echo "Checking if package was uninstalled..."
+            if (Get-Command cfn-teleport -ErrorAction SilentlyContinue) {
               Write-Error "Package was not uninstalled"
               exit 1
             }
@@ -573,13 +571,3 @@ jobs:
               ChecksumType64 = 'sha256'
             }
             Get-ChocolateyWebFile @fileArgs
-          UNINSTALL_SCRIPT: |
-            $packageName = 'cfn-teleport'
-            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
-
-            #$pathArgs = @{
-            #  pathToInstall = Join-Path $installDir 'bin'
-            #}
-
-            #Uninstall-ChocolateyPath @pathArgs
-            #Remove-Item -Path $installDir -Recurse -Force
