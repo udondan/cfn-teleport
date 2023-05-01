@@ -465,7 +465,7 @@ jobs:
           name: artifacts
           path: artifacts
 
-      - name: Generate nuspec file
+      - name: Generate chocolatey package
         run: |
           if (-not $Env:NUSPEC) {
             Write-Error "NUSPEC variable not set"
