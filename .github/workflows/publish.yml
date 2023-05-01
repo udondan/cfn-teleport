@@ -481,13 +481,9 @@ jobs:
             $version = '0.3.1'
           }
 
-          # Get the file paths
-          $url32File = "${{ github.workspace }}/artifacts/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
-          $url64File = "${{ github.workspace }}/artifacts/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
-
           # Get the SHA256 hashes
-          $sha32 = Get-FileHash $url32File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
-          $sha64 = Get-FileHash $url64File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+          $sha32 = "a"
+          $sha64 = "b"
 
           # Build the URLs
           $url32 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
