@@ -503,7 +503,7 @@ jobs:
           $installScriptPath = "${{ github.workspace }}/tools/chocolateyInstall.ps1"
           $uninstallScriptPath = "${{ github.workspace }}/tools/chocolateyUninstall.ps1"
           Set-Content -Path $installScriptPath -Value $installScriptContent
-          Set-Content -Path $uninstallScriptPath -Value $uninstallScriptContent
+          #Set-Content -Path $uninstallScriptPath -Value $uninstallScriptContent
 
           # Output file content
           echo "#### cfn-teleport.nuspec ####"
@@ -564,7 +564,7 @@ jobs:
 
             $fileArgs = @{
               packageName    = $packageName
-              fileFullPath   = Join-Path $installDir 'bin\cfn-teleport.exe'
+              fileFullPath   = Join-Path $installDir 'cfn-teleport.exe'
               url            = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-x86_64-pc-windows-msvc-v0.3.1.exe'
               checksum       = '3a666472ac16244839210fe888fb975e2433745cf0c3ad8a698152e4dfebb49d'
               url64bit       = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-i686-pc-windows-msvc-v0.3.1.exe'
@@ -573,11 +573,6 @@ jobs:
               ChecksumType64 = 'sha256'
             }
             Get-ChocolateyWebFile @fileArgs
-
-            #$pathArgs = @{
-            #  pathToInstall = Join-Path $installDir 'bin'
-            #}
-            #Install-ChocolateyPath @pathArgs
           UNINSTALL_SCRIPT: |
             $packageName = 'cfn-teleport'
             $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
