@@ -520,8 +520,8 @@ jobs:
 
             # Test installation
             echo "Installing package..."
-            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}" -f $version
-            choco install cfn-teleport --source $nupgkFile --yes
+            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}".nupkg -f $version
+            choco install cfn-teleport --source $nupgkFile --yes --version $version
 
             # Check if installation was successful
             Get-Command cfn-teleport
@@ -539,7 +539,7 @@ jobs:
 
             # Push package
             echo "Pushing package..."
-            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+            #choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
         env:
           NUSPEC: |
             <?xml version="1.0"?>
@@ -579,14 +579,11 @@ jobs:
             Install-ChocolateyPath @pathArgs
           UNINSTALL_SCRIPT: |
             $packageName = 'cfn-teleport'
+            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
 
             $pathArgs = @{
-                target = Join-Path $toolsDir 'cfn-teleport.exe'
-                returnPowerShellPath = $false
+              pathToInstall = Join-Path $installDir 'bin'
             }
 
             Uninstall-ChocolateyPath @pathArgs
-
-            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
-
             Remove-Item -Path $installDir -Recurse -Force
