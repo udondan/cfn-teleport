@@ -560,22 +560,14 @@ jobs:
             $packageName = 'cfn-teleport'
             $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
 
-            # Set download url and checksum based on architecture
-            if ([System.Environment]::Is64BitOperatingSystem) {
-              $url = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-x86_64-pc-windows-msvc-v0.3.1.exe'
-              $checksum = '3a666472ac16244839210fe888fb975e2433745cf0c3ad8a698152e4dfebb49d'
-            } else {
-              $url = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-i686-pc-windows-msvc-v0.3.1.exe'
-              $checksum = 'c9054947e79b17c3a634ec6216af397b1415a1d7ce4cd6a4a450773e8176622d'
-            }
-
             $packageArgs = @{
               packageName    = $packageName
-              url            = $url
-              checksum       = $checksum
+              url            = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-x86_64-pc-windows-msvc-v0.3.1.exe'
+              checksum       = '3a666472ac16244839210fe888fb975e2433745cf0c3ad8a698152e4dfebb49d'
+              url64bit       = 'https://github.com/udondan/cfn-teleport/releases/download/v0.3.1/cfn-teleport-i686-pc-windows-msvc-v0.3.1.exe'
+              checksum64     = 'c9054947e79b17c3a634ec6216af397b1415a1d7ce4cd6a4a450773e8176622d'
               checksumType   = 'sha256'
               fileType       = 'exe'
-              silentArgs     = '/S'
               validExitCodes = @(0)
               destination    = $toolsDir
             }
