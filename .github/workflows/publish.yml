@@ -517,7 +517,7 @@ jobs:
           echo "Creating package..."
           choco pack $nuspecPath
 
-          if ("${{ github.event_name }}" -ne "pull_request") {
+
             # Test installation
             echo "Installing package..."
             $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
@@ -539,7 +539,6 @@ jobs:
             # Push package
             echo "Pushing package..."
             choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
-          }
         env:
           NUSPEC: |
             <?xml version="1.0"?>
