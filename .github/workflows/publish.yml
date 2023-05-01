@@ -467,6 +467,11 @@ jobs:
 
       - name: Generate nuspec file
         run: |
+          if (-not $env:NUSPEC) {
+            Write-Error "NUSPEC variable not set"
+            exit 1
+          }
+
           $nuspec = $env:NUSPEC
 
           $version = $env:GITHUB_REF_NAME
