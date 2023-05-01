@@ -473,6 +473,8 @@ jobs:
           }
 
           $nuspec = $Env:NUSPEC
+          $installScript = $Env:INSTALL_SCRIPT
+          $uninstallScript = $Env:UNINSTALL_SCRIPT
 
           $version = $Env:GITHUB_REF_NAME
           if ($version -notmatch '^v\d+\.\d+\.\d+$') {
@@ -491,12 +493,21 @@ jobs:
           $url32 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-i686-pc-windows-msvc-{0}.exe" -f $version
           $url64 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-x86_64-pc-windows-msvc-{0}.exe" -f $version
 
-          # Replace the placeholders in the nuspec file
+          # Replace the placeholders in the nuspec and script files
           $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+          $installScriptContent = $installScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+          $uninstallScriptContent = $uninstallScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
 
-          # Write the nuspec file
+          # Write nuspec and script files
           $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
           Set-Content -Path $nuspecPath -Value $nuspecContent
+
+          $toolsDir = "${{ github.workspace }}/tools"
+          New-Item -ItemType Directory -Force -Path $toolsDir
+          $installScriptPath = "${{ github.workspace }}/tools/chocolateyInstall.ps1"
+          $uninstallScriptPath = "${{ github.workspace }}/tools/chocolateyUninstall.ps1"
+          Set-Content -Path $installScriptPath -Value $installScriptContent
+          Set-Content -Path $uninstallScriptPath -Value $uninstallScriptContent
 
           # Output file content
           echo "$nuspecContent"
@@ -519,55 +530,51 @@ jobs:
                 <licenseUrl>https://github.com/udondan/cfn-teleport/blob/master/LICENSE</licenseUrl>
                 <projectUrl>https://github.com/udondan/cfn-teleport</projectUrl>
               </metadata>
-              <installScript>
-                <powershell>
-                  $packageName = 'cfn-teleport'
-                  $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
-
-                  # Set download url and checksum based on architecture
-                  if ([System.Environment]::Is64BitOperatingSystem) {
-                    $url = '{{ url64 }}'
-                    $checksum = '{{ sha64 }}'
-                  } else {
-                    $url = '{{ url32 }}'
-                    $checksum = '{{ sha32 }}'
-                  }
-
-                  $packageArgs = @{
-                    packageName    = $packageName
-                    url            = $url
-                    checksum       = $checksum
-                    checksumType   = 'sha256'
-                    fileType       = 'exe'
-                    silentArgs     = '/S'
-                    validExitCodes = @(0)
-                    destination    = $toolsDir
-                  }
-
-                  Install-ChocolateyPackage @packageArgs
-
-                  Install-ChocolateyPath 'cfn-teleport'
-                </powershell>
-              </installScript>
-              <uninstallScript>
-                <powershell>
-                  $packageName = 'cfn-teleport'
-                  $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
-
-                  Uninstall-ChocolateyPath 'cfn-teleport'
-
-                  $packageArgs = @{
-                    packageName = $packageName
-                    fileType = 'exe'
-                    silentArgs = '/S'
-                    validExitCodes = @(0)
-                    file = "$($toolsDir)\cfn-teleport.exe"
-                  }
-
-                  Uninstall-ChocolateyPackage @packageArgs
-                </powershell>
-              </uninstallScript>
+              <files>
+                <file src="tools\**" target="tools" />
+              </files>
             </package>
+          INSTALL_SCRIPT: |
+            $packageName = 'cfn-teleport'
+            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+
+            # Set download url and checksum based on architecture
+            if ([System.Environment]::Is64BitOperatingSystem) {
+              $url = '{{ url64 }}'
+              $checksum = '{{ sha64 }}'
+            } else {
+              $url = '{{ url32 }}'
+              $checksum = '{{ sha32 }}'
+            }
+
+            $packageArgs = @{
+              packageName    = $packageName
+              url            = $url
+              checksum       = $checksum
+              checksumType   = 'sha256'
+              fileType       = 'exe'
+              silentArgs     = '/S'
+              validExitCodes = @(0)
+              destination    = $toolsDir
+            }
+
+            Install-ChocolateyPackage @packageArgs
+            Install-ChocolateyPath 'cfn-teleport'
+          UNINSTALL_SCRIPT: |
+            $packageName = 'cfn-teleport'
+            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+
+            Uninstall-ChocolateyPath 'cfn-teleport'
+
+            $packageArgs = @{
+              packageName = $packageName
+              fileType = 'exe'
+              silentArgs = '/S'
+              validExitCodes = @(0)
+              file = "$($toolsDir)\cfn-teleport.exe"
+            }
+
+            Uninstall-ChocolateyPackage @packageArgs
 
       - name: Create Chocolatey package
         run: choco pack
