@@ -574,7 +574,7 @@ jobs:
             Get-ChocolateyWebFile @fileArgs
 
             $pathArgs = @{
-              target = Join-Path $toolsDir 'cfn-teleport.exe'
+              target = Join-Path $installDir 'tools\cfn-teleport.exe'
               returnPowerShellPath = $false
             }
             Install-ChocolateyPath @pathArgs
