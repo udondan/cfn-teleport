@@ -467,14 +467,14 @@ jobs:
 
       - name: Generate nuspec file
         run: |
-          if (-not $env:NUSPEC) {
+          if (-not $Env:NUSPEC) {
             Write-Error "NUSPEC variable not set"
             exit 1
           }
 
-          $nuspec = $env:NUSPEC
+          $nuspec = $Env:NUSPEC
 
-          $version = $env:GITHUB_REF_NAME
+          $version = $Env:GITHUB_REF_NAME
           if ($version -notmatch '^v\d+\.\d+\.\d+$') {
             $version = 'v9.9.9'
           }
@@ -492,7 +492,7 @@ jobs:
           $url64 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-x86_64-pc-windows-msvc-{0}.exe" -f $version
 
           # Replace the placeholders in the nuspec file
-          $nuspecContent = $env.NUSPEC.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+          $nuspecContent = $Env.NUSPEC.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
 
           # Write the nuspec file
           $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
