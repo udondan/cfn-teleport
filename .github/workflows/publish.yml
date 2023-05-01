@@ -520,8 +520,8 @@ jobs:
 
             # Test installation
             echo "Installing package..."
-            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}".nupkg -f $version
-            choco install cfn-teleport --source $nupgkFile --yes
+            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
+            choco install cfn-teleport --source $nupgkFile --yes --version $version
 
             # Check if installation was successful
             Get-Command cfn-teleport
@@ -559,6 +559,7 @@ jobs:
             </package>
           INSTALL_SCRIPT: |
             $packageName = 'cfn-teleport'
+            $version = '{{ version }}'
             $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
 
             $fileArgs = @{
