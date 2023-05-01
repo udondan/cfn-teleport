@@ -523,7 +523,8 @@ jobs:
 
           # Test installation, will not work, but i want to see the output
           echo "Installing package..."
-          choco install cfn-teleport --source cfn-teleport.{{ version }}.nupkg --yes
+          $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
+          choco install cfn-teleport --source $nupgkFile --yes
         env:
           NUSPEC: |
             <?xml version="1.0"?>
