@@ -272,7 +272,7 @@ jobs:
           git add cfn-teleport.rb
           git status
           git config --global user.email "${EMAIL}"
-          git config --global user.name "${NAME}"
+          git config --global user.name "udondan"
           git commit -m "Release ${VERSION:1}"
 
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
@@ -398,7 +398,7 @@ jobs:
           git status
           git diff
           git config --global user.email "${EMAIL}"
-          git config --global user.name "${NAME}"
+          git config --global user.name "udondan"
           git commit -am "Release ${VERSION:1}"
 
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
@@ -452,3 +452,117 @@ jobs:
               # Move the binary to /usr/bin
               install -Dm755 "${srcdir}/cfn-teleport" "${pkgdir}/usr/bin/cfn-teleport"
             }
+
+  chocolatey-publish:
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v3
+        with:
+          name: artifacts
+          path: artifacts
+
+      - name: Set up Chocolatey environment
+        uses: chocolatey/setup-chocolatey@v1
+
+      - name: Generate nuspec file
+        run: |
+          $nuspec = $env:NUSPEC
+
+          $version = $env:GITHUB_REF_NAME
+          if ($version -notmatch '^v\d+\.\d+\.\d+$') {
+            $version = 'v9.9.9'
+          }
+
+          # Get the file paths
+          $url32File = "${{ github.workspace }}/artifacts/cfn-teleport-i686-pc-windows-msvc-${{ version }}.exe"
+          $url64File = "${{ github.workspace }}/artifacts/cfn-teleport-x86_64-pc-windows-msvc-${{ version }}.exe"
+
+          # Get the SHA256 hashes
+          $sha32 = Get-FileHash $url32File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+          $sha64 = Get-FileHash $url64File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+
+          # Build the URLs
+          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/${{ version }}/cfn-teleport-i686-pc-windows-msvc-${{ version }}.exe"
+          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/${{ version }}/cfn-teleport-x86_64-pc-windows-msvc-${{ version }}.exe"
+
+          # Replace the placeholders in the nuspec file
+          $nuspecContent = $env.NUSPEC.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+
+          # Write the nuspec file
+          $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
+          Set-Content -Path $nuspecPath -Value $nuspecContent
+
+          # Output file content
+          echo "$nuspecContent"
+
+          # Validate nuspec
+          choco pack $nuspecPath --dry-run
+
+          # Test installation, will not work, but i want to see the output
+          choco install cfn-teleport --source $nuspecPath --yes
+        env:
+          NUSPEC: |
+            <?xml version="1.0"?>
+            <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+              <metadata>
+                <id>cfn-teleport</id>
+                <version>{{ version }}</version>
+                <authors>udondan</authors>
+                <description>A command-line tool which can move CloudFormation resources between stacks</description>
+                <tags>aws cloudformation migration</tags>
+                <licenseUrl>https://github.com/udondan/cfn-teleport/blob/master/LICENSE</licenseUrl>
+                <projectUrl>https://github.com/udondan/cfn-teleport</projectUrl>
+              </metadata>
+              <installScript>
+                <powershell>
+                  $packageName = 'cfn-teleport'
+                  $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+
+                  # Set download url and checksum based on architecture
+                  if ([System.Environment]::Is64BitOperatingSystem) {
+                    $url = '{{ url64 }}'
+                    $checksum = '{{ sha64 }}'
+                  } else {
+                    $url = '{{ url32 }}'
+                    $checksum = '{{ sha32 }}'
+                  }
+
+                  $packageArgs = @{
+                    packageName    = $packageName
+                    url            = $url
+                    checksum       = $checksum
+                    checksumType   = 'sha256'
+                    fileType       = 'exe'
+                    silentArgs     = '/S'
+                    validExitCodes = @(0)
+                    destination    = $toolsDir
+                  }
+
+                  Install-ChocolateyPackage @packageArgs
+
+                  Install-ChocolateyPath 'cfn-teleport'
+                </powershell>
+              </installScript>
+              <uninstallScript>
+                <powershell>
+                  $packageName = 'cfn-teleport'
+                  $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+
+                  Uninstall-ChocolateyPath 'cfn-teleport'
+
+                  $packageArgs = @{
+                    packageName = $packageName
+                    fileType = 'exe'
+                    silentArgs = '/S'
+                    validExitCodes = @(0)
+                    file = "$($toolsDir)\cfn-teleport.exe"
+                  }
+
+                  Uninstall-ChocolateyPackage @packageArgs
+                </powershell>
+              </uninstallScript>
+            </package>
+
+      - name: Create Chocolatey package
+        run: choco pack
