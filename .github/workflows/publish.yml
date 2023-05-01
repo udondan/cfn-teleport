@@ -521,10 +521,29 @@ jobs:
           echo "Creating package..."
           choco pack $nuspecPath
 
-          # Test installation, will not work, but i want to see the output
-          echo "Installing package..."
-          $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
-          choco install cfn-teleport --source $nupgkFile --yes
+          if ("${{ github.event_name }}" -ne "pull_request") {
+            # Test installation
+            echo "Installing package..."
+            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
+            choco install cfn-teleport --source $nupgkFile --yes
+
+            # Check if installation was successful
+            Get-Command cfn-teleport
+
+            # Uninstall package
+            echo "Uninstalling package..."
+            choco uninstall cfn-teleport --yes
+
+            # Ensure package is uninstalled
+            if (Get-Command cfn-teleport) {
+              Write-Error "Package was not uninstalled"
+              exit 1
+            }
+
+            # Push package
+            echo "Pushing package..."
+            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+          }
         env:
           NUSPEC: |
             <?xml version="1.0"?>
