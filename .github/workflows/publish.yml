@@ -460,6 +460,12 @@ jobs:
       run:
         shell: powershell
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
       - uses: actions/download-artifact@v3
         with:
           name: artifacts
@@ -471,6 +477,11 @@ jobs:
             Write-Error "NUSPEC variable not set"
             exit 1
           }
+
+          $markdown = Get-Content -Path "CHANGELOG.md" -Raw
+          $startIndex = $markdown.IndexOf("## [", 0)
+          $endIndex = $markdown.IndexOf("## [", $startIndex + 1)
+          $releaseNotes = $markdown.Substring($startIndex, $endIndex - $startIndex)
 
           $nuspec = $Env:NUSPEC
           $installScript = $Env:INSTALL_SCRIPT
@@ -489,7 +500,7 @@ jobs:
           $url64 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
 
           # Replace the placeholders in the nuspec and script files
-          $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+          $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version).Replace('{{ release_notes }}', $releaseNotes)
           $installScriptContent = $installScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
 
           # Write nuspec and script files
@@ -548,6 +559,8 @@ jobs:
                 <tags>aws cloudformation migration</tags>
                 <licenseUrl>https://github.com/udondan/cfn-teleport/blob/master/LICENSE</licenseUrl>
                 <projectUrl>https://github.com/udondan/cfn-teleport</projectUrl>
+                <packageSourceUrl>https://github.com/udondan/cfn-teleport/blob/main/.github/workflows/publish.yml</packageSourceUrl>
+                <releaseNotes>{{ release_notes }}</releaseNotes>
               </metadata>
               <files>
                 <file src="tools\**" target="tools" />
