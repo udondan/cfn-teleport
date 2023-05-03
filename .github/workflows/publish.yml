@@ -546,16 +546,18 @@ jobs:
 
             # Push package
             echo "Pushing package..."
-            #choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
         env:
           NUSPEC: |
             <?xml version="1.0"?>
             <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
               <metadata>
                 <id>cfn-teleport</id>
+                <title>cfn-teleport</title>
                 <version>{{ version }}</version>
                 <authors>udondan</authors>
                 <description>A command-line tool which can move CloudFormation resources between stacks</description>
+                <summary>A command-line tool which can move CloudFormation resources between stacks</summary>
                 <tags>aws cloudformation migration</tags>
                 <licenseUrl>https://github.com/udondan/cfn-teleport/blob/master/LICENSE</licenseUrl>
                 <projectUrl>https://github.com/udondan/cfn-teleport</projectUrl>
