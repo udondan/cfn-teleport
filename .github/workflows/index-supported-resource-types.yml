@@ -72,16 +72,9 @@ jobs:
                   COMMIT_MESSAGE="Removes support for resource $RESOURCE"
               fi
           fi
+          git add src/supported_resource_types.rs
           echo "CHANGED=${CHANGED}" >> $GITHUB_OUTPUT
           echo "COMMIT_MESSAGE=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
-
-      - name: Configure git
-        run: |
-          set -x
-          git config --local user.email "${{ secrets.EMAIL }}"
-          git config --local user.name "udondan"
-          git add src/supported_resource_types.rs
-        if: steps.changes.outputs.CHANGED >= 1
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v5
@@ -92,8 +85,8 @@ jobs:
           body-path: body.txt
           branch: resource-type-updates
           delete-branch: true
-          committer: udondan <${{ secrets.RELEASE_MAIL }}>
-          author: udondan <${{ secrets.RELEASE_MAIL }}>
+          committer: udondan <${{ secrets.EMAIL }}>
+          author: udondan <${{ secrets.EMAIL }}>
           labels: automerge
           base: main
         if: steps.changes.outputs.CHANGED >= 1
