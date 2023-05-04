@@ -1,9 +1,8 @@
 ---
 name: Trivy vulnerability scan
 on:
-  pull_request:
-    branches:
-      - main
+  schedule:
+    - cron: 21 3 * * *
 
 jobs:
   scan:
@@ -17,9 +16,6 @@ jobs:
         with:
           scan-type: fs
           ignore-unfixed: true
-          #exit-code: "1"
-          skip-dirs: test
-
           format: sarif
           output: trivy-results.sarif
 
