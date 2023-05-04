@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 585] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 587] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -199,7 +199,6 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 585] = [
     "AWS::EC2::VPC",
     "AWS::EC2::VPCDHCPOptionsAssociation",
     "AWS::EC2::VPCPeeringConnection",
-    "AWS::EC2::VPNGateway",
     "AWS::ECR::PublicRepository",
     "AWS::ECR::PullThroughCacheRule",
     "AWS::ECR::RegistryPolicy",
@@ -230,6 +229,8 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 585] = [
     "AWS::ElasticBeanstalk::Application",
     "AWS::ElasticLoadBalancingV2::Listener",
     "AWS::ElasticLoadBalancingV2::ListenerRule",
+    "AWS::ElasticLoadBalancingV2::LoadBalancer",
+    "AWS::ElasticLoadBalancingV2::TargetGroup",
     "AWS::EventSchemas::RegistryPolicy",
     "AWS::Events::ApiDestination",
     "AWS::Events::Archive",
@@ -268,6 +269,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 585] = [
     "AWS::GroundStation::MissionProfile",
     "AWS::HealthLake::FHIRDatastore",
     "AWS::IAM::InstanceProfile",
+    "AWS::IAM::ManagedPolicy",
     "AWS::IAM::OIDCProvider",
     "AWS::IAM::Role",
     "AWS::IAM::SAMLProvider",
