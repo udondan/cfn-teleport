@@ -247,19 +247,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &client,
         &target_stack,
         template_target_with_deletion_policy,
-        selected_resources.clone(),
-        new_logical_ids_map.clone(),
-    )
-    .await?;
-
-    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
-    execute_changeset(&client, &target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, &target_stack, None).await?;
-
-    let changeset_name = create_changeset(
-        &client,
-        &target_stack,
-        template_target,
         selected_resources,
         new_logical_ids_map,
     )
@@ -267,6 +254,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
     execute_changeset(&client, &target_stack, &changeset_name).await?;
+    wait_for_stack_update_completion(&client, &target_stack, None).await?;
+
+    update_stack(&client, &target_stack, template_target).await?;
     wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
 
     Ok(())
