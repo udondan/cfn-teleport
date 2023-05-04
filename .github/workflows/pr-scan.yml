@@ -17,7 +17,5 @@ jobs:
         with:
           scan-type: fs
           ignore-unfixed: true
-          format: table
           exit-code: "1"
-          severity: CRITICAL,HIGH
-          skip-files: test
+          skip-dirs: test
