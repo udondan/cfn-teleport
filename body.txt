@@ -1,0 +1,7 @@
+**Added resources:**
+  - AWS::ElasticLoadBalancingV2::LoadBalancer
+  - AWS::ElasticLoadBalancingV2::TargetGroup
+  - AWS::IAM::ManagedPolicy
+
+**Removed resources:**
+  - AWS::EC2::VPNGateway
