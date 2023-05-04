@@ -141,7 +141,7 @@ jobs:
 
           if ! npx cdk diff --fail; then
             echo "Migration failed, cdk diff did show changes"
-            # exit 1 enable, when we have solved #76
+            exit 1
           fi
         env:
           AWS_DEFAULT_REGION: us-east-1
