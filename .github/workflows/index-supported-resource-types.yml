@@ -2,9 +2,9 @@
 name: Index supported resource types
 
 on:
-  pull_request:
-    branches:
-      - main
+  schedule:
+    - cron: 42 4 * * *
+  workflow_dispatch:
 
 jobs:
   index-supported-resource-types:
@@ -80,7 +80,7 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.OVERRIDE_TOKEN }}
-          commit-message: ${{ steps.changes.outputs.COMMIT_MESSAGE }}
+          commit-message: "feat: ${{ steps.changes.outputs.COMMIT_MESSAGE }}"
           title: ${{ steps.changes.outputs.COMMIT_MESSAGE }}
           body-path: body.txt
           branch: resource-type-updates
