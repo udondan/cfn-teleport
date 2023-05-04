@@ -10,7 +10,11 @@ jobs:
   index-supported-resource-types:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
 
       - name: Index supported resource types
         id: changes
@@ -80,7 +84,7 @@ jobs:
         if: steps.changes.outputs.CHANGED >= 1
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.OVERRIDE_TOKEN }}
           commit-message: ${{ steps.changes.outputs.COMMIT_MESSAGE }}
