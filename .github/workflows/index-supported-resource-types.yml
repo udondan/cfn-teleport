@@ -18,6 +18,8 @@ jobs:
           set -euo pipefail
           IFS=$'\n\t'
 
+          cargo install htmlq
+
           RESOURCES=$(curl -s "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resource-import-supported-resources.html"  | htmlq --text "table tr td:first-child > p > a")
           COUNT=$(echo "${RESOURCES}" | wc -l | xargs)
 
