@@ -1,33 +1,61 @@
 ---
-name: Dependabot Automerge
+name: Automerge
+
+concurrency: automerge
 
 on:
   pull_request_target:
     types: [labeled, synchronize]
 
-concurrency: automerge
-
-permissions:
-  contents: write
-  pull-requests: write
-
 jobs:
-  dependabot:
+  automerge_dependabot:
+    name: Automerge Dependabot
     runs-on: ubuntu-latest
     if: |
-      (
-        github.actor == 'dependabot[bot]' ||
-        github.actor == 'udondan'
-      ) &&
+      github.actor == 'dependabot[bot]' &&
       contains(github.event.pull_request.labels.*.name, 'dependencies')
     steps:
-      - name: Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@v1.3.0
+      - name: Wait for tests to succeed
+        uses: fountainhead/action-wait-for-check@v1.1.0
+        id: wait-for-ci
         with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
-      - name: Enable auto-merge for Dependabot PRs
-        run: gh pr merge --auto --squash "$PR_URL"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: success
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          timeoutSeconds: 1200
+          intervalSeconds: 30
+
+      - name: Automerge
+        uses: pascalgn/automerge-action@v0.15.3
+        if: steps.wait-for-ci.outputs.conclusion == 'success'
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_LABELS: dependencies
+          UPDATE_LABELS: dependencies
+          GITHUB_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+          MERGE_DELETE_BRANCH: true
+
+  automerge_ci:
+    name: Automerge CI
+    runs-on: ubuntu-latest
+    if: |
+      github.actor == 'udondan' &&
+      contains(github.event.pull_request.labels.*.name, 'automerge')
+    steps:
+      - name: Wait for tests to succeed
+        uses: fountainhead/action-wait-for-check@v1.1.0
+        id: wait-for-ci
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          checkName: success
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          timeoutSeconds: 1200
+          intervalSeconds: 30
+
+      - name: Automerge
+        uses: pascalgn/automerge-action@v0.15.3
+        if: steps.wait-for-ci.outputs.conclusion == 'success'
+        env:
+          MERGE_LABELS: automerge
+          UPDATE_LABELS: automerge
+          GITHUB_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+          MERGE_DELETE_BRANCH: true
