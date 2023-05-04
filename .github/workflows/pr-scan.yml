@@ -1,0 +1,23 @@
+---
+name: Trivy vulnerability scan
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  scan:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Trivy vulnerability scanner in repo mode
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          skip-files: test
