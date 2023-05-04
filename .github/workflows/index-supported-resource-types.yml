@@ -72,7 +72,7 @@ jobs:
                   COMMIT_MESSAGE="Removes support for resource $RESOURCE"
               fi
           fi
-          git add src/supported_resource_types.rs
+
           echo "CHANGED=${CHANGED}" >> $GITHUB_OUTPUT
           echo "COMMIT_MESSAGE=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
 
@@ -88,5 +88,5 @@ jobs:
           committer: udondan <${{ secrets.EMAIL }}>
           author: udondan <${{ secrets.EMAIL }}>
           labels: automerge
-          base: main
+          add-paths: src/supported_resource_types.rs
         if: steps.changes.outputs.CHANGED >= 1
