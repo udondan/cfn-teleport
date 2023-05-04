@@ -70,7 +70,6 @@ jobs:
           fi
           echo "CHANGED=${CHANGED}" >> $GITHUB_OUTPUT
           echo "COMMIT_MESSAGE=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
-          echo "COMMIT_BODY=$(cat body.txt)" >> $GITHUB_OUTPUT
 
       - name: Configure git
         run: |
@@ -86,7 +85,7 @@ jobs:
           token: ${{ secrets.OVERRIDE_TOKEN }}
           commit-message: ${{ steps.changes.outputs.COMMIT_MESSAGE }}
           title: ${{ steps.changes.outputs.COMMIT_MESSAGE }}
-          body: ${{ steps.changes.outputs.COMMIT_BODY }}
+          body-path: body.txt
           branch: resource-type-updates
           delete-branch: true
           committer: udondan <${{ secrets.RELEASE_MAIL }}>
