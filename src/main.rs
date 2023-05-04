@@ -198,7 +198,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
 
-    let template_target = add_resources(
+    let (template_target_with_deletion_policy, template_target) = add_resources(
         get_template(&client, &target_stack).await?,
         template_source.clone(),
         new_logical_ids_map.clone(),
@@ -208,6 +208,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         template_retained.clone(),
         template_removed.clone(),
         template_target.clone(),
+        template_target_with_deletion_policy.clone(),
     ] {
         let result = validate_template(&client, template).await;
         if result.is_err() {
@@ -236,23 +237,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
     update_stack(&client, &source_stack, template_removed).await?;
     wait_for_stack_update_completion(&client, &source_stack, Some(spinner)).await?;
 
-    let changeset_name = create_changeset(
-        &client,
-        &target_stack,
-        template_target,
-        selected_resources,
-        new_logical_ids_map,
-    )
-    .await?;
-
     let spinner = spinner::Spin::new(&format!(
         "Importing {} resources into stack {}",
         resource_ids_to_remove.len(),
         target_stack,
     ));
-    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
 
+    let changeset_name = create_changeset(
+        &client,
+        &target_stack,
+        template_target_with_deletion_policy,
+        selected_resources,
+        new_logical_ids_map,
+    )
+    .await?;
+
+    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
     execute_changeset(&client, &target_stack, &changeset_name).await?;
+    wait_for_stack_update_completion(&client, &target_stack, None).await?;
+
+    update_stack(&client, &target_stack, template_target).await?;
     wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
 
     Ok(())
@@ -599,7 +603,7 @@ fn add_resources(
     mut target_template: serde_json::Value,
     source_template: serde_json::Value,
     resource_id_map: HashMap<String, String>,
-) -> serde_json::Value {
+) -> (serde_json::Value, serde_json::Value) {
     let target_resources = target_template["Resources"].as_object_mut().unwrap();
     let source_resources = source_template["Resources"].as_object().unwrap();
 
@@ -609,12 +613,12 @@ fn add_resources(
         }
     }
 
-    let target_template = set_default_deletion_policy(
+    let target_template_with_deletion_policy = set_default_deletion_policy(
         target_template.clone(),
         resource_id_map.values().map(|x| x.to_string()).collect(),
     );
 
-    target_template
+    (target_template_with_deletion_policy, target_template)
 }
 
 async fn validate_template(
