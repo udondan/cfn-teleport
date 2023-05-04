@@ -95,4 +95,5 @@ jobs:
           committer: udondan <${{ secrets.RELEASE_MAIL }}>
           author: udondan <${{ secrets.RELEASE_MAIL }}>
           labels: automerge
+          base: main
         if: steps.changes.outputs.CHANGED >= 1
