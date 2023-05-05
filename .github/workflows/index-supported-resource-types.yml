@@ -38,6 +38,12 @@ jobs:
           done
           echo "];" >> src/supported_resource_types.rs
 
+          if [[ ! $(git diff --shortstat) ]]; then
+              echo "No changes!"
+              echo "CHANGED=0" >> $GITHUB_OUTPUT
+              exit 0
+          fi
+
           ADDED_RESOURCES=$(git diff | grep '^+    ')
           REMOVED_RESOURCES=$(git diff | grep '^-    ')
           COUNT_ADDED=$(echo "$ADDED_RESOURCES" | wc -l)
