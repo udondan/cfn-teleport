@@ -1,9 +1,8 @@
 ---
 name: Trivy vulnerability scan
 on:
-  pull_request:
-    branches:
-      - main
+  schedule:
+    - cron: 21 3 * * *
 
 jobs:
   scan:
@@ -17,7 +16,10 @@ jobs:
         with:
           scan-type: fs
           ignore-unfixed: true
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
-          skip-files: test
+          format: sarif
+          output: trivy-results.sarif
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: trivy-results.sarif

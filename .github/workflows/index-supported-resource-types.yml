@@ -1,0 +1,98 @@
+---
+name: Index supported resource types
+
+on:
+  schedule:
+    - cron: 42 4 * * *
+  workflow_dispatch:
+
+jobs:
+  index-supported-resource-types:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Index supported resource types
+        id: changes
+        run: |
+          set -euo pipefail
+          IFS=$'\n\t'
+
+          cargo install htmlq
+
+          RESOURCES=$(curl -s "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resource-import-supported-resources.html"  | htmlq --text "table tr td:first-child > p > a")
+          COUNT=$(echo "${RESOURCES}" | wc -l | xargs)
+
+          if [[ ! "${RESOURCES}" =~ EC2::Instance ]]; then
+              echo "EC2::Instance not found in supported resources. Something is wrong with the source"
+              exit 1
+          fi
+
+          echo "pub const SUPPORTED_RESOURCE_TYPES: [&str; ${COUNT}] = [" > src/supported_resource_types.rs
+          echo "${RESOURCES}" | while read -r line; do
+              echo "    \"${line}\"," >> src/supported_resource_types.rs
+          done
+          echo "];" >> src/supported_resource_types.rs
+
+          if [[ ! $(git diff --shortstat) ]]; then
+              echo "No changes!"
+              echo "CHANGED=0" >> $GITHUB_OUTPUT
+              exit 0
+          fi
+
+          ADDED_RESOURCES=$(git diff | grep '^+    ')
+          REMOVED_RESOURCES=$(git diff | grep '^-    ')
+          COUNT_ADDED=$(echo "$ADDED_RESOURCES" | wc -l)
+          COUNT_REMOVED=$(echo "$REMOVED_RESOURCES" | wc -l)
+          CHANGED=$(($COUNT_ADDED + $COUNT_REMOVED))
+
+          echo "$CHANGED changes"
+
+          COMMIT_MESSAGE="Updates supported resource types ($CHANGED)"
+
+          if [ "$CHANGED" -gt 1 ]; then
+              if [ -n "$ADDED_RESOURCES" ]; then
+                  echo "**Added resources:**" > body.txt
+                  echo "$ADDED_RESOURCES" | sed 's/^\+ *"\(.*\)",/  - \1/' >> body.txt
+              fi
+
+              if [ -n "$ADDED_RESOURCES" ] && [ -n "$REMOVED_RESOURCES" ]; then
+                  echo "" >> body.txt
+              fi
+
+              if [ -n "$REMOVED_RESOURCES" ]; then
+                  echo "**Removed resources:**" >> body.txt
+                  echo "$REMOVED_RESOURCES" | sed 's/^- *"\(.*\)",/  - \1/' >> body.txt
+              fi
+          else
+              if [ -n "$ADDED_RESOURCES" ]; then
+                  RESOURCE=$(echo "$ADDED_RESOURCES" | sed 's/^- *"\(.*\)",/\1/')
+                  COMMIT_MESSAGE="Adds support for resource $RESOURCE"
+              fi
+              if [ -n "$REMOVED_RESOURCES" ]; then
+                  RESOURCE=$(echo "$REMOVED_RESOURCES" | sed 's/^- *"\(.*\)",/\1/')
+                  COMMIT_MESSAGE="Removes support for resource $RESOURCE"
+              fi
+          fi
+
+          echo "CHANGED=${CHANGED}" >> $GITHUB_OUTPUT
+          echo "COMMIT_MESSAGE=${COMMIT_MESSAGE}" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.OVERRIDE_TOKEN }}
+          commit-message: "feat: ${{ steps.changes.outputs.COMMIT_MESSAGE }}"
+          title: "feat: ${{ steps.changes.outputs.COMMIT_MESSAGE }}"
+          body-path: body.txt
+          branch: resource-type-updates
+          delete-branch: true
+          committer: udondan <${{ secrets.EMAIL }}>
+          author: udondan <${{ secrets.EMAIL }}>
+          labels: automerge
+          add-paths: src/supported_resource_types.rs
+        if: steps.changes.outputs.CHANGED >= 1
