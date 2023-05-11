@@ -488,12 +488,16 @@ jobs:
 
           $version = $Env:GITHUB_REF_NAME -replace '^v', ''
           if ($version -notmatch '^v\d+\.\d+\.\d+$') {
-            $version = '0.3.1'
+            $version = '9.9.9'
           }
 
+          # Get the file paths
+          $url32File = "${{ github.workspace }}/artifacts/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
+          $url64File = "${{ github.workspace }}/artifacts/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
+
           # Get the SHA256 hashes
-          $sha32 = "a"
-          $sha64 = "b"
+          $sha32 = Get-FileHash $url32File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+          $sha64 = Get-FileHash $url64File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
 
           # Build the URLs
           $url32 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
@@ -522,7 +526,7 @@ jobs:
           echo "Creating package..."
           choco pack $nuspecPath
 
-
+          if ("${{ github.event_name }}" -ne "pull_request") {
             # Test installation
             echo "Installing package..."
             $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
@@ -546,7 +550,8 @@ jobs:
 
             # Push package
             echo "Pushing package..."
-            #choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+          }
         env:
           NUSPEC: |
             <?xml version="1.0"?>
