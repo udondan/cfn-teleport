@@ -408,7 +408,7 @@ jobs:
           EMAIL: ${{ secrets.EMAIL }}
           NAME: ${{ secrets.NAME }}
           TEMPLATE: |
-            # Maintainer: ${NAME} <${EMAIL}>
+            # Maintainer: ${{ secrets.NAME }} <${{ secrets.EMAIL }}>
             # Maintainer: ${{ secrets.NAME2 }} <${{ secrets.EMAIL2 }}>
 
             pkgname=cfn-teleport
