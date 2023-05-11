@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/udondan/cfn-teleport/compare/v0.3.1...v0.4.0) (2023-05-11)
+
+
+### Features
+
+* Updates supported resource types (4) ([#134](https://github.com/udondan/cfn-teleport/issues/134)) ([2e466f2](https://github.com/udondan/cfn-teleport/commit/2e466f23e9af25bd4328a6727c7f2c39af72ecf6))
+
+
+### Bug Fixes
+
+* removes remains of DeletionPolicy we are required to set during import ([#126](https://github.com/udondan/cfn-teleport/issues/126)) ([02843c5](https://github.com/udondan/cfn-teleport/commit/02843c5130991dc834fcf3ab9dcf0cc09fdce798))
+
 ## [0.3.1](https://github.com/udondan/cfn-teleport/compare/v0.3.0...v0.3.1) (2023-04-30)
 
 
