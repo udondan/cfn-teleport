@@ -22,6 +22,12 @@ On Arch Linux you can install from [AUR](https://aur.archlinux.org/packages/cfn-
 yay -S cfn-teleport
 ```
 
+On Windows you can install via [Chocolatey](https://community.chocolatey.org/packages/cfn-teleport):
+
+```powershell
+choco install cfn-teleport
+```
+
 Pre-compiled binaries for various operating systems and architectures are [available for download][latest].
 
 If you have [rust/cargo installed](https://doc.rust-lang.org/cargo/getting-started/installation.html), you can install the [crate]:
@@ -61,6 +67,6 @@ Contributions are welcome!
 
 This project uses [conventional commits](https://www.conventionalcommits.org/). Please make sure all your merge request titles follow these specifications.
 
-   [license]: https://github.com/udondan/iam-floyd/blob/main/LICENSE
-   [crate]: https://crates.io/crates/cfn-teleport
-   [latest]: https://github.com/udondan/cfn-teleport/releases/latest
+[license]: https://github.com/udondan/iam-floyd/blob/main/LICENSE
+[crate]: https://crates.io/crates/cfn-teleport
+[latest]: https://github.com/udondan/cfn-teleport/releases/latest
