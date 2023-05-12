@@ -60,8 +60,8 @@ jobs:
           $sha64 = "8081970e7a240b2b559a042e4a1e3149001a9280bb752b954db7302f6ee380b9"
 
           # Build the URLs
-          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
-          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
+          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
+          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
 
           # Replace the placeholders in the nuspec and script files
           $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version).Replace('{{ release_notes }}', $releaseNotes)
