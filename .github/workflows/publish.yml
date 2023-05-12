@@ -487,7 +487,7 @@ jobs:
           $installScript = $Env:INSTALL_SCRIPT
 
           $version = $Env:GITHUB_REF_NAME -replace '^v', ''
-          if ($version -notmatch '^v\d+\.\d+\.\d+$') {
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
             $version = '9.9.9'
           }
 
