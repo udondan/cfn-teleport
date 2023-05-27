@@ -14,10 +14,10 @@ publish = true
 
 [dependencies]
 atty = "0.2.14"
-aws-config = "0.55.2"
-aws-sdk-cloudformation = "0.27.0"
-clap = { version = "4.2.7", features = ["derive"] }
-console = "0.15.6"
+aws-config = "0.55.3"
+aws-sdk-cloudformation = "0.28.0"
+clap = { version = "4.3.0", features = ["derive"] }
+console = "0.15.7"
 dialoguer = "0.10.4"
 serde_json = "1.0.96"
 spinners = "4.1.0"
