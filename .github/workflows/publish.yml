@@ -500,8 +500,8 @@ jobs:
           $sha64 = Get-FileHash $url64File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
 
           # Build the URLs
-          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
-          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
+          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
+          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
 
           # Replace the placeholders in the nuspec and script files
           $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version).Replace('{{ release_notes }}', $releaseNotes)
