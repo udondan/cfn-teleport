@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 587] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 588] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -198,6 +198,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 587] = [
     "AWS::EC2::TransitGatewayVpcAttachment",
     "AWS::EC2::VPC",
     "AWS::EC2::VPCDHCPOptionsAssociation",
+    "AWS::EC2::VPCEndpoint",
     "AWS::EC2::VPCPeeringConnection",
     "AWS::ECR::PublicRepository",
     "AWS::ECR::PullThroughCacheRule",
