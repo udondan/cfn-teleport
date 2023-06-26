@@ -62,7 +62,7 @@ jobs:
 
           COMMIT_MESSAGE="Updates supported resource types ($CHANGED)"
 
-          if [ "$CHANGED" -gt 1 ]; then
+          if [ "$CHANGED" -gt 0 ]; then
               if [ -n "$ADDED_RESOURCES" ]; then
                   echo "**Added resources:**" > body.txt
                   echo "$ADDED_RESOURCES" | sed 's/^\+ *"\(.*\)",/  - \1/' >> body.txt
