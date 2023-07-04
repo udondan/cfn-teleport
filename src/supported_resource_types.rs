@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 588] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 589] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -565,6 +565,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 588] = [
     "AWS::ServiceCatalogAppRegistry::ResourceAssociation",
     "AWS::Signer::ProfilePermission",
     "AWS::Signer::SigningProfile",
+    "AWS::SNS::Topic",
     "AWS::SSO::PermissionSet",
     "AWS::StepFunctions::Activity",
     "AWS::StepFunctions::StateMachine",
