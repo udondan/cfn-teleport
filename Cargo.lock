@@ -473,7 +473,7 @@ dependencies = [
  "console",
  "dialoguer",
  "serde_json",
- "spinoff",
+ "spinach",
  "tokio",
  "uuid",
 ]
@@ -525,17 +525,6 @@ name = "colorchoice"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
-
-[[package]]
-name = "colored"
-version = "2.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f0bd191e39a596125c50f96d9e8b5756839d630cc6cb27741661b12bd7bde63"
-dependencies = [
- "is-terminal",
- "lazy_static",
- "winapi",
-]
 
 [[package]]
 name = "console"
@@ -1050,12 +1039,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "paste"
-version = "1.0.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4b27ab7be369122c218afc2079489cdcb4b517c0a3fc386ff11e1fedfcc2b35"
-
-[[package]]
 name = "percent-encoding"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1379,15 +1362,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
-name = "spinoff"
-version = "0.7.0"
+name = "spinach"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fee259f96b31e7a18657d11741fe30d63f98e07de70e7a19d2b705ab9b331cdc"
-dependencies = [
- "colored",
- "once_cell",
- "paste",
-]
+checksum = "16970c6e553ab70e3da4b335276701cda1366c0957a38a694297893cdd86bdf5"
 
 [[package]]
 name = "strsim"

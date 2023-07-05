@@ -440,7 +440,7 @@ async fn select_resources<'a>(
 
 fn user_confirm() -> Result<(), Box<dyn Error>> {
     let confirmed = Confirm::new()
-        .with_prompt("Please confirm your selection")
+        .with_prompt("Please confirm your selection:")
         .default(false)
         .interact_on_opt(&Term::stderr())?;
 
