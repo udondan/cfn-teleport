@@ -1,17 +1,21 @@
 use atty::Stream;
 use console::style;
-use spinners::{Spinner, Spinners};
+use spinach::{Color, Spinach, Spinner};
 use std::io::Write;
 
 pub struct Spin {
-    spinner: Option<Spinner>,
+    spinner: Option<Spinach>,
     message: String,
 }
 
 impl Spin {
     pub fn new(message: &str) -> Self {
         if atty::is(Stream::Stdout) {
-            let sp = Spinner::new(Spinners::Layer, String::from(message));
+            let sp = Spinach::new_with(
+                Spinner::new(vec!["-", "=", "≡"], 100),
+                String::from(message),
+                Color::Ignore,
+            );
             Self {
                 spinner: Some(sp),
                 message: String::from(message),
@@ -29,8 +33,8 @@ impl Spin {
     pub fn complete(&mut self) {
         let success_prefix = style("✔".to_string()).green();
 
-        if let Some(mut spinner) = self.spinner.take() {
-            spinner.stop_with_message(format!("{} {}", success_prefix, self.message.clone()));
+        if let Some(spinner) = self.spinner.take() {
+            spinner.stop_with("✔", self.message.clone(), Color::Green);
         } else {
             println!(": {}", success_prefix);
         }
