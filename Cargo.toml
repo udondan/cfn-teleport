@@ -20,7 +20,7 @@ clap = { version = "4.3.9", features = ["derive"] }
 console = "0.15.7"
 dialoguer = "0.10.4"
 serde_json = "1.0.99"
-spinners = "4.1.0"
+spinoff = "0.7.0"
 tokio = { version = "1", features = ["full"] }
 
 [dependencies.uuid]
