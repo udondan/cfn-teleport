@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 589] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 590] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -556,6 +556,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 589] = [
     "AWS::SageMaker::Pipeline",
     "AWS::SageMaker::Project",
     "AWS::SageMaker::UserProfile",
+    "AWS::SecurityHub::Standard",
     "AWS::ServiceCatalog::CloudFormationProvisionedProduct",
     "AWS::ServiceCatalog::ServiceAction",
     "AWS::ServiceCatalog::ServiceActionAssociation",
