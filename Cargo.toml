@@ -19,7 +19,7 @@ aws-sdk-cloudformation = "0.28.0"
 clap = { version = "4.3.11", features = ["derive"] }
 console = "0.15.7"
 dialoguer = "0.10.4"
-serde_json = "1.0.100"
+serde_json = "1.0.102"
 spinach = "2.1.0"
 tokio = { version = "1", features = ["full"] }
 proc-macro2 = "1.0.64" # override indirect dependency
