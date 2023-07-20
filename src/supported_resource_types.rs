@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 590] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 592] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -28,6 +28,8 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 590] = [
     "AWS::ApiGateway::UsagePlan",
     "AWS::ApiGateway::UsagePlanKey",
     "AWS::ApiGatewayV2::VpcLink",
+    "AWS::AppConfig::Extension",
+    "AWS::AppConfig::ExtensionAssociation",
     "AWS::AppFlow::ConnectorProfile",
     "AWS::AppFlow::Flow",
     "AWS::AppIntegrations::DataIntegration",
