@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 592] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 593] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -93,6 +93,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 592] = [
     "AWS::CloudFront::Distribution",
     "AWS::CloudFront::Function",
     "AWS::CloudFront::KeyGroup",
+    "AWS::CloudFront::OriginAccessControl",
     "AWS::CloudFront::OriginRequestPolicy",
     "AWS::CloudFront::PublicKey",
     "AWS::CloudFront::RealtimeLogConfig",
