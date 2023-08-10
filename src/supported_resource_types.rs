@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 593] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 594] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -361,6 +361,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 593] = [
     "AWS::LakeFormation::TagAssociation",
     "AWS::Lambda::CodeSigningConfig",
     "AWS::Lambda::Function",
+    "AWS::Lambda::Permission",
     "AWS::Lambda::Url",
     "AWS::Lex::Bot",
     "AWS::Lex::BotAlias",
