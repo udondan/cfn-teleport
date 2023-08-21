@@ -13,7 +13,7 @@
     "ts-node": "^10.5.0",
     "typescript": "^5.1.6",
     "aws-cdk": "2.90.0",
-    "aws-cdk-lib": "2.90.0",
+    "aws-cdk-lib": "2.92.0",
     "constructs": "^10.2.69"
   }
 }
