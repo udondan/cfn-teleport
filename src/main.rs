@@ -204,7 +204,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         new_logical_ids_map.clone(),
     );
 
-    for template in vec![
+    for template in [
         template_retained.clone(),
         template_removed.clone(),
         template_target.clone(),
