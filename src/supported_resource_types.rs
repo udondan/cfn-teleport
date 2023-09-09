@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 594] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 599] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -162,6 +162,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 594] = [
     "AWS::EC2::DHCPOptions",
     "AWS::EC2::EC2Fleet",
     "AWS::EC2::EgressOnlyInternetGateway",
+    "AWS::EC2::EIP",
     "AWS::EC2::EnclaveCertificateIamRoleAssociation",
     "AWS::EC2::FlowLog",
     "AWS::EC2::GatewayRouteTableAssociation",
@@ -440,6 +441,9 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 594] = [
     "AWS::NimbleStudio::StudioComponent",
     "AWS::OpenSearchService::Domain",
     "AWS::OpsWorksCM::Server",
+    "AWS::Organizations::Account",
+    "AWS::Organizations::OrganizationalUnit",
+    "AWS::Organizations::Policy",
     "AWS::Panorama::ApplicationInstance",
     "AWS::Panorama::Package",
     "AWS::Panorama::PackageVersion",
@@ -526,6 +530,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 594] = [
     "AWS::S3Outposts::Bucket",
     "AWS::S3Outposts::BucketPolicy",
     "AWS::S3Outposts::Endpoint",
+    "AWS::Scheduler::Schedule",
     "AWS::SES::ConfigurationSet",
     "AWS::SES::ConfigurationSetEventDestination",
     "AWS::SES::ContactList",
