@@ -2,16 +2,11 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":semanticCommitTypeAll(chore)"],
   "dependencyDashboard": false,
+  "includePaths": ["./**", "test/cdk/**"],
   "packageRules": [
     {
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
-    }
-  ],
-  "packageFileRules": [
-    {
-      "packageFileGlobs": ["package.json"],
-      "directory": "/test/cdk"
     }
   ]
 }
