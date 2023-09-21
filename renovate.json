@@ -15,5 +15,6 @@
       "matchUpdateTypes": ["minor", "patch"],
       "automerge": true
     }
-  ]
+  ],
+  "rebaseWhen": "auto"
 }
