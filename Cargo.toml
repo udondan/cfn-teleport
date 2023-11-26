@@ -22,7 +22,7 @@ dialoguer = "0.11.0"
 serde_json = "1.0.108"
 spinach = "2.1.0"
 tokio = { version = "1", features = ["full"] }
-proc-macro2 = "1.0.69" # override indirect dependency
+proc-macro2 = "1.0.70" # override indirect dependency
 
 [dependencies.uuid]
 version = "1.6.1"
