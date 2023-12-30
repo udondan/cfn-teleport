@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/udondan/cfn-teleport/compare/cfn-teleport-v0.11.0...cfn-teleport-v0.12.0) (2023-12-30)
+
+
+### Features
+
+* Nothing. Really nothing. Just effing around with release-please configuration.
+
 ## [0.11.0](https://github.com/udondan/cfn-teleport/compare/v0.10.0...v0.11.0) (2023-12-30)
 
 
