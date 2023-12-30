@@ -16,5 +16,4 @@ jobs:
     steps:
       - uses: google-github-actions/release-please-action@v4
         with:
-          manifest-file: .release-please.json
           token: ${{ secrets.OVERRIDE_TOKEN }}
