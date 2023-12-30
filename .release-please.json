@@ -1,0 +1,8 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "rust",
+      "package-name": "cfn-teleport"
+    }
+  }
+}

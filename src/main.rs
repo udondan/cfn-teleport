@@ -727,18 +727,10 @@ async fn get_resource_identifier_mapping(
         Ok(output) => {
             let mut map = HashMap::new();
             for item in output.resource_identifier_summaries().iter() {
-                //item.iter().for_each(|item| {
-                item.logical_resource_ids()
-                    // .unwrap()
-                    .iter()
-                    .for_each(|logical_id| {
-                        let resource_identifier = item
-                            .resource_identifiers() /*.unwrap() */
-                            .first()
-                            .unwrap();
-                        map.insert(logical_id.to_string(), resource_identifier.to_string());
-                    });
-                //});
+                item.logical_resource_ids().iter().for_each(|logical_id| {
+                    let resource_identifier = item.resource_identifiers().first().unwrap();
+                    map.insert(logical_id.to_string(), resource_identifier.to_string());
+                });
             }
             Ok(map)
         }
