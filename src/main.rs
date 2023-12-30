@@ -1,3 +1,4 @@
+use aws_config::BehaviorVersion;
 use aws_sdk_cloudformation as cloudformation;
 use clap::Parser;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
@@ -35,7 +36,7 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let config = aws_config::load_from_env().await;
+    let config = aws_config::load_defaults(BehaviorVersion::v2023_11_09()).await;
     let client = cloudformation::Client::new(&config);
     let stacks = get_stacks(&client).await?;
 
@@ -312,7 +313,7 @@ async fn get_stacks(
             .send()
             .await?;
 
-        let new_stacks = resp.stack_summaries().unwrap_or_default().to_vec();
+        let new_stacks = resp.stack_summaries().to_vec();
         stacks.append(&mut new_stacks.clone());
 
         if let Some(next_token) = resp.next_token() {
@@ -371,7 +372,7 @@ async fn get_resources(
         .send()
         .await?;
 
-    let resources = resp.stack_resource_summaries().unwrap_or_default().to_vec();
+    let resources = resp.stack_resource_summaries().to_vec();
 
     // Filter resources based on supported types
     let filtered_resources = resources
@@ -667,7 +668,7 @@ async fn get_stack_status(
         Err(err) => return Err(Box::new(err)),
     };
 
-    let stacks = describe_stacks_output.stacks().unwrap_or_default();
+    let stacks = describe_stacks_output.stacks();
     let stack = stacks.first();
 
     if let Some(stack) = stack {
@@ -726,16 +727,18 @@ async fn get_resource_identifier_mapping(
         Ok(output) => {
             let mut map = HashMap::new();
             for item in output.resource_identifier_summaries().iter() {
-                item.iter().for_each(|item| {
-                    item.logical_resource_ids()
-                        .unwrap()
-                        .iter()
-                        .for_each(|logical_id| {
-                            let resource_identifier =
-                                item.resource_identifiers().unwrap().first().unwrap();
-                            map.insert(logical_id.to_string(), resource_identifier.to_string());
-                        });
-                });
+                //item.iter().for_each(|item| {
+                item.logical_resource_ids()
+                    // .unwrap()
+                    .iter()
+                    .for_each(|logical_id| {
+                        let resource_identifier = item
+                            .resource_identifiers() /*.unwrap() */
+                            .first()
+                            .unwrap();
+                        map.insert(logical_id.to_string(), resource_identifier.to_string());
+                    });
+                //});
             }
             Ok(map)
         }
