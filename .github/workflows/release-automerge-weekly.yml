@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Find Pull Request
-        uses: juliangruber/find-pull-request-action@v1
+        uses: juliangruber/find-pull-request-action@v1.8.0
         id: find-pull-request
         with:
           branch: release-please--branches--main--components--cfn-teleport
@@ -27,7 +27,7 @@ jobs:
         if: ${{ steps.find-pull-request.outputs.number != '' }}
 
       - name: Merge Pull Request
-        uses: juliangruber/merge-pull-request-action@v1
+        uses: juliangruber/merge-pull-request-action@v1.2.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           number: ${{ steps.find-pull-request.outputs.number }}
