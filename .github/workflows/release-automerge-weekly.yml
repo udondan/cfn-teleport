@@ -6,6 +6,9 @@ on:
     - cron: 0 18 * * 0
   workflow_dispatch:
 
+permissions:
+  pull-requests: write
+
 jobs:
   merge-latest-release:
     runs-on: ubuntu-latest
@@ -21,7 +24,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           number: ${{ steps.find-pull-request.outputs.number }}
-        if: steps.find-pull-request.outputs.head-sha
+        if: ${{ steps.find-pull-request.outputs.number != '' }}
 
       - name: Merge Pull Request
         uses: juliangruber/merge-pull-request-action@v1
@@ -30,4 +33,4 @@ jobs:
           number: ${{ steps.find-pull-request.outputs.number }}
           method: squash
           repo: juliangruber/octokit-action
-        if: steps.find-pull-request.outputs.head-sha
+        if: ${{ steps.find-pull-request.outputs.number != '' }}
