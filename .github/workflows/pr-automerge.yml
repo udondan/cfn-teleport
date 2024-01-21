@@ -33,3 +33,4 @@ jobs:
           UPDATE_LABELS: automerge
           GITHUB_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
           MERGE_DELETE_BRANCH: true
+          MERGE_METHOD: squash
