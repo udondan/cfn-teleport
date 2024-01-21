@@ -17,7 +17,7 @@ jobs:
           branch: release-please--branches--main--components--cfn-teleport
 
       - name: Approve Pull Request
-        uses: juliangruber/approve-pull-request-action@v2.0.0
+        uses: juliangruber/approve-pull-request-action@v2.0.4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           number: ${{ steps.find-pull-request.outputs.number }}
