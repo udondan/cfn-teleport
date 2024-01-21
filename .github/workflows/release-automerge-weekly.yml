@@ -32,5 +32,4 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           number: ${{ steps.find-pull-request.outputs.number }}
           method: squash
-          repo: juliangruber/octokit-action
         if: ${{ steps.find-pull-request.outputs.number != '' }}
