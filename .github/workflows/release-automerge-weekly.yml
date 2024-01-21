@@ -1,0 +1,33 @@
+---
+name: Release Automerge
+
+on:
+  schedule:
+    - cron: 0 18 * * 0
+  workflow_dispatch:
+
+jobs:
+  merge-latest-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find Pull Request
+        uses: juliangruber/find-pull-request-action@v1
+        id: find-pull-request
+        with:
+          branch: release-please--branches--main--components--cfn-teleport
+
+      - name: Approve Pull Request
+        uses: juliangruber/approve-pull-request-action@v2.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          number: ${{ steps.find-pull-request.outputs.number }}
+        if: steps.find-pull-request.outputs.head-sha
+
+      - name: Merge Pull Request
+        uses: juliangruber/merge-pull-request-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          number: ${{ steps.find-pull-request.outputs.number }}
+          method: squash
+          repo: juliangruber/octokit-action
+        if: steps.find-pull-request.outputs.head-sha
