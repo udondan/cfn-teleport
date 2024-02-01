@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 926] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 930] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -153,6 +153,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 926] = [
     "AWS::CloudWatch::MetricStream",
     "AWS::CodeArtifact::Domain",
     "AWS::CodeArtifact::Repository",
+    "AWS::CodeBuild::Fleet",
     "AWS::CodeDeploy::Application",
     "AWS::CodeDeploy::DeploymentConfig",
     "AWS::CodeGuruProfiler::ProfilingGroup",
@@ -428,6 +429,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 926] = [
     "AWS::GreengrassV2::Deployment",
     "AWS::GroundStation::MissionProfile",
     "AWS::GuardDuty::Detector",
+    "AWS::GuardDuty::Filter",
     "AWS::GuardDuty::IPSet",
     "AWS::GuardDuty::ThreatIntelSet",
     "AWS::HealthImaging::Datastore",
@@ -468,6 +470,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 926] = [
     "AWS::Inspector::AssessmentTarget",
     "AWS::Inspector::AssessmentTemplate",
     "AWS::Inspector::ResourceGroup",
+    "AWS::InspectorV2::CisScanConfiguration",
     "AWS::InspectorV2::Filter",
     "AWS::IoT::AccountAuditConfiguration",
     "AWS::IoT::Authorizer",
@@ -728,6 +731,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 926] = [
     "AWS::RDS::DBSubnetGroup",
     "AWS::RDS::EventSubscription",
     "AWS::RDS::GlobalCluster",
+    "AWS::RDS::Integration",
     "AWS::RDS::OptionGroup",
     "AWS::RUM::AppMonitor",
     "AWS::Redshift::Cluster",
