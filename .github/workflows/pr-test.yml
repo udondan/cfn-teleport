@@ -1,7 +1,9 @@
 ---
 name: Test
 
-concurrency: test
+concurrency:
+  group: pr-test
+  cancel-in-progress: false
 
 on:
   pull_request:
