@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/udondan/cfn-teleport/compare/v0.12.0...v0.13.0) (2024-02-10)
+
+
+### Features
+
+* Updates supported resource types (4) ([#485](https://github.com/udondan/cfn-teleport/issues/485)) ([7123002](https://github.com/udondan/cfn-teleport/commit/7123002e6b009ab2b909c77c46e0ab409e0d3f35))
+
 ## [0.12.0](https://github.com/udondan/cfn-teleport/compare/v0.11.0...v0.12.0) (2024-01-21)
 
 
