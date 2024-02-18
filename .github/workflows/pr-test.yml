@@ -93,7 +93,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: matrix.rust-toolchain == 'stable'
         with:
-          node-version: 16
+          node-version: 20
 
       - name: npm dependency cache
         if: matrix.rust-toolchain == 'stable'
