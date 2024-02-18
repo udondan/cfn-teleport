@@ -20,13 +20,6 @@ jobs:
         with:
           branch: release-please--branches--main--components--cfn-teleport
 
-      - name: Approve Pull Request
-        uses: juliangruber/approve-pull-request-action@v2.0.4
-        with:
-          github-token: ${{ secrets.OVERRIDE_TOKEN }}
-          number: ${{ steps.find-pull-request.outputs.number }}
-        if: ${{ steps.find-pull-request.outputs.number != '' }}
-
       - name: Merge Pull Request
         uses: juliangruber/merge-pull-request-action@v1.2.0
         with:
