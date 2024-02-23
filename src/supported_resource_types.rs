@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 936] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 937] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -437,6 +437,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 936] = [
     "AWS::GuardDuty::Filter",
     "AWS::GuardDuty::IPSet",
     "AWS::GuardDuty::Master",
+    "AWS::GuardDuty::Member",
     "AWS::GuardDuty::ThreatIntelSet",
     "AWS::HealthImaging::Datastore",
     "AWS::HealthLake::FHIRDatastore",
