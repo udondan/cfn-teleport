@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 937] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 934] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -446,7 +446,6 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 937] = [
     "AWS::IAM::GroupPolicy",
     "AWS::IAM::ManagedPolicy",
     "AWS::IAM::OIDCProvider",
-    "AWS::IAM::Policy",
     "AWS::IAM::Role",
     "AWS::IAM::RolePolicy",
     "AWS::IAM::SAMLProvider",
@@ -829,10 +828,8 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 937] = [
     "AWS::SimSpaceWeaver::Simulation",
     "AWS::SNS::Topic",
     "AWS::SNS::TopicInlinePolicy",
-    "AWS::SNS::TopicPolicy",
     "AWS::SQS::Queue",
     "AWS::SQS::QueueInlinePolicy",
-    "AWS::SQS::QueuePolicy",
     "AWS::SSM::Association",
     "AWS::SSM::Document",
     "AWS::SSM::Parameter",
