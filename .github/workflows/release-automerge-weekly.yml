@@ -21,7 +21,7 @@ jobs:
           branch: release-please--branches--main--components--cfn-teleport
 
       - name: Merge Pull Request
-        uses: juliangruber/merge-pull-request-action@v1.2.0
+        uses: juliangruber/merge-pull-request-action@v1.3.0
         with:
           github-token: ${{ secrets.OVERRIDE_TOKEN }}
           number: ${{ steps.find-pull-request.outputs.number }}
