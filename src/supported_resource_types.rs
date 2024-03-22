@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 930] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 935] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -49,6 +49,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 930] = [
     "AWS::AppFlow::Connector",
     "AWS::AppFlow::ConnectorProfile",
     "AWS::AppFlow::Flow",
+    "AWS::AppIntegrations::Application",
     "AWS::AppIntegrations::DataIntegration",
     "AWS::AppIntegrations::EventIntegration",
     "AWS::AppRunner::AutoScalingConfiguration",
@@ -150,6 +151,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 930] = [
     "AWS::CloudWatch::CompositeAlarm",
     "AWS::CloudWatch::MetricStream",
     "AWS::CodeArtifact::Domain",
+    "AWS::CodeArtifact::PackageGroup",
     "AWS::CodeArtifact::Repository",
     "AWS::CodeBuild::Fleet",
     "AWS::CodeDeploy::Application",
@@ -859,7 +861,10 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 930] = [
     "AWS::Scheduler::ScheduleGroup",
     "AWS::SecretsManager::Secret",
     "AWS::SecurityHub::AutomationRule",
+    "AWS::SecurityHub::DelegatedAdmin",
     "AWS::SecurityHub::Hub",
+    "AWS::SecurityHub::Insight",
+    "AWS::SecurityHub::ProductSubscription",
     "AWS::SecurityHub::Standard",
     "AWS::ServiceCatalog::CloudFormationProvisionedProduct",
     "AWS::ServiceCatalog::ServiceAction",
