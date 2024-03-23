@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 935] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 934] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -546,6 +546,8 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 935] = [
     "AWS::KMS::Key",
     "AWS::KMS::ReplicaKey",
     "AWS::KafkaConnect::Connector",
+    "AWS::KafkaConnect::CustomPlugin",
+    "AWS::KafkaConnect::WorkerConfiguration",
     "AWS::Kendra::DataSource",
     "AWS::Kendra::Faq",
     "AWS::Kendra::Index",
@@ -861,10 +863,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 935] = [
     "AWS::Scheduler::ScheduleGroup",
     "AWS::SecretsManager::Secret",
     "AWS::SecurityHub::AutomationRule",
-    "AWS::SecurityHub::DelegatedAdmin",
     "AWS::SecurityHub::Hub",
-    "AWS::SecurityHub::Insight",
-    "AWS::SecurityHub::ProductSubscription",
     "AWS::SecurityHub::Standard",
     "AWS::ServiceCatalog::CloudFormationProvisionedProduct",
     "AWS::ServiceCatalog::ServiceAction",
