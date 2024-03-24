@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Find Pull Request
-        uses: juliangruber/find-pull-request-action@v1.8.1
+        uses: juliangruber/find-pull-request-action@v1.9.0
         id: find-pull-request
         with:
           branch: release-please--branches--main--components--cfn-teleport
