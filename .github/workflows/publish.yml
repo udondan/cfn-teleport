@@ -453,139 +453,139 @@ jobs:
               install -Dm755 "${srcdir}/cfn-teleport" "${pkgdir}/usr/bin/cfn-teleport"
             }
 
-  chocolatey-publish:
-    needs: build
-    runs-on: windows-latest
-    defaults:
-      run:
-        shell: powershell
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - uses: actions/download-artifact@v3
-        with:
-          name: artifacts
-          path: artifacts
-
-      - name: Generate chocolatey package
-        run: |
-          if (-not $Env:NUSPEC) {
-            Write-Error "NUSPEC variable not set"
-            exit 1
-          }
-
-          $markdown = Get-Content -Path "CHANGELOG.md" -Raw
-          $startIndex = $markdown.IndexOf("## [", 0)
-          $endIndex = $markdown.IndexOf("## [", $startIndex + 1)
-          $releaseNotes = $markdown.Substring($startIndex, $endIndex - $startIndex)
-
-          $nuspec = $Env:NUSPEC
-          $installScript = $Env:INSTALL_SCRIPT
-
-          $version = $Env:GITHUB_REF_NAME -replace '^v', ''
-          if ($version -notmatch '^\d+\.\d+\.\d+$') {
-            $version = '9.9.9'
-          }
-
-          # Get the file paths
-          $url32File = "${{ github.workspace }}/artifacts/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
-          $url64File = "${{ github.workspace }}/artifacts/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
-
-          # Get the SHA256 hashes
-          $sha32 = Get-FileHash $url32File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
-          $sha64 = Get-FileHash $url64File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
-
-          # Build the URLs
-          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
-          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
-
-          # Replace the placeholders in the nuspec and script files
-          $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version).Replace('{{ release_notes }}', $releaseNotes)
-          $installScriptContent = $installScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
-
-          # Write nuspec and script files
-          $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
-          Set-Content -Path $nuspecPath -Value $nuspecContent
-
-          $toolsDir = "${{ github.workspace }}/tools"
-          New-Item -ItemType Directory -Force -Path $toolsDir
-          $installScriptPath = "${{ github.workspace }}/tools/chocolateyInstall.ps1"
-          Set-Content -Path $installScriptPath -Value $installScriptContent
-
-          # Output file content
-          echo "#### cfn-teleport.nuspec ####"
-          echo "$nuspecContent"
-          echo "#### chocolateyInstall.ps1 ####"
-          echo "$installScriptContent"
-
-          # Create package
-          echo "Creating package..."
-          choco pack $nuspecPath
-
-          if ("${{ github.event_name }}" -ne "pull_request") {
-            # Test installation
-            echo "Installing package..."
-            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
-            choco install cfn-teleport --source $nupgkFile --yes
-
-            # Check if installation was successful
-            echo "Checking if package was installed..."
-            Get-Command cfn-teleport
-            cfn-teleport.exe --version
-
-            # Uninstall package
-            echo "Uninstalling package..."
-            choco uninstall cfn-teleport --yes
-
-            # Ensure package is uninstalled
-            echo "Checking if package was uninstalled..."
-            if (Get-Command cfn-teleport -ErrorAction SilentlyContinue) {
-              Write-Error "Package was not uninstalled"
-              exit 1
-            }
-
-            # Push package
-            echo "Pushing package..."
-            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
-          }
-        env:
-          NUSPEC: |
-            <?xml version="1.0"?>
-            <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
-              <metadata>
-                <id>cfn-teleport</id>
-                <title>cfn-teleport</title>
-                <version>{{ version }}</version>
-                <authors>udondan</authors>
-                <description>A command-line tool which can move CloudFormation resources between stacks</description>
-                <summary>A command-line tool which can move CloudFormation resources between stacks</summary>
-                <tags>aws cloudformation migration</tags>
-                <licenseUrl>https://github.com/udondan/cfn-teleport/blob/master/LICENSE</licenseUrl>
-                <projectUrl>https://github.com/udondan/cfn-teleport</projectUrl>
-                <packageSourceUrl>https://github.com/udondan/cfn-teleport/blob/main/.github/workflows/publish.yml</packageSourceUrl>
-                <releaseNotes>{{ release_notes }}</releaseNotes>
-              </metadata>
-              <files>
-                <file src="tools\**" target="tools" />
-              </files>
-            </package>
-          INSTALL_SCRIPT: |
-            $packageName = 'cfn-teleport'
-            $version = '{{ version }}'
-            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
-
-            $fileArgs = @{
-              packageName    = $packageName
-              fileFullPath   = Join-Path $installDir 'cfn-teleport.exe'
-              url            = '{{ url32 }}'
-              checksum       = '{{ sha32 }}'
-              url64bit       = '{{ url64 }}'
-              checksum64     = '{{ sha64 }}'
-              checksumType   = 'sha256'
-              ChecksumType64 = 'sha256'
-            }
-            Get-ChocolateyWebFile @fileArgs
+#  chocolatey-publish:
+#    needs: build
+#    runs-on: windows-latest
+#    defaults:
+#      run:
+#        shell: powershell
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#        with:
+#          persist-credentials: false
+#          fetch-depth: 0
+#
+#      - uses: actions/download-artifact@v3
+#        with:
+#          name: artifacts
+#          path: artifacts
+#
+#      - name: Generate chocolatey package
+#        run: |
+#          if (-not $Env:NUSPEC) {
+#            Write-Error "NUSPEC variable not set"
+#            exit 1
+#          }
+#
+#          $markdown = Get-Content -Path "CHANGELOG.md" -Raw
+#          $startIndex = $markdown.IndexOf("## [", 0)
+#          $endIndex = $markdown.IndexOf("## [", $startIndex + 1)
+#          $releaseNotes = $markdown.Substring($startIndex, $endIndex - $startIndex)
+#
+#          $nuspec = $Env:NUSPEC
+#          $installScript = $Env:INSTALL_SCRIPT
+#
+#          $version = $Env:GITHUB_REF_NAME -replace '^v', ''
+#          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+#            $version = '9.9.9'
+#          }
+#
+#          # Get the file paths
+#          $url32File = "${{ github.workspace }}/artifacts/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
+#          $url64File = "${{ github.workspace }}/artifacts/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
+#
+#          # Get the SHA256 hashes
+#          $sha32 = Get-FileHash $url32File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+#          $sha64 = Get-FileHash $url64File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+#
+#          # Build the URLs
+#          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
+#          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
+#
+#          # Replace the placeholders in the nuspec and script files
+#          $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version).Replace('{{ release_notes }}', $releaseNotes)
+#          $installScriptContent = $installScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+#
+#          # Write nuspec and script files
+#          $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
+#          Set-Content -Path $nuspecPath -Value $nuspecContent
+#
+#          $toolsDir = "${{ github.workspace }}/tools"
+#          New-Item -ItemType Directory -Force -Path $toolsDir
+#          $installScriptPath = "${{ github.workspace }}/tools/chocolateyInstall.ps1"
+#          Set-Content -Path $installScriptPath -Value $installScriptContent
+#
+#          # Output file content
+#          echo "#### cfn-teleport.nuspec ####"
+#          echo "$nuspecContent"
+#          echo "#### chocolateyInstall.ps1 ####"
+#          echo "$installScriptContent"
+#
+#          # Create package
+#          echo "Creating package..."
+#          choco pack $nuspecPath
+#
+#          if ("${{ github.event_name }}" -ne "pull_request") {
+#            # Test installation
+#            echo "Installing package..."
+#            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
+#            choco install cfn-teleport --source $nupgkFile --yes
+#
+#            # Check if installation was successful
+#            echo "Checking if package was installed..."
+#            Get-Command cfn-teleport
+#            cfn-teleport.exe --version
+#
+#            # Uninstall package
+#            echo "Uninstalling package..."
+#            choco uninstall cfn-teleport --yes
+#
+#            # Ensure package is uninstalled
+#            echo "Checking if package was uninstalled..."
+#            if (Get-Command cfn-teleport -ErrorAction SilentlyContinue) {
+#              Write-Error "Package was not uninstalled"
+#              exit 1
+#            }
+#
+#            # Push package
+#            echo "Pushing package..."
+#            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+#          }
+#        env:
+#          NUSPEC: |
+#            <?xml version="1.0"?>
+#            <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+#              <metadata>
+#                <id>cfn-teleport</id>
+#                <title>cfn-teleport</title>
+#                <version>{{ version }}</version>
+#                <authors>udondan</authors>
+#                <description>A command-line tool which can move CloudFormation resources between stacks</description>
+#                <summary>A command-line tool which can move CloudFormation resources between stacks</summary>
+#                <tags>aws cloudformation migration</tags>
+#                <licenseUrl>https://github.com/udondan/cfn-teleport/blob/master/LICENSE</licenseUrl>
+#                <projectUrl>https://github.com/udondan/cfn-teleport</projectUrl>
+#                <packageSourceUrl>https://github.com/udondan/cfn-teleport/blob/main/.github/workflows/publish.yml</packageSourceUrl>
+#                <releaseNotes>{{ release_notes }}</releaseNotes>
+#              </metadata>
+#              <files>
+#                <file src="tools\**" target="tools" />
+#              </files>
+#            </package>
+#          INSTALL_SCRIPT: |
+#            $packageName = 'cfn-teleport'
+#            $version = '{{ version }}'
+#            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+#
+#            $fileArgs = @{
+#              packageName    = $packageName
+#              fileFullPath   = Join-Path $installDir 'cfn-teleport.exe'
+#              url            = '{{ url32 }}'
+#              checksum       = '{{ sha32 }}'
+#              url64bit       = '{{ url64 }}'
+#              checksum64     = '{{ sha64 }}'
+#              checksumType   = 'sha256'
+#              ChecksumType64 = 'sha256'
+#            }
+#            Get-ChocolateyWebFile @fileArgs
