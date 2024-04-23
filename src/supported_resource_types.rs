@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 964] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 967] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -359,6 +359,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 964] = [
     "AWS::ECR::RegistryPolicy",
     "AWS::ECR::ReplicationConfiguration",
     "AWS::ECR::Repository",
+    "AWS::ECR::RepositoryCreationTemplate",
     "AWS::ECS::CapacityProvider",
     "AWS::ECS::Cluster",
     "AWS::ECS::ClusterCapacityProviderAssociations",
@@ -585,6 +586,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 964] = [
     "AWS::LakeFormation::PrincipalPermissions",
     "AWS::LakeFormation::Tag",
     "AWS::LakeFormation::TagAssociation",
+    "AWS::Lambda::Alias",
     "AWS::Lambda::CodeSigningConfig",
     "AWS::Lambda::EventInvokeConfig",
     "AWS::Lambda::Function",
@@ -919,6 +921,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 964] = [
     "AWS::Synthetics::Group",
     "AWS::SystemsManagerSAP::Application",
     "AWS::Timestream::Database",
+    "AWS::Timestream::InfluxDBInstance",
     "AWS::Timestream::ScheduledQuery",
     "AWS::Timestream::Table",
     "AWS::Transfer::Agreement",
