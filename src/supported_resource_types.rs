@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 967] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 973] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -104,6 +104,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 967] = [
     "AWS::Bedrock::Agent",
     "AWS::Bedrock::AgentAlias",
     "AWS::Bedrock::DataSource",
+    "AWS::Bedrock::Guardrail",
     "AWS::Bedrock::KnowledgeBase",
     "AWS::BillingConductor::BillingGroup",
     "AWS::BillingConductor::CustomLineItem",
@@ -733,6 +734,8 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 967] = [
     "AWS::Panorama::ApplicationInstance",
     "AWS::Panorama::Package",
     "AWS::Panorama::PackageVersion",
+    "AWS::PaymentCryptography::Alias",
+    "AWS::PaymentCryptography::Key",
     "AWS::Personalize::Dataset",
     "AWS::Personalize::DatasetGroup",
     "AWS::Personalize::Schema",
@@ -803,6 +806,9 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 967] = [
     "AWS::Route53::HealthCheck",
     "AWS::Route53::HostedZone",
     "AWS::Route53::KeySigningKey",
+    "AWS::Route53Profiles::Profile",
+    "AWS::Route53Profiles::ProfileAssociation",
+    "AWS::Route53Profiles::ProfileResourceAssociation",
     "AWS::Route53RecoveryControl::Cluster",
     "AWS::Route53RecoveryControl::ControlPanel",
     "AWS::Route53RecoveryControl::RoutingControl",
