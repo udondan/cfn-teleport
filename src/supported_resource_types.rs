@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 973] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 980] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -338,6 +338,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 973] = [
     "AWS::EC2::TransitGatewayPeeringAttachment",
     "AWS::EC2::TransitGatewayRouteTable",
     "AWS::EC2::TransitGatewayRouteTableAssociation",
+    "AWS::EC2::TransitGatewayRouteTablePropagation",
     "AWS::EC2::TransitGatewayVpcAttachment",
     "AWS::EC2::VPC",
     "AWS::EC2::VPCCidrBlock",
@@ -745,6 +746,12 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 973] = [
     "AWS::Proton::EnvironmentAccountConnection",
     "AWS::Proton::EnvironmentTemplate",
     "AWS::Proton::ServiceTemplate",
+    "AWS::QBusiness::Application",
+    "AWS::QBusiness::DataSource",
+    "AWS::QBusiness::Index",
+    "AWS::QBusiness::Plugin",
+    "AWS::QBusiness::Retriever",
+    "AWS::QBusiness::WebExperience",
     "AWS::QLDB::Stream",
     "AWS::QuickSight::Analysis",
     "AWS::QuickSight::Dashboard",
