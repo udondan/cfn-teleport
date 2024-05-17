@@ -36,7 +36,7 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let config = aws_config::load_defaults(BehaviorVersion::v2023_11_09()).await;
+    let config = aws_config::load_defaults(BehaviorVersion::v2024_03_28()).await;
     let client = cloudformation::Client::new(&config);
     let stacks = get_stacks(&client).await?;
 
