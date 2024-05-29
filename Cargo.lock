@@ -150,9 +150,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-cloudformation"
-version = "1.32.0"
+version = "1.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2fd16298a92a311272387070a4c5d7096d00d39498f93fb16df0f94c5945889"
+checksum = "ccb47e38b671012f44098dfe4469a739a3b69abfc3fc64b35afe5dc22717543a"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
