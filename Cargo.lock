@@ -150,9 +150,9 @@ dependencies = [
 
 [[package]]
 name = "aws-sdk-cloudformation"
-version = "1.34.0"
+version = "1.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e297d8b68e65ea33be01429728b7d71d88f3ca26e7319dbf5c28e350c5d2060d"
+checksum = "8a305664192a69568fb6ca2570ec21e54287bbc388288146d2a99d7d00a06bfe"
 dependencies = [
  "aws-credential-types",
  "aws-runtime",
@@ -314,9 +314,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime"
-version = "1.5.5"
+version = "1.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0d3965f6417a92a6d1009c5958a67042f57e46342afb37ca58f9ad26744ec73"
+checksum = "8508de54f34b8feca6638466c2bd2de9d1df5bf79c578de9a649b72d644006b3"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-http",
@@ -328,6 +328,7 @@ dependencies = [
  "http 0.2.9",
  "http-body 0.4.5",
  "http-body 1.0.0",
+ "httparse",
  "hyper",
  "hyper-rustls",
  "once_cell",
@@ -340,9 +341,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-runtime-api"
-version = "1.6.2"
+version = "1.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4179bd8a1c943e1aceb46c5b9fc014a561bd6c35a2153e816ba29076ee49d245"
+checksum = "aa6dbabc7629fab4e4467f95f119c2e1a9b00b44c893affa98e23b040a0e2567"
 dependencies = [
  "aws-smithy-async",
  "aws-smithy-types",
@@ -357,9 +358,9 @@ dependencies = [
 
 [[package]]
 name = "aws-smithy-types"
-version = "1.1.10"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b6764ba7e1c5ede1c9f9e4046645534f06c2581402461c559b481a420330a83"
+checksum = "cfe321a6b21f5d8eabd0ade9c55d3d0335f3c3157fc2b3e87f05f34b539e4df5"
 dependencies = [
  "base64-simd",
  "bytes",
