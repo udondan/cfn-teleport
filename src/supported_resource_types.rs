@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1041] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1043] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -9,6 +9,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1041] = [
     "AWS::ARCZonalShift::AutoshiftObserverNotificationStatus",
     "AWS::ARCZonalShift::ZonalAutoshiftConfiguration",
     "AWS::AccessAnalyzer::Analyzer",
+    "AWS::AmazonMQ::Configuration",
     "AWS::Amplify::App",
     "AWS::Amplify::Branch",
     "AWS::Amplify::Domain",
@@ -470,7 +471,8 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1041] = [
     "AWS::GlobalAccelerator::CrossAccountAttachment",
     "AWS::GlobalAccelerator::EndpointGroup",
     "AWS::GlobalAccelerator::Listener",
-    "AWS::Glue::Datasbase",
+    "AWS::Glue::Crawler",
+    "AWS::Glue::Database",
     "AWS::Glue::Registry",
     "AWS::Glue::Schema",
     "AWS::Glue::SchemaVersion",
