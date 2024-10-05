@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1043] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1046] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -473,11 +473,13 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1043] = [
     "AWS::GlobalAccelerator::Listener",
     "AWS::Glue::Crawler",
     "AWS::Glue::Database",
+    "AWS::Glue::Job",
     "AWS::Glue::Registry",
     "AWS::Glue::Schema",
     "AWS::Glue::SchemaVersion",
     "AWS::Glue::SchemaVersionMetadata",
     "AWS::Glue::Trigger",
+    "AWS::Glue::UsageProfile",
     "AWS::Grafana::Workspace",
     "AWS::GreengrassV2::ComponentVersion",
     "AWS::GreengrassV2::Deployment",
@@ -798,6 +800,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1043] = [
     "AWS::QuickSight::Dashboard",
     "AWS::QuickSight::DataSet",
     "AWS::QuickSight::DataSource",
+    "AWS::QuickSight::Folder",
     "AWS::QuickSight::RefreshSchedule",
     "AWS::QuickSight::Template",
     "AWS::QuickSight::Theme",
