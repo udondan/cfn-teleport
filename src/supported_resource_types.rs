@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1052] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1051] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -425,7 +425,6 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1052] = [
     "AWS::ElasticLoadBalancingV2::TargetGroup",
     "AWS::ElasticLoadBalancingV2::TrustStore",
     "AWS::ElasticLoadBalancingV2::TrustStoreRevocation",
-    "AWS::Elasticsearch::Domain",
     "AWS::EntityResolution::IdMappingWorkflow",
     "AWS::EntityResolution::IdNamespace",
     "AWS::EntityResolution::MatchingWorkflow",
