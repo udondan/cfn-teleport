@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1065] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1068] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -354,6 +354,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1065] = [
     "AWS::EC2::SecurityGroup",
     "AWS::EC2::SecurityGroupEgress",
     "AWS::EC2::SecurityGroupIngress",
+    "AWS::EC2::SecurityGroupVpcAssociation",
     "AWS::EC2::SpotFleet",
     "AWS::EC2::Subnet",
     "AWS::EC2::SubnetCidrBlock",
@@ -1023,6 +1024,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1065] = [
     "AWS::Transfer::Connector",
     "AWS::Transfer::Profile",
     "AWS::Transfer::Server",
+    "AWS::Transfer::User",
     "AWS::Transfer::Workflow",
     "AWS::VerifiedPermissions::IdentitySource",
     "AWS::VerifiedPermissions::Policy",
@@ -1046,6 +1048,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1065] = [
     "AWS::WAFv2::WebACL",
     "AWS::WAFv2::WebACLAssociation",
     "AWS::Wisdom::AIAgent",
+    "AWS::Wisdom::AIAgentVersion",
     "AWS::Wisdom::AIPrompt",
     "AWS::Wisdom::AIPromptVersion",
     "AWS::Wisdom::Assistant",
