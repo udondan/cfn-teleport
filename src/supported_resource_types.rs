@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1068] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1069] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -469,6 +469,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1068] = [
     "AWS::FraudDetector::Variable",
     "AWS::GameLift::Alias",
     "AWS::GameLift::Build",
+    "AWS::GameLift::ContainerFleet",
     "AWS::GameLift::Fleet",
     "AWS::GameLift::GameServerGroup",
     "AWS::GameLift::GameSessionQueue",
