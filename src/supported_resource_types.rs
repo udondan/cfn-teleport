@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1069] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1071] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -147,9 +147,11 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1069] = [
     "AWS::CleanRooms::Membership",
     "AWS::CleanRooms::PrivacyBudgetTemplate",
     "AWS::CleanRoomsML::TrainingDataset",
+    "AWS::CloudFormation::GuardHook",
     "AWS::CloudFormation::HookDefaultVersion",
     "AWS::CloudFormation::HookTypeConfig",
     "AWS::CloudFormation::HookVersion",
+    "AWS::CloudFormation::LambdaHook",
     "AWS::CloudFormation::ModuleDefaultVersion",
     "AWS::CloudFormation::ModuleVersion",
     "AWS::CloudFormation::PublicTypeVersion",
