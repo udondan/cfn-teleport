@@ -20,7 +20,7 @@ clap = { version = "4.5.4", features = ["derive"] }
 console = "0.15.8"
 dialoguer = "0.11.0"
 serde_json = "1.0.116"
-spinach = "2.1.0"
+spinach = "3.0.0"
 tokio = { version = "1.37.0", features = ["full"] }
 proc-macro2 = "1.0.81"                               # override indirect dependency
 
