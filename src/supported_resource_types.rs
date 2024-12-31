@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1105] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1106] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -166,6 +166,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1105] = [
     "AWS::CloudFormation::Stack",
     "AWS::CloudFormation::StackSet",
     "AWS::CloudFormation::TypeActivation",
+    "AWS::CloudFront::AnycastIpList",
     "AWS::CloudFront::CachePolicy",
     "AWS::CloudFront::CloudFrontOriginAccessIdentity",
     "AWS::CloudFront::ContinuousDeploymentPolicy",
