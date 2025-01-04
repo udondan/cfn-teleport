@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1106] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1105] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -984,7 +984,6 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1106] = [
     "AWS::SageMaker::Device",
     "AWS::SageMaker::DeviceFleet",
     "AWS::SageMaker::Domain",
-    "AWS::SageMaker::Endpoint",
     "AWS::SageMaker::FeatureGroup",
     "AWS::SageMaker::Image",
     "AWS::SageMaker::ImageVersion",
