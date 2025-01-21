@@ -1,4 +1,4 @@
-pub const SUPPORTED_RESOURCE_TYPES: [&str; 1105] = [
+pub const SUPPORTED_RESOURCE_TYPES: [&str; 1112] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -49,6 +49,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1105] = [
     "AWS::ApiGatewayV2::RouteResponse",
     "AWS::ApiGatewayV2::VpcLink",
     "AWS::AppConfig::ConfigurationProfile",
+    "AWS::AppConfig::Deployment",
     "AWS::AppConfig::DeploymentStrategy",
     "AWS::AppConfig::Environment",
     "AWS::AppConfig::Extension",
@@ -256,6 +257,7 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1105] = [
     "AWS::CustomerProfiles::CalculatedAttributeDefinition",
     "AWS::CustomerProfiles::Domain",
     "AWS::CustomerProfiles::EventStream",
+    "AWS::CustomerProfiles::EventTrigger",
     "AWS::CustomerProfiles::Integration",
     "AWS::CustomerProfiles::ObjectType",
     "AWS::CustomerProfiles::SegmentDefinition",
@@ -781,6 +783,11 @@ pub const SUPPORTED_RESOURCE_TYPES: [&str; 1105] = [
     "AWS::NimbleStudio::StreamingImage",
     "AWS::NimbleStudio::Studio",
     "AWS::NimbleStudio::StudioComponent",
+    "AWS::Notifications::ChannelAssociation",
+    "AWS::Notifications::EventRule",
+    "AWS::Notifications::NotificationConfiguration",
+    "AWS::Notifications::NotificationHub",
+    "AWS::NotificationsContacts::EmailContact",
     "AWS::OSIS::Pipeline",
     "AWS::Oam::Link",
     "AWS::Oam::Sink",
