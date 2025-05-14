@@ -9,7 +9,7 @@
     "cdk": "cdk"
   },
   "dependencies": {
-    "@types/node": "20.17.46",
+    "@types/node": "20.17.47",
     "ts-node": "^10.5.0",
     "typescript": "^5.2.2",
     "aws-cdk": "2.1014.0",
