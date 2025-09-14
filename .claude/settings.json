@@ -1,8 +1,6 @@
 {
   "permissions": {
     "allow": [
-      "WebSearch",
-      "Bash(grep:*)",
       "Bash(cargo *)",
       "Bash(make build)",
       "Bash(make run)",

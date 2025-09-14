@@ -1,6 +1,6 @@
 use atty::Stream;
 use console::style;
-use spinach::{Spinner, RunningSpinner};
+use spinach::{RunningSpinner, Spinner};
 use std::io::Write;
 
 pub struct Spin {
