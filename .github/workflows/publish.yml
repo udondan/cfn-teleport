@@ -128,6 +128,10 @@ jobs:
       - name: Install rust target
         run: rustup target add "${TARGET}"
 
+      - name: Install bindgen-cli for ARM cross-compilation
+        if: startsWith(matrix.TARGET, 'arm')
+        run: cargo install --force --locked bindgen-cli
+
       - name: Run build
         run: cargo build --release --verbose --target "${TARGET}"
         env:
