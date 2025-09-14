@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.1](https://github.com/udondan/cfn-teleport/compare/v0.37.0...v0.37.1) (2025-09-14)
+
+
+### Bug Fixes
+
+* update artifact actions from v3 to v4/v5 ([#1094](https://github.com/udondan/cfn-teleport/issues/1094)) ([c01da26](https://github.com/udondan/cfn-teleport/commit/c01da26ce6d348fb78a1e0cd574be0c8738b1699))
+
 ## [0.37.0](https://github.com/udondan/cfn-teleport/compare/v0.36.0...v0.37.0) (2025-09-14)
 
 
