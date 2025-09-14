@@ -174,9 +174,9 @@ jobs:
           echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_OUTPUT
 
       - name: Archive artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: artifacts
+          name: artifacts-${{ matrix.TARGET }}
           path: |
             ./artifacts
 
@@ -231,10 +231,11 @@ jobs:
           repository: udondan/homebrew-software
           token: ${{ secrets.OVERRIDE_TOKEN }}
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v5
         with:
-          name: artifacts
+          pattern: artifacts-*
           path: artifacts
+          merge-multiple: true
 
       - name: Update homebrew formula
         run: |
@@ -329,10 +330,11 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v5
         with:
-          name: artifacts
+          pattern: artifacts-*
           path: artifacts
+          merge-multiple: true
 
       - name: Install and configure requirements
         run: |

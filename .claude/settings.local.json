@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(cargo *)",
+      "Bash(make build)",
+      "Bash(make run)",
+      "Bash(make release)",
+      "Bash(make test)",
+      "Bash(make test-clean-all)",
+      "Bash(make test-reset)",
+      "Bash(make lint)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
