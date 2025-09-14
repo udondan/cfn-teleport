@@ -33,7 +33,7 @@ jobs:
               exit 1
           fi
 
-          echo "pub const SUPPORTED_RESOURCE_TYPES: [&str; ${COUNT}] = [" > src/supported_resource_types.rs
+          echo "pub static SUPPORTED_RESOURCE_TYPES: [&str; ${COUNT}] = [" > src/supported_resource_types.rs
           echo "${RESOURCES}" | while read -r line; do
               echo "    \"${line}\"," >> src/supported_resource_types.rs
           done
