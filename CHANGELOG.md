@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.2](https://github.com/udondan/cfn-teleport/compare/v0.37.1...v0.37.2) (2025-09-14)
+
+
+### Bug Fixes
+
+* update spinner.rs for spinach v3 API compatibility ([#1096](https://github.com/udondan/cfn-teleport/issues/1096)) ([869ef1c](https://github.com/udondan/cfn-teleport/commit/869ef1c17c1130f50fe84fb408b0211baeb38c92))
+
 ## [0.37.1](https://github.com/udondan/cfn-teleport/compare/v0.37.0...v0.37.1) (2025-09-14)
 
 
