@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.37.0](https://github.com/udondan/cfn-teleport/compare/v0.36.0...v0.37.0) (2025-09-14)
+
+
+### Features
+
+* Updates supported resource types (148) ([#857](https://github.com/udondan/cfn-teleport/issues/857)) ([668e529](https://github.com/udondan/cfn-teleport/commit/668e5299e6cd236b938fb92301d886d474f70037))
+
+
+### Bug Fixes
+
+* converts large array to static & updates BehaviorVersion of aws_config to latest (v2025_08_07) ([#1092](https://github.com/udondan/cfn-teleport/issues/1092)) ([3955abc](https://github.com/udondan/cfn-teleport/commit/3955abcfcd992445989772cf8e24788ffaf83473))
+
 ## [0.36.0](https://github.com/udondan/cfn-teleport/compare/v0.35.0...v0.36.0) (2025-01-04)
 
 
