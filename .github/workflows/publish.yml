@@ -65,7 +65,7 @@ jobs:
             OS: macos-latest
 
           # 64-bit version of the ARM architecture for macOS
-          - target: aarch64-apple-darwin
+          - TARGET: aarch64-apple-darwin
             OS: macos-latest
 
           # 64-bit version of the x86 architecture for Windows-based systems with the Microsoft Visual C++ (MSVC) runtime
@@ -112,6 +112,9 @@ jobs:
           # we make cross-compilation
           if [[ "${OS}" =~ ^ubuntu.*$ ]]; then
             sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+
+            # Install additional dependencies for aws-lc-sys cross-compilation
+            sudo apt-get install -qq cmake clang llvm-dev libclang-dev
           fi
 
           if [[ "${TARGET}" =~ ^.*-musl(eabihf?)$ ]]; then
@@ -125,8 +128,19 @@ jobs:
       - name: Install rust target
         run: rustup target add "${TARGET}"
 
+      - name: Install bindgen-cli for ARM cross-compilation
+        if: startsWith(matrix.TARGET, 'arm')
+        run: cargo install --force --locked bindgen-cli
+
       - name: Run build
         run: cargo build --release --verbose --target "${TARGET}"
+        env:
+          # Enable external bindgen for aws-lc-sys when cross-compiling
+          AWS_LC_SYS_EXTERNAL_BINDGEN: ${{ startsWith(matrix.TARGET, 'arm') && '1' || '' }}
+          # Set the target for cross-compilation linkers
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: ${{ matrix.TARGET == 'armv7-unknown-linux-gnueabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
+          CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER: ${{ matrix.TARGET == 'arm-unknown-linux-gnueabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.TARGET == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
 
       - name: List target
         run: find ./target
@@ -174,9 +188,9 @@ jobs:
           echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_OUTPUT
 
       - name: Archive artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: artifacts
+          name: artifacts-${{ matrix.TARGET }}
           path: |
             ./artifacts
 
@@ -231,10 +245,11 @@ jobs:
           repository: udondan/homebrew-software
           token: ${{ secrets.OVERRIDE_TOKEN }}
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v5
         with:
-          name: artifacts
+          pattern: artifacts-*
           path: artifacts
+          merge-multiple: true
 
       - name: Update homebrew formula
         run: |
@@ -329,10 +344,11 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v5
         with:
-          name: artifacts
+          pattern: artifacts-*
           path: artifacts
+          merge-multiple: true
 
       - name: Install and configure requirements
         run: |
