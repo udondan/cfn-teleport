@@ -1,4 +1,4 @@
-pub static SUPPORTED_RESOURCE_TYPES: [&str; 1237] = [
+pub static SUPPORTED_RESOURCE_TYPES: [&str; 1240] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -872,6 +872,7 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1237] = [
     "AWS::ODB::CloudExadataInfrastructure",
     "AWS::ODB::CloudVmCluster",
     "AWS::ODB::OdbNetwork",
+    "AWS::ODB::OdbPeeringConnection",
     "AWS::OSIS::Pipeline",
     "AWS::Oam::Link",
     "AWS::Oam::Sink",
@@ -1144,6 +1145,8 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1237] = [
     "AWS::SecurityLake::Subscriber",
     "AWS::SecurityLake::SubscriberNotification",
     "AWS::ServiceCatalog::CloudFormationProvisionedProduct",
+    "AWS::ServiceCatalog::LaunchTemplateConstraint",
+    "AWS::ServiceCatalog::PortfolioProductAssociation",
     "AWS::ServiceCatalog::ServiceAction",
     "AWS::ServiceCatalog::ServiceActionAssociation",
     "AWS::ServiceCatalog::TagOption",
