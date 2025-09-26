@@ -1,4 +1,4 @@
-pub static SUPPORTED_RESOURCE_TYPES: [&str; 1240] = [
+pub static SUPPORTED_RESOURCE_TYPES: [&str; 1246] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -12,6 +12,7 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1240] = [
     "AWS::ARCZonalShift::AutoshiftObserverNotificationStatus",
     "AWS::ARCZonalShift::ZonalAutoshiftConfiguration",
     "AWS::AccessAnalyzer::Analyzer",
+    "AWS::AmazonMQ::Broker",
     "AWS::AmazonMQ::Configuration",
     "AWS::Amplify::App",
     "AWS::Amplify::Branch",
@@ -144,6 +145,10 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1240] = [
     "AWS::Bedrock::KnowledgeBase",
     "AWS::Bedrock::Prompt",
     "AWS::Bedrock::PromptVersion",
+    "AWS::BedrockAgentCore::BrowserCustom",
+    "AWS::BedrockAgentCore::CodeInterpreterCustom",
+    "AWS::BedrockAgentCore::Runtime",
+    "AWS::BedrockAgentCore::RuntimeEndpoint",
     "AWS::Billing::BillingView",
     "AWS::BillingConductor::BillingGroup",
     "AWS::BillingConductor::CustomLineItem",
@@ -322,6 +327,7 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1240] = [
     "AWS::DataZone::EnvironmentActions",
     "AWS::DataZone::EnvironmentBlueprintConfiguration",
     "AWS::DataZone::EnvironmentProfile",
+    "AWS::DataZone::FormType",
     "AWS::DataZone::GroupProfile",
     "AWS::DataZone::Owner",
     "AWS::DataZone::PolicyGrant",
