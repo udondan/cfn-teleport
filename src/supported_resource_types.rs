@@ -1,4 +1,4 @@
-pub static SUPPORTED_RESOURCE_TYPES: [&str; 1246] = [
+pub static SUPPORTED_RESOURCE_TYPES: [&str; 1240] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -992,12 +992,6 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1246] = [
     "AWS::ResourceExplorer2::View",
     "AWS::ResourceGroups::Group",
     "AWS::ResourceGroups::TagSyncTask",
-    "AWS::RoboMaker::Fleet",
-    "AWS::RoboMaker::Robot",
-    "AWS::RoboMaker::RobotApplication",
-    "AWS::RoboMaker::RobotApplicationVersion",
-    "AWS::RoboMaker::SimulationApplication",
-    "AWS::RoboMaker::SimulationApplicationVersion",
     "AWS::RolesAnywhere::CRL",
     "AWS::RolesAnywhere::Profile",
     "AWS::RolesAnywhere::TrustAnchor",
