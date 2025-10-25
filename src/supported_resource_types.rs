@@ -1,4 +1,4 @@
-pub static SUPPORTED_RESOURCE_TYPES: [&str; 1257] = [
+pub static SUPPORTED_RESOURCE_TYPES: [&str; 1260] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -976,6 +976,9 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1257] = [
     "AWS::RDS::GlobalCluster",
     "AWS::RDS::Integration",
     "AWS::RDS::OptionGroup",
+    "AWS::RTBFabric::Link",
+    "AWS::RTBFabric::RequesterGateway",
+    "AWS::RTBFabric::ResponderGateway",
     "AWS::RUM::AppMonitor",
     "AWS::Rbin::Rule",
     "AWS::Redshift::Cluster",
