@@ -38,7 +38,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = aws_config::load_defaults(BehaviorVersion::v2025_08_07()).await;
     let client = cloudformation::Client::new(&config);
-    let stacks = get_stacks(&client).await?;
+
+    // Try to get stacks and handle credential errors specifically
+    let stacks = match get_stacks(&client).await {
+        Ok(stacks) => stacks,
+        Err(err) => {
+            let err_msg = format!("{:?}", err);
+            if err_msg.contains("CredentialsNotLoaded")
+                || err_msg.contains("no providers in chain provided credentials")
+            {
+                eprintln!("\nERROR: AWS credentials not found.\n");
+                eprintln!("Please ensure you're authenticated with AWS using one of the following methods:");
+                eprintln!("  • AWS CLI: Run 'aws configure'");
+                eprintln!(
+                    "  • Environment variables: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+                );
+                eprintln!("  • IAM role (if running on EC2/ECS/Lambda)");
+                eprintln!("\nFor more information, visit:");
+                eprintln!(
+                    "  https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html\n"
+                );
+                process::exit(1);
+            } else {
+                return Err(err.into());
+            }
+        }
+    };
 
     let stack_names: Vec<&str> = stacks
         .iter()
