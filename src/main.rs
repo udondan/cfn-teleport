@@ -3,11 +3,11 @@ use aws_sdk_cloudformation as cloudformation;
 use clap::Parser;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::error::Error;
-use std::process;
 use uuid::Uuid;
 mod spinner;
 use std::collections::HashMap;
 use std::io;
+use std::process;
 mod supported_resource_types;
 
 const DEMO: bool = false;
@@ -43,10 +43,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let stacks = match get_stacks(&client).await {
         Ok(stacks) => stacks,
         Err(err) => {
-            let err_msg = format!("{:?}", err);
-            if err_msg.contains("CredentialsNotLoaded")
-                || err_msg.contains("no providers in chain provided credentials")
-            {
+            // Check error source chain for credential-related errors
+            let mut is_credentials_error = false;
+            let mut source = err.source();
+
+            while let Some(error) = source {
+                let error_str = error.to_string();
+                if error_str.contains("CredentialsNotLoaded")
+                    || error_str.contains("no providers in chain provided credentials")
+                {
+                    is_credentials_error = true;
+                    break;
+                }
+                source = error.source();
+            }
+
+            if is_credentials_error {
                 eprintln!("\nERROR: AWS credentials not found.\n");
                 eprintln!("Please ensure you're authenticated with AWS using one of the following methods:");
                 eprintln!("  • AWS CLI: Run 'aws configure'");
@@ -58,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 eprintln!(
                     "  https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html\n"
                 );
-                process::exit(1);
+                return Err("AWS credentials not found".into());
             } else {
                 return Err(err.into());
             }
