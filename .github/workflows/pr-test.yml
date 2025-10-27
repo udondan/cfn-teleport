@@ -90,7 +90,7 @@ jobs:
         run: |
           cargo install --path .
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         if: matrix.rust-toolchain == 'stable'
         with:
           node-version: 22
