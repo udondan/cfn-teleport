@@ -188,7 +188,7 @@ jobs:
           echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_OUTPUT
 
       - name: Archive artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: artifacts-${{ matrix.TARGET }}
           path: |
@@ -245,7 +245,7 @@ jobs:
           repository: udondan/homebrew-software
           token: ${{ secrets.OVERRIDE_TOKEN }}
 
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           pattern: artifacts-*
           path: artifacts
@@ -344,7 +344,7 @@ jobs:
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           pattern: artifacts-*
           path: artifacts
