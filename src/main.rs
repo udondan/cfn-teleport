@@ -1,13 +1,14 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudformation as cloudformation;
+use aws_sdk_cloudformation::error::ProvideErrorMetadata;
 use clap::Parser;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::error::Error;
-use std::process;
 use uuid::Uuid;
 mod spinner;
 use std::collections::HashMap;
 use std::io;
+use std::process;
 mod supported_resource_types;
 
 const DEMO: bool = false;
@@ -38,7 +39,52 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let config = aws_config::load_defaults(BehaviorVersion::v2025_08_07()).await;
     let client = cloudformation::Client::new(&config);
-    let stacks = get_stacks(&client).await?;
+
+    // Try to get stacks and handle credential errors specifically
+    let stacks = match get_stacks(&client).await {
+        Ok(stacks) => stacks,
+        Err(err) => {
+            // Check error source chain for credential-related errors
+            let mut is_credentials_error = false;
+            let mut source = err.source();
+
+            while let Some(error) = source {
+                let error_str = error.to_string();
+                if error_str.contains("CredentialsNotLoaded")
+                    || error_str.contains("no providers in chain provided credentials")
+                {
+                    is_credentials_error = true;
+                    break;
+                }
+                source = error.source();
+            }
+
+            if is_credentials_error {
+                eprintln!("\nAWS credentials not found.\n");
+                eprintln!("Please ensure you're authenticated with AWS using one of the following methods:");
+                eprintln!("  • AWS CLI: Run 'aws configure'");
+                eprintln!(
+                    "  • Environment variables: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+                );
+                eprintln!("  • IAM role (if running on EC2/ECS/Lambda)");
+                eprintln!("\nFor more information, visit:");
+                eprintln!(
+                    "  https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html\n"
+                );
+                process::exit(1);
+            } else {
+                // Handle other AWS errors cleanly
+                let message = err.message().unwrap_or("An AWS error occurred");
+
+                if let Some(code) = err.code() {
+                    eprintln!("\nAWS Error ({}): {}\n", code, message);
+                } else {
+                    eprintln!("\n{}\n", message);
+                }
+                process::exit(1);
+            }
+        }
+    };
 
     let stack_names: Vec<&str> = stacks
         .iter()
