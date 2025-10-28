@@ -1,5 +1,6 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudformation as cloudformation;
+use aws_sdk_cloudformation::error::ProvideErrorMetadata;
 use clap::Parser;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::error::Error;
@@ -72,7 +73,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 );
                 process::exit(1);
             } else {
-                return Err(Box::new(err) as Box<dyn Error>);
+                // Handle other AWS errors cleanly
+                let message = err.message().unwrap_or("An AWS error occurred");
+
+                if let Some(code) = err.code() {
+                    eprintln!("\nAWS Error ({}): {}\n", code, message);
+                } else {
+                    eprintln!("\n{}\n", message);
+                }
+                process::exit(1);
             }
         }
     };
