@@ -12,31 +12,6 @@ mod supported_resource_types;
 
 const DEMO: bool = false;
 
-struct CredentialsError;
-
-impl std::fmt::Debug for CredentialsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-impl std::fmt::Display for CredentialsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "\nERROR: AWS credentials not found.\n\n\
-             Please ensure you're authenticated with AWS using one of the following methods:\n\
-             • AWS CLI: Run 'aws configure'\n\
-             • Environment variables: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY\n\
-             • IAM role (if running on EC2/ECS/Lambda)\n\n\
-             For more information, visit:\n\
-             https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html\n"
-        )
-    }
-}
-
-impl std::error::Error for CredentialsError {}
-
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -84,7 +59,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             if is_credentials_error {
-                return Err(Box::new(CredentialsError) as Box<dyn Error>);
+                eprintln!("\nAWS credentials not found.\n");
+                eprintln!("Please ensure you're authenticated with AWS using one of the following methods:");
+                eprintln!("  • AWS CLI: Run 'aws configure'");
+                eprintln!(
+                    "  • Environment variables: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
+                );
+                eprintln!("  • IAM role (if running on EC2/ECS/Lambda)");
+                eprintln!("\nFor more information, visit:");
+                eprintln!(
+                    "  https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html\n"
+                );
+                process::exit(1);
             } else {
                 return Err(Box::new(err) as Box<dyn Error>);
             }
