@@ -1,4 +1,4 @@
-pub static SUPPORTED_RESOURCE_TYPES: [&str; 1260] = [
+pub static SUPPORTED_RESOURCE_TYPES: [&str; 1264] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -368,6 +368,7 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1260] = [
     "AWS::DocDBElastic::Cluster",
     "AWS::DynamoDB::GlobalTable",
     "AWS::DynamoDB::Table",
+    "AWS::EC2::CapacityManagerDataExport",
     "AWS::EC2::CapacityReservation",
     "AWS::EC2::CapacityReservationFleet",
     "AWS::EC2::CarrierGateway",
@@ -1060,6 +1061,9 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1260] = [
     "AWS::S3Tables::TableBucket",
     "AWS::S3Tables::TableBucketPolicy",
     "AWS::S3Tables::TablePolicy",
+    "AWS::S3Vectors::Index",
+    "AWS::S3Vectors::VectorBucket",
+    "AWS::S3Vectors::VectorBucketPolicy",
     "AWS::SES::ConfigurationSet",
     "AWS::SES::ConfigurationSetEventDestination",
     "AWS::SES::ContactList",
