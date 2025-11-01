@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.44.0](https://github.com/udondan/cfn-teleport/compare/v0.43.0...v0.44.0) (2025-11-01)
+
+
+### Features
+
+* Updates supported resource types (4) ([#1156](https://github.com/udondan/cfn-teleport/issues/1156)) ([554192e](https://github.com/udondan/cfn-teleport/commit/554192e5dc4f1e4d99cb01603f57b8dfff38004f))
+
+
+### Bug Fixes
+
+* display user-friendly error when AWS credentials are missing ([#1149](https://github.com/udondan/cfn-teleport/issues/1149)) ([7ec3f22](https://github.com/udondan/cfn-teleport/commit/7ec3f22901b8dc9973ce8d9a28dfecaf2c658dcd))
+
 ## [0.43.0](https://github.com/udondan/cfn-teleport/compare/v0.42.0...v0.43.0) (2025-10-25)
 
 
