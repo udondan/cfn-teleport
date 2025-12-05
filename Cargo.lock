@@ -1976,9 +1976,9 @@ checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "spinach"
-version = "3.1.0"
+version = "3.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "700bbfbb75f2f208227ab7587441992508a5de48877628cf71bf1f70e92f5473"
+checksum = "0361ede622d2facbedd14197af54c4c9bac3087a95a8d0572f72ddf2bda6e009"
 
 [[package]]
 name = "stable_deref_trait"
