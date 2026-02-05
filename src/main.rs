@@ -37,7 +37,7 @@ struct Args {
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let config = aws_config::load_defaults(BehaviorVersion::v2025_08_07()).await;
+    let config = aws_config::load_defaults(BehaviorVersion::v2026_01_12()).await;
     let client = cloudformation::Client::new(&config);
 
     // Try to get stacks and handle credential errors specifically
