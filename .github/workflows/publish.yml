@@ -111,10 +111,17 @@ jobs:
           # dependencies are only needed on ubuntu as that's the only place where
           # we make cross-compilation
           if [[ "${OS}" =~ ^ubuntu.*$ ]]; then
-            sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+            # Update package lists to avoid 404 errors
+            sudo apt-get update -qq
 
-            # Install additional dependencies for aws-lc-sys cross-compilation
+            # Install common dependencies for aws-lc-sys cross-compilation
             sudo apt-get install -qq cmake clang llvm-dev libclang-dev
+
+            # Install ARM cross-compilation tools only for ARM targets
+            # (gcc-multilib conflicts with crossbuild-essential-*)
+            if [[ "${TARGET}" =~ ^(arm|aarch64).*$ ]]; then
+              sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+            fi
           fi
 
           if [[ "${TARGET}" =~ ^.*-musl(eabihf?)$ ]]; then
