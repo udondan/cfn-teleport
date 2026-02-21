@@ -178,8 +178,8 @@ jobs:
           RENAME_QUEUE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameQueue"))')
           DEPENDENCY_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("DependencyBucket"))')
           DEPENDENT_TABLE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("DependentTable"))')
-          POLICY_TARGET_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("PolicyTargetBucket"))')
-          POLICY_SOURCE_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("PolicySourceBucket"))')
+          LAMBDA_TARGET_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("LambdaTargetBucket"))')
+          TEST_FUNCTION_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("TestFunction")) | select(contains("ServiceRole") | not) | select(contains("LogRetention") | not)')
           
           echo "Found test resources:"
           echo "  RenameBucket: $RENAME_BUCKET_ID"
@@ -187,8 +187,8 @@ jobs:
           echo "  RenameQueue: $RENAME_QUEUE_ID"
           echo "  DependencyBucket: $DEPENDENCY_BUCKET_ID"
           echo "  DependentTable: $DEPENDENT_TABLE_ID"
-          echo "  PolicyTargetBucket: $POLICY_TARGET_BUCKET_ID"
-          echo "  PolicySourceBucket: $POLICY_SOURCE_BUCKET_ID"
+          echo "  LambdaTargetBucket: $LAMBDA_TARGET_BUCKET_ID"
+          echo "  TestFunction: $TEST_FUNCTION_ID"
           
           if [ -z "$RENAME_BUCKET_ID" ] || [ -z "$RENAME_TABLE_ID" ] || [ -z "$RENAME_QUEUE_ID" ]; then
             echo "✗ Could not find required rename test resources in stack"
@@ -307,45 +307,46 @@ jobs:
 
           echo ""
           echo "=========================================="
-          echo "TEST 5: GetAtt reference in resource property"
+          echo "TEST 5: References in Lambda environment variables"
           echo "=========================================="
-          # Verify PolicySourceBucket has policy referencing PolicyTargetBucket
-          if echo "$TEMPLATE" | jq -e ".Resources.\"${POLICY_SOURCE_BUCKET_ID}\".Properties.BucketPolicy" > /dev/null 2>&1; then
-            echo "Note: Policy is inline in bucket (CDK L2 behavior)"
-          fi
-          
-          # Find the bucket policy resource
-          POLICY_ID=$(echo "$TEMPLATE" | jq -r ".Resources | keys[] | select(startswith(\"${POLICY_SOURCE_BUCKET_ID}\")) | select(contains(\"Policy\"))")
-          
-          if [ -n "$POLICY_ID" ]; then
-            echo "Found bucket policy: $POLICY_ID"
-            
-            # Check if policy references PolicyTargetBucket via GetAtt
-            if echo "$TEMPLATE" | jq -e ".Resources.\"${POLICY_ID}\".Properties.PolicyDocument.Statement[].Resource[] | select(type == \"object\") | select(.[\"Fn::Join\"]? or .[\"Fn::Sub\"]? or .[\"Fn::GetAtt\"]?)" > /dev/null; then
-              echo "✓ Policy contains resource reference before rename"
-            else
-              echo "Note: Policy might use string interpolation"
-            fi
-          fi
-
-          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
-            --resource "${POLICY_TARGET_BUCKET_ID}:RenamedPolicyTarget"
-
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
-          
-          if echo "$TEMPLATE" | jq -e '.Resources.RenamedPolicyTarget' > /dev/null; then
-            echo "✓ Policy target bucket renamed successfully"
+          # Verify Lambda function has environment variables referencing the bucket
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME" > /dev/null; then
+            echo "✓ Lambda has BUCKET_NAME environment variable before rename"
           else
-            echo "✗ Policy target bucket rename failed"
+            echo "✗ Lambda environment variable not found before rename"
+            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment"
             exit 1
           fi
 
-          # Verify policy now references RenamedPolicyTarget
-          if echo "$TEMPLATE" | jq -e ".Resources.\"${POLICY_ID}\".Properties.PolicyDocument.Statement[].Resource[] | select(contains(\"RenamedPolicyTarget\") or (type == \"object\" and (.[\"Fn::GetAtt\"]?[0] == \"RenamedPolicyTarget\" or .[\"Fn::Join\"]?[1][]? | select(type == \"object\") | .[\"Fn::GetAtt\"]?[0] == \"RenamedPolicyTarget\")))" > /dev/null 2>&1; then
-            echo "✓ Resource property reference updated successfully"
+          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "${LAMBDA_TARGET_BUCKET_ID}:RenamedLambdaTarget"
+
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
+          
+          if echo "$TEMPLATE" | jq -e '.Resources.RenamedLambdaTarget' > /dev/null; then
+            echo "✓ Lambda target bucket renamed successfully"
           else
-            echo "⚠ Could not verify GetAtt update in policy (might be string-based ARN)"
-            echo "$TEMPLATE" | jq ".Resources.\"${POLICY_ID}\".Properties.PolicyDocument.Statement[].Resource"
+            echo "✗ Lambda target bucket rename failed"
+            exit 1
+          fi
+
+          # Verify Lambda environment variables now reference RenamedLambdaTarget
+          # BUCKET_NAME uses Ref
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME.Ref == \"RenamedLambdaTarget\"" > /dev/null; then
+            echo "✓ Lambda BUCKET_NAME (Ref) updated successfully"
+          else
+            echo "✗ Lambda BUCKET_NAME (Ref) not updated"
+            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME"
+            exit 1
+          fi
+
+          # BUCKET_ARN uses Fn::GetAtt
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_ARN[\"Fn::GetAtt\"][0] == \"RenamedLambdaTarget\"" > /dev/null; then
+            echo "✓ Lambda BUCKET_ARN (Fn::GetAtt) updated successfully"
+          else
+            echo "✗ Lambda BUCKET_ARN (Fn::GetAtt) not updated"
+            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_ARN"
+            exit 1
           fi
 
           echo ""

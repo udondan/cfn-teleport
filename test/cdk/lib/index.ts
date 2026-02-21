@@ -2,6 +2,7 @@ import {
   aws_dynamodb,
   aws_ec2,
   aws_iam,
+  aws_lambda,
   aws_s3,
   aws_sqs,
   CfnOutput,
@@ -160,30 +161,31 @@ export class TestStack extends Stack {
         description: 'Resources with DependsOn relationship',
       });
 
-      // 6. Bucket policy that references another bucket (resource property reference)
-      const policyTargetBucket = new aws_s3.Bucket(this, 'PolicyTargetBucket', {
-        bucketName: `${this.account}-cfn-teleport-policy-target`,
+      // 6. Lambda function that references a bucket in environment variable (resource property reference)
+      const lambdaTargetBucket = new aws_s3.Bucket(this, 'LambdaTargetBucket', {
+        bucketName: `${this.account}-cfn-teleport-lambda-target`,
         removalPolicy: RemovalPolicy.DESTROY,
       });
 
-      const policySourceBucket = new aws_s3.Bucket(this, 'PolicySourceBucket', {
-        bucketName: `${this.account}-cfn-teleport-policy-source`,
-        removalPolicy: RemovalPolicy.DESTROY,
+      // Create a simple Lambda function that references the bucket via environment variable
+      const testFunction = new aws_lambda.Function(this, 'TestFunction', {
+        runtime: aws_lambda.Runtime.NODEJS_20_X,
+        handler: 'index.handler',
+        code: aws_lambda.Code.fromInline(`
+          exports.handler = async (event) => {
+            console.log('Bucket:', process.env.BUCKET_NAME);
+            return { statusCode: 200 };
+          };
+        `),
+        environment: {
+          BUCKET_NAME: lambdaTargetBucket.bucketName, // Ref to bucket
+          BUCKET_ARN: lambdaTargetBucket.bucketArn, // Fn::GetAtt to bucket
+        },
       });
 
-      // Add bucket policy that references PolicyTargetBucket
-      policySourceBucket.addToResourcePolicy(
-        new aws_iam.PolicyStatement({
-          effect: aws_iam.Effect.ALLOW,
-          principals: [new aws_iam.AccountRootPrincipal()],
-          actions: ['s3:GetObject'],
-          resources: [`${policyTargetBucket.bucketArn}/*`], // References PolicyTargetBucket via GetAtt
-        }),
-      );
-
-      new CfnOutput(this, 'PolicyTestOutput', {
-        value: `${policySourceBucket.bucketName}:${policyTargetBucket.bucketName}`,
-        description: 'Buckets with policy cross-reference',
+      new CfnOutput(this, 'LambdaTestOutput', {
+        value: `${testFunction.functionName}:${lambdaTargetBucket.bucketName}`,
+        description: 'Lambda with bucket references in environment',
       });
     }
   }
