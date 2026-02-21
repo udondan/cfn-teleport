@@ -163,6 +163,202 @@ jobs:
           ROLE: Role1ABCC5F0
           DYNAMO_TABLE: DynamoDbTable6316879D
 
+      - name: Test same-stack renaming - comprehensive reference tests
+        if: matrix.rust-toolchain == 'stable'
+        working-directory: test/cdk
+        run: |
+          echo "######### Finding rename test resources #########"
+          # CDK generates logical IDs with hashes, e.g., RenameBucket615F0D5B
+          # Find the actual resource IDs by looking at the stack template
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          
+          # Find all test resources
+          RENAME_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameBucket")) | select(startswith("RenameBucketOutput") | not)')
+          RENAME_TABLE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameTable")) | select(startswith("RenameTableOutput") | not)')
+          RENAME_QUEUE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameQueue"))')
+          DEPENDENCY_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("DependencyBucket"))')
+          DEPENDENT_TABLE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("DependentTable"))')
+          LAMBDA_TARGET_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("LambdaTargetBucket"))')
+          TEST_FUNCTION_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("TestFunction")) | select(contains("ServiceRole") | not) | select(contains("LogRetention") | not)')
+          
+          echo "Found test resources:"
+          echo "  RenameBucket: $RENAME_BUCKET_ID"
+          echo "  RenameTable: $RENAME_TABLE_ID"
+          echo "  RenameQueue: $RENAME_QUEUE_ID"
+          echo "  DependencyBucket: $DEPENDENCY_BUCKET_ID"
+          echo "  DependentTable: $DEPENDENT_TABLE_ID"
+          echo "  LambdaTargetBucket: $LAMBDA_TARGET_BUCKET_ID"
+          echo "  TestFunction: $TEST_FUNCTION_ID"
+          
+          if [ -z "$RENAME_BUCKET_ID" ] || [ -z "$RENAME_TABLE_ID" ] || [ -z "$RENAME_QUEUE_ID" ]; then
+            echo "✗ Could not find required rename test resources in stack"
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "TEST 1: Ref reference in Output"
+          echo "=========================================="
+          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "${RENAME_BUCKET_ID}:RenamedBucket"
+
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          
+          if echo "$TEMPLATE" | jq -e '.Resources.RenamedBucket' > /dev/null; then
+            echo "✓ Resource renamed successfully"
+          else
+            echo "✗ Resource rename failed - RenamedBucket not found in template"
+            exit 1
+          fi
+
+          # Verify the Output Ref reference was updated
+          if echo "$TEMPLATE" | jq -e '.Outputs | to_entries[] | select(.key | startswith("RenameBucket")) | .value.Value.Ref == "RenamedBucket"' > /dev/null; then
+            echo "✓ Output Ref reference updated successfully"
+          else
+            echo "✗ Output Ref reference not updated"
+            echo "$TEMPLATE" | jq '.Outputs'
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "TEST 2: GetAtt reference in Output"
+          echo "=========================================="
+          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "${RENAME_TABLE_ID}:RenamedTable"
+
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          
+          if echo "$TEMPLATE" | jq -e '.Resources.RenamedTable' > /dev/null; then
+            echo "✓ Table renamed successfully"
+          else
+            echo "✗ Table rename failed"
+            exit 1
+          fi
+
+          # Verify GetAtt reference was updated in Output
+          if echo "$TEMPLATE" | jq -e '.Outputs | to_entries[] | select(.key | startswith("RenameTable")) | .value.Value["Fn::GetAtt"][0] == "RenamedTable"' > /dev/null; then
+            echo "✓ Output GetAtt reference updated successfully"
+          else
+            echo "✗ Output GetAtt reference not updated"
+            echo "$TEMPLATE" | jq '.Outputs'
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "TEST 3: Fn::Sub reference in Output"
+          echo "=========================================="
+          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "${RENAME_QUEUE_ID}:RenamedQueue"
+
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          
+          if echo "$TEMPLATE" | jq -e '.Resources.RenamedQueue' > /dev/null; then
+            echo "✓ Queue renamed successfully"
+          else
+            echo "✗ Queue rename failed"
+            exit 1
+          fi
+
+          # Verify Fn::Sub reference in Output was updated
+          # The output structure is: {"Fn::Sub": ["Queue ${QueueRef} in region ${AWS::Region}", {"QueueRef": {"Ref": "RenamedQueue"}}]}
+          if echo "$TEMPLATE" | jq -e '.Outputs | to_entries[] | select(.key | startswith("SubTest")) | .value.Value["Fn::Sub"][1].QueueRef.Ref == "RenamedQueue"' > /dev/null; then
+            echo "✓ Output Fn::Sub reference updated successfully"
+          else
+            echo "✗ Output Fn::Sub reference not updated"
+            echo "$TEMPLATE" | jq '.Outputs | to_entries[] | select(.key | startswith("SubTest"))'
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "TEST 4: DependsOn reference"
+          echo "=========================================="
+          # Verify DependsOn exists before rename
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${DEPENDENT_TABLE_ID}\".DependsOn[] | select(. == \"${DEPENDENCY_BUCKET_ID}\")" > /dev/null; then
+            echo "✓ DependsOn relationship exists before rename"
+          else
+            echo "✗ DependsOn relationship not found before rename"
+            echo "$TEMPLATE" | jq ".Resources.\"${DEPENDENT_TABLE_ID}\""
+            exit 1
+          fi
+
+          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "${DEPENDENCY_BUCKET_ID}:RenamedDependencyBucket"
+
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          
+          if echo "$TEMPLATE" | jq -e '.Resources.RenamedDependencyBucket' > /dev/null; then
+            echo "✓ Dependency bucket renamed successfully"
+          else
+            echo "✗ Dependency bucket rename failed"
+            exit 1
+          fi
+
+          # Verify DependsOn was updated
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${DEPENDENT_TABLE_ID}\".DependsOn[] | select(. == \"RenamedDependencyBucket\")" > /dev/null; then
+            echo "✓ DependsOn reference updated successfully"
+          else
+            echo "✗ DependsOn reference not updated"
+            echo "$TEMPLATE" | jq ".Resources.\"${DEPENDENT_TABLE_ID}\".DependsOn"
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "TEST 5: References in Lambda environment variables"
+          echo "=========================================="
+          # Verify Lambda function has environment variables referencing the bucket
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME" > /dev/null; then
+            echo "✓ Lambda has BUCKET_NAME environment variable before rename"
+          else
+            echo "✗ Lambda environment variable not found before rename"
+            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment"
+            exit 1
+          fi
+
+          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "${LAMBDA_TARGET_BUCKET_ID}:RenamedLambdaTarget"
+
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          
+          if echo "$TEMPLATE" | jq -e '.Resources.RenamedLambdaTarget' > /dev/null; then
+            echo "✓ Lambda target bucket renamed successfully"
+          else
+            echo "✗ Lambda target bucket rename failed"
+            exit 1
+          fi
+
+          # Verify Lambda environment variables now reference RenamedLambdaTarget
+          # BUCKET_NAME uses Ref
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME.Ref == \"RenamedLambdaTarget\"" > /dev/null; then
+            echo "✓ Lambda BUCKET_NAME (Ref) updated successfully"
+          else
+            echo "✗ Lambda BUCKET_NAME (Ref) not updated"
+            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME"
+            exit 1
+          fi
+
+          # BUCKET_ARN uses Fn::GetAtt
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_ARN[\"Fn::GetAtt\"][0] == \"RenamedLambdaTarget\"" > /dev/null; then
+            echo "✓ Lambda BUCKET_ARN (Fn::GetAtt) updated successfully"
+          else
+            echo "✗ Lambda BUCKET_ARN (Fn::GetAtt) not updated"
+            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_ARN"
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "✓ All same-stack rename reference tests passed!"
+          echo "=========================================="
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          STACK1: CfnTeleportTest1
+
       - name: Delete test stacks
         if: matrix.rust-toolchain == 'stable'
         run: |

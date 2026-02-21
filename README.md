@@ -4,7 +4,13 @@
 [![crates.io](https://img.shields.io/badge/crates.io-cfn--teleport-yellowgreen)][crate]
 [![License](https://img.shields.io/github/license/udondan/cfn-teleport)][license]
 
-A command-line tool which can move CloudFormation resources between stacks.
+A command-line tool for managing CloudFormation resources across and within stacks.
+
+**Features:**
+
+- **Move resources between stacks** - Transfer resources from one CloudFormation stack to another
+- **Rename resources within a stack** - Change logical IDs of resources in the same stack
+- **Automatic reference updates** - All CloudFormation references (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`, etc.) are automatically updated
 
 ![Demo](https://raw.githubusercontent.com/udondan/cfn-teleport/main/docs/demo.gif)
 
@@ -53,13 +59,47 @@ Options:
   -V, --version                 Print version
 ```
 
-Example usage:
+### Moving Resources Between Stacks
+
+Transfer resources from one stack to another:
 
 ```bash
 cfn-teleport --source Stack1 --target Stack2 --resource Bucket21D68F7E8 --resource Bucket182C536A1 --yes
 ```
 
-If any of the required options is undefined, the program will ask for it during execution.
+The tool will:
+
+1. Export resources from the source stack
+2. Import them into the target stack
+3. Update all references in both stacks automatically
+4. Preserve the physical resources (no deletion/recreation)
+
+### Renaming Resources Within a Stack
+
+Rename resources in the same stack by specifying the same source and target:
+
+```bash
+cfn-teleport --source MyStack --target MyStack --resource OldBucketName:NewBucketName --yes
+```
+
+The tool will:
+
+1. Rename the logical ID of the resource
+2. Update all references (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`, etc.) automatically
+3. Preserve the physical resource (no deletion/recreation)
+
+### Interactive Mode
+
+If any of the required options is undefined, the program will prompt for input interactively:
+
+```bash
+cfn-teleport
+# Will prompt for:
+# - Source stack name
+# - Target stack name
+# - Resources to move/rename
+# - Optional: New logical IDs for each resource
+```
 
 ## Contributing
 
