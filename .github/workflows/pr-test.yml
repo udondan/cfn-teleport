@@ -68,7 +68,7 @@ jobs:
           [ "${{ matrix.rust-toolchain }}" == 'stable' ] && cargo clippy --version || :
 
       - name: Dependency cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: target
           key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
@@ -97,7 +97,7 @@ jobs:
 
       - name: npm dependency cache
         if: matrix.rust-toolchain == 'stable'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: test/cdk/.npm
           key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
