@@ -170,7 +170,7 @@ jobs:
           echo "######### Finding rename test resources #########"
           # CDK generates logical IDs with hashes, e.g., RenameBucket615F0D5B
           # Find the actual resource IDs by looking at the stack template
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           
           # Find all test resources
           RENAME_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameBucket")) | select(startswith("RenameBucketOutput") | not)')
@@ -202,7 +202,7 @@ jobs:
           cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${RENAME_BUCKET_ID}:RenamedBucket"
 
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedBucket' > /dev/null; then
             echo "✓ Resource renamed successfully"
@@ -227,7 +227,7 @@ jobs:
           cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${RENAME_TABLE_ID}:RenamedTable"
 
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedTable' > /dev/null; then
             echo "✓ Table renamed successfully"
@@ -252,7 +252,7 @@ jobs:
           cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${RENAME_QUEUE_ID}:RenamedQueue"
 
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedQueue' > /dev/null; then
             echo "✓ Queue renamed successfully"
@@ -287,7 +287,7 @@ jobs:
           cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${DEPENDENCY_BUCKET_ID}:RenamedDependencyBucket"
 
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedDependencyBucket' > /dev/null; then
             echo "✓ Dependency bucket renamed successfully"
@@ -321,7 +321,7 @@ jobs:
           cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${LAMBDA_TARGET_BUCKET_ID}:RenamedLambdaTarget"
 
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output text)
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedLambdaTarget' > /dev/null; then
             echo "✓ Lambda target bucket renamed successfully"
