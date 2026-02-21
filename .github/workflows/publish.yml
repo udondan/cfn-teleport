@@ -111,6 +111,9 @@ jobs:
           # dependencies are only needed on ubuntu as that's the only place where
           # we make cross-compilation
           if [[ "${OS}" =~ ^ubuntu.*$ ]]; then
+            # Update package lists to avoid 404 errors
+            sudo apt-get update -qq
+
             # Install common dependencies for aws-lc-sys cross-compilation
             sudo apt-get install -qq cmake clang llvm-dev libclang-dev
 
