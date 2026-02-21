@@ -41,6 +41,24 @@ export class TestStack extends Stack {
         removalPolicy: RemovalPolicy.DESTROY,
       });
 
+      // Standalone bucket for testing cross-stack moves with refactor mode
+      // NO OUTPUTS, NO REFERENCES - completely standalone
+      new aws_s3.Bucket(this, 'StandaloneBucket', {
+        bucketName: `${this.account}-cfn-teleport-standalone`,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+
+      // Standalone DynamoDB table for testing cross-stack moves with refactor mode
+      // NO OUTPUTS, NO REFERENCES - completely standalone
+      new aws_dynamodb.Table(this, 'StandaloneTable', {
+        tableName: `cfn-teleport-standalone`,
+        removalPolicy: RemovalPolicy.DESTROY,
+        partitionKey: {
+          name: 'id',
+          type: aws_dynamodb.AttributeType.STRING,
+        },
+      });
+
       new aws_dynamodb.Table(this, 'DynamoDbTable', {
         tableName: `cfn-teleport-test`,
         removalPolicy: RemovalPolicy.DESTROY,

@@ -113,12 +113,83 @@ jobs:
         run: |
           make test
 
-      - name: Run test migrations
+      - name: Test refactor mode (default) with supported resource types
         if: matrix.rust-toolchain == 'stable'
         working-directory: test/cdk
         run: |
-          echo "######### Testing migration from ${STACK1} to ${STACK2} #########"
-          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes \
+          echo "######### TEST 1: Refactor mode with standalone resources #########"
+          
+          # Find standalone resources
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          STANDALONE_BUCKET=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneBucket"))')
+          STANDALONE_TABLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneTable"))')
+          
+          echo "Found standalone resources: $STANDALONE_BUCKET, $STANDALONE_TABLE"
+          
+          echo "Moving standalone resources to ${STACK2} with refactor mode..."
+          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+            --resource "${STANDALONE_BUCKET}" \
+            --resource "${STANDALONE_TABLE}"
+
+          if npx cdk diff --fail | grep -E "(${STANDALONE_BUCKET}|${STANDALONE_TABLE})"; then
+            echo "✓ Standalone resources moved successfully"
+          else
+            echo "✗ Standalone resource migration failed"
+            exit 1
+          fi
+
+          echo "######### TEST 2: Move regular resources (no KeyPair) #########"
+          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+            --resource "${BUCKET1}" \
+            --resource "${BUCKET2}" \
+            --resource "${DYNAMO_TABLE}"
+
+          if npx cdk diff --fail | grep -E "(${BUCKET1}|${BUCKET2}|${DYNAMO_TABLE})"; then
+            echo "✓ Regular resources moved successfully"
+          else
+            echo "✗ Regular resource migration failed"
+            exit 1
+          fi
+
+          echo "######### TEST 3: Move all resources back to ${STACK1} #########"
+          cfn-teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
+            --resource "${STANDALONE_BUCKET}" \
+            --resource "${STANDALONE_TABLE}" \
+            --resource "${BUCKET1}" \
+            --resource "${BUCKET2}" \
+            --resource "${DYNAMO_TABLE}"
+
+          if ! npx cdk diff --fail; then
+            echo "✓ All resources successfully moved back"
+          else
+            echo "✗ Failed to move resources back"
+            exit 1
+          fi
+          
+          echo "######### TEST 4: Verify refactor mode REJECTS KeyPair (expected failure) #########"
+          if cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" 2>&1 | grep -i "tag"; then
+            echo "✓ Refactor mode correctly rejected KeyPair (tag update issue)"
+          else
+            echo "✗ Refactor mode should have failed with KeyPair but didn't"
+            exit 1
+          fi
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          STACK1: CfnTeleportTest1
+          STACK2: CfnTeleportTest2
+          BUCKET1: Bucket182C536A1
+          BUCKET2: Bucket21D68F7E8
+          DYNAMO_TABLE: DynamoDbTable6316879D
+          KEY_PAIR: KeyPair
+
+      - name: Test import mode (legacy) with all resource types including KeyPair
+        if: matrix.rust-toolchain == 'stable'
+        working-directory: test/cdk
+        run: |
+          echo "######### Testing IMPORT mode migration from ${STACK1} to ${STACK2} #########"
+          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
             --resource "${INSTANCE}" \
@@ -133,8 +204,8 @@ jobs:
             exit 1
           fi
 
-          echo "######### Testing migration from ${STACK2} to ${STACK1} #########"
-          cfn-teleport --source "${STACK2}" --target "${STACK1}" --yes \
+          echo "######### Testing IMPORT mode migration from ${STACK2} back to ${STACK1} #########"
+          cfn-teleport --source "${STACK2}" --target "${STACK1}" --yes --mode import \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
             --resource "${INSTANCE}" \
