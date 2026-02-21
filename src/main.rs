@@ -9,6 +9,7 @@ mod spinner;
 use std::collections::HashMap;
 use std::io;
 use std::process;
+mod reference_updater;
 mod supported_resource_types;
 
 const DEMO: bool = false;
@@ -109,10 +110,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .to_string()
     });
 
-    if source_stack == target_stack {
-        return Err("Source and target stack must be different".into());
-    }
-
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
     let selected_resources = match args.resource.clone() {
@@ -159,27 +156,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .logical_resource_id()
                     .unwrap_or_default()
                     .to_owned();
-                let mut new_logical_id: String;
-                if false {
-                    // resource renaming is disabled for now
-                    new_logical_id = Input::new()
-                        .with_prompt(format!(
-                            "Optionally provide a new logical ID for resource '{}'",
-                            old_logical_id
-                        ))
-                        .default(old_logical_id.clone())
-                        .interact_text()?;
 
-                    if new_logical_id.is_empty() {
-                        new_logical_id = resource
-                            .logical_resource_id()
-                            .unwrap_or_default()
-                            .to_string();
-                    } else {
-                        //resource_has_been_renamed = true;
-                    }
-                } else {
-                    new_logical_id = old_logical_id.clone();
+                let mut new_logical_id: String = Input::new()
+                    .with_prompt(format!(
+                        "Optionally provide a new logical ID for resource '{}'",
+                        old_logical_id
+                    ))
+                    .default(old_logical_id.clone())
+                    .interact_text()?;
+
+                if new_logical_id.is_empty() {
+                    new_logical_id = resource
+                        .logical_resource_id()
+                        .unwrap_or_default()
+                        .to_string();
                 }
 
                 new_logical_ids_map.insert(old_logical_id, new_logical_id);
@@ -197,6 +187,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     if source_stack == target_stack {
+        // Same-stack operation: must be renaming, not just moving
+        let mut has_any_rename = false;
+        for (old_id, new_id) in &new_logical_ids_map {
+            if old_id != new_id {
+                has_any_rename = true;
+                break;
+            }
+        }
+
+        if !has_any_rename {
+            return Err(
+                "Source and target stack are the same, but no resources are being renamed. \
+                 Same-stack operations require renaming at least one resource."
+                    .into(),
+            );
+        }
+
+        // Check for resources that aren't being renamed
         let mut duplicate_ids = Vec::new();
         for (old_id, new_id) in &new_logical_ids_map {
             if old_id == new_id {
@@ -236,6 +244,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let template_source = get_template(&client, &source_stack).await?;
     let template_source_str = serde_json::to_string(&template_source)?;
 
+    // Validate that resources being moved don't have dangling references
+    // (i.e., resources staying in source stack that reference moving resources)
+    // Only validate for cross-stack moves, not same-stack renames
+    if source_stack != target_stack {
+        validate_move_references(&template_source, &new_logical_ids_map)?;
+    }
+
+    // Same-stack rename: Use CloudFormation Stack Refactoring API
+    if source_stack == target_stack {
+        return refactor_stack_resources(
+            &client,
+            &source_stack,
+            template_source,
+            new_logical_ids_map,
+        )
+        .await;
+    }
+
+    // Cross-stack move: Use import/export flow
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
 
     let template_retained =
@@ -250,6 +277,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         template_source.clone(),
         new_logical_ids_map.clone(),
     );
+
+    // Update all resource references in the target templates
+    let template_target_with_deletion_policy = reference_updater::update_template_references(
+        template_target_with_deletion_policy,
+        &new_logical_ids_map,
+    );
+    let template_target =
+        reference_updater::update_template_references(template_target, &new_logical_ids_map);
 
     for template in [
         template_retained.clone(),
@@ -485,6 +520,82 @@ async fn select_resources<'a>(
     }
 }
 
+/// Validates that resources being moved don't have dangling references.
+///
+/// When moving resources between stacks, ensures that:
+/// 1. Resources staying in source stack don't reference moving resources
+/// 2. If a resource references another, both must be moved together
+/// 3. Outputs in source stack don't reference moving resources (outputs can't be moved)
+///
+/// # Arguments
+/// * `source_template` - The source stack template
+/// * `new_logical_ids_map` - Map of resource IDs being moved (old ID -> new ID)
+///
+/// # Returns
+/// Ok if validation passes, Err with detailed message if validation fails
+fn validate_move_references(
+    source_template: &serde_json::Value,
+    new_logical_ids_map: &HashMap<String, String>,
+) -> Result<(), Box<dyn Error>> {
+    use std::collections::HashSet;
+
+    // Get all resources being moved
+    let moving_resources: HashSet<String> = new_logical_ids_map.keys().cloned().collect();
+
+    // Find all references in the source template
+    let all_references = reference_updater::find_all_references(source_template);
+
+    let mut errors = Vec::new();
+
+    // Check each resource that has references
+    for (referencing_resource, referenced_resources) in &all_references {
+        // Special case: Outputs section
+        if referencing_resource == "Outputs" {
+            // Check if any output references a moving resource
+            for referenced in referenced_resources {
+                if moving_resources.contains(referenced) {
+                    errors.push(format!(
+                        "  - Output section references resource '{}' which is being moved. \
+                         Outputs cannot be moved between stacks. Please remove or update the output before moving the resource.",
+                        referenced
+                    ));
+                }
+            }
+            continue;
+        }
+
+        // For regular resources: check if referencing resource is moving
+        let is_referencing_resource_moving = moving_resources.contains(referencing_resource);
+
+        // Check each referenced resource
+        for referenced in referenced_resources {
+            let is_referenced_resource_moving = moving_resources.contains(referenced);
+
+            // Problem: referencing resource stays, but referenced resource moves
+            if !is_referencing_resource_moving && is_referenced_resource_moving {
+                errors.push(format!(
+                    "  - Resource '{}' references '{}', but only '{}' is being moved. \
+                     Either move both resources together, or remove the reference before moving.",
+                    referencing_resource, referenced, referenced
+                ));
+            }
+        }
+    }
+
+    // If we found any errors, return them all
+    if !errors.is_empty() {
+        let error_message = format!(
+            "Cannot move resources due to dangling references:\n\n{}\n\n\
+             Tip: You can move multiple resources together if they reference each other.\n\
+             Tip: Same-stack renaming doesn't have this restriction.",
+            errors.join("\n")
+        );
+        return Err(error_message.into());
+    }
+
+    Ok(())
+}
+
 fn user_confirm() -> Result<(), Box<dyn Error>> {
     let confirmed = Confirm::new()
         .with_prompt("Please confirm your selection:")
@@ -680,6 +791,165 @@ async fn validate_template(
     {
         Ok(_output) => Ok(()),
         Err(err) => Err(err.into()),
+    }
+}
+
+async fn refactor_stack_resources(
+    client: &cloudformation::Client,
+    stack_name: &str,
+    template: serde_json::Value,
+    id_mapping: HashMap<String, String>,
+) -> Result<(), Box<dyn Error>> {
+    use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
+
+    // Step 1: Create updated template with renamed resources and updated references
+    let mut updated_template = template.clone();
+
+    // Rename resources in the Resources section
+    if let Some(resources) = updated_template
+        .get_mut("Resources")
+        .and_then(|r| r.as_object_mut())
+    {
+        let keys_to_rename: Vec<(String, String)> = id_mapping
+            .iter()
+            .map(|(old, new)| (old.clone(), new.clone()))
+            .collect();
+
+        for (old_id, new_id) in keys_to_rename {
+            if let Some(resource) = resources.remove(&old_id) {
+                resources.insert(new_id, resource);
+            }
+        }
+    }
+
+    // Update all references using our reference updater
+    // This is needed because we're sending an updated template to CloudFormation,
+    // and the template must have valid references for validation to pass
+    let updated_template =
+        reference_updater::update_template_references(updated_template, &id_mapping);
+
+    // Validate the updated template
+    validate_template(client, updated_template.clone())
+        .await
+        .map_err(|e| format!("Updated template validation failed: {}", e))?;
+
+    // Step 2: Build resource mappings for CloudFormation
+    let resource_mappings: Vec<ResourceMapping> = id_mapping
+        .iter()
+        .map(|(old_id, new_id)| {
+            ResourceMapping::builder()
+                .source(
+                    ResourceLocation::builder()
+                        .stack_name(stack_name)
+                        .logical_resource_id(old_id)
+                        .build(),
+                )
+                .destination(
+                    ResourceLocation::builder()
+                        .stack_name(stack_name)
+                        .logical_resource_id(new_id)
+                        .build(),
+                )
+                .build()
+        })
+        .collect();
+
+    // Step 3-6: Create, validate, and execute stack refactor (with simplified output)
+    let spinner = spinner::Spin::new(&format!(
+        "Renaming {} resource{} in stack {}",
+        id_mapping.len(),
+        if id_mapping.len() == 1 { "" } else { "s" },
+        stack_name,
+    ));
+
+    let stack_definition = StackDefinition::builder()
+        .stack_name(stack_name)
+        .template_body(serde_json::to_string(&updated_template)?)
+        .build();
+
+    // Create refactor
+    let create_result = client
+        .create_stack_refactor()
+        .stack_definitions(stack_definition)
+        .set_resource_mappings(Some(resource_mappings))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
+
+    let refactor_id = create_result
+        .stack_refactor_id()
+        .ok_or("No stack refactor ID returned")?;
+
+    // Wait for validation to complete
+    loop {
+        let status = client
+            .describe_stack_refactor()
+            .stack_refactor_id(refactor_id)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+
+        match status.status().map(|s| s.as_str()) {
+            Some("CREATE_COMPLETE") => {
+                break;
+            }
+            Some("CREATE_FAILED") | Some("FAILED") => {
+                drop(spinner);
+                return Err(format!(
+                    "Stack refactor validation failed: {}",
+                    status.status_reason().unwrap_or("Unknown error")
+                )
+                .into());
+            }
+            _ => {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+        }
+    }
+
+    // Execute the refactor
+    client
+        .execute_stack_refactor()
+        .stack_refactor_id(refactor_id)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+
+    // Wait for execution to complete
+    loop {
+        let status = client
+            .describe_stack_refactor()
+            .stack_refactor_id(refactor_id)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+
+        match status.execution_status().map(|s| s.as_str()) {
+            Some("EXECUTE_COMPLETE") => {
+                drop(spinner);
+                println!(
+                    "✓ Renamed {} resource{} in stack {}",
+                    id_mapping.len(),
+                    if id_mapping.len() == 1 { "" } else { "s" },
+                    stack_name
+                );
+                for (old_id, new_id) in id_mapping {
+                    println!("  {} → {}", old_id, new_id);
+                }
+                return Ok(());
+            }
+            Some("EXECUTE_FAILED") | Some("FAILED") => {
+                drop(spinner);
+                return Err(format!(
+                    "Stack refactor execution failed: {}",
+                    status.status_reason().unwrap_or("Unknown error")
+                )
+                .into());
+            }
+            _ => {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            }
+        }
     }
 }
 
