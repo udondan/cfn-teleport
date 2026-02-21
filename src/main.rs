@@ -186,6 +186,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
+    // Fetch template once and reuse
+    let template_source = get_template(&client, &source_stack).await?;
+
     if source_stack == target_stack {
         // Same-stack operation: must be renaming, not just moving
         let mut has_any_rename = false;
@@ -221,6 +224,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
             return Err(error_message.into());
         }
 
+        // Check for name collisions: new name already exists in stack
+        let existing_resources = if let Some(resources) = template_source.get("Resources") {
+            if let Some(obj) = resources.as_object() {
+                obj.keys()
+                    .cloned()
+                    .collect::<std::collections::HashSet<_>>()
+            } else {
+                std::collections::HashSet::new()
+            }
+        } else {
+            std::collections::HashSet::new()
+        };
+
+        let mut collisions = Vec::new();
+        for (old_id, new_id) in &new_logical_ids_map {
+            // Check if the new name exists and is NOT the old name being renamed
+            if existing_resources.contains(new_id) && old_id != new_id {
+                collisions.push(format!(
+                    "{} -> {} (resource '{}' already exists)",
+                    old_id, new_id, new_id
+                ));
+            }
+        }
+
+        if !collisions.is_empty() {
+            let error_message = format!(
+                "Cannot rename resources: target name(s) already exist in stack {}:\n  {}",
+                source_stack,
+                collisions.join("\n  ")
+            );
+            return Err(error_message.into());
+        }
+
         println!(
             "The following resources in stack {} will be renamed:",
             source_stack
@@ -241,7 +277,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         user_confirm()?;
     }
 
-    let template_source = get_template(&client, &source_stack).await?;
     let template_source_str = serde_json::to_string(&template_source)?;
 
     // Validate that resources being moved don't have dangling references
@@ -902,7 +937,7 @@ async fn refactor_stack_resources(
                 .into());
             }
             _ => {
-                std::thread::sleep(std::time::Duration::from_secs(2));
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             }
         }
     }
@@ -947,7 +982,7 @@ async fn refactor_stack_resources(
                 .into());
             }
             _ => {
-                std::thread::sleep(std::time::Duration::from_secs(5));
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
             }
         }
     }
@@ -1009,7 +1044,7 @@ async fn wait_for_stack_update_completion(
             || status == cloudformation::types::StackStatus::UpdateCompleteCleanupInProgress
             || status == cloudformation::types::StackStatus::ImportInProgress
         {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             stack_status = get_stack_status(client, stack_name).await?;
         } else {
             if status != cloudformation::types::StackStatus::UpdateComplete
@@ -1162,7 +1197,7 @@ async fn wait_for_changeset_created(
         if status == cloudformation::types::ChangeSetStatus::CreateInProgress
             || status == cloudformation::types::ChangeSetStatus::CreatePending
         {
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             changeset_status = get_changeset_status(client, stack_name, changeset_name).await?;
         } else {
             if status != cloudformation::types::ChangeSetStatus::CreateComplete {

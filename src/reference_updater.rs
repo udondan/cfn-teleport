@@ -99,10 +99,17 @@ fn collect_references(value: &Value, references: &mut HashSet<String>) {
             // Check for Sub
             if let Some(sub_value) = map.get("Fn::Sub") {
                 if let Some(template_str) = sub_value.as_str() {
-                    extract_sub_references(template_str, references);
+                    extract_sub_references(template_str, references, &HashSet::new());
                 } else if let Some(array) = sub_value.as_array() {
                     if let Some(template_str) = array.first().and_then(|v| v.as_str()) {
-                        extract_sub_references(template_str, references);
+                        // Get variable names from the variable map (second element)
+                        let mut local_vars = HashSet::new();
+                        if let Some(var_map) = array.get(1).and_then(|v| v.as_object()) {
+                            for key in var_map.keys() {
+                                local_vars.insert(key.clone());
+                            }
+                        }
+                        extract_sub_references(template_str, references, &local_vars);
                     }
                 }
             }
@@ -140,13 +147,31 @@ fn collect_references(value: &Value, references: &mut HashSet<String>) {
 /// Extracts resource references from Fn::Sub template strings.
 ///
 /// Looks for ${ResourceName} or ${ResourceName.Attribute} patterns.
-fn extract_sub_references(template: &str, references: &mut HashSet<String>) {
+/// Excludes variables defined in the Fn::Sub variable map.
+fn extract_sub_references(
+    template: &str,
+    references: &mut HashSet<String>,
+    local_vars: &HashSet<String>,
+) {
     // Match ${...} patterns
     let mut chars = template.chars().peekable();
     while let Some(ch) = chars.next() {
         if ch == '$' {
             if let Some(&'{') = chars.peek() {
                 chars.next(); // consume '{'
+
+                // Check for escape syntax ${!Literal}
+                if let Some(&'!') = chars.peek() {
+                    // Skip escaped variables - they're literals, not references
+                    while let Some(&next_ch) = chars.peek() {
+                        chars.next();
+                        if next_ch == '}' {
+                            break;
+                        }
+                    }
+                    continue;
+                }
+
                 let mut var_name = String::new();
 
                 // Collect until '}' or '.'
@@ -165,7 +190,10 @@ fn extract_sub_references(template: &str, references: &mut HashSet<String>) {
                     }
                 }
 
-                if !var_name.is_empty() && !is_pseudo_parameter(&var_name) {
+                if !var_name.is_empty()
+                    && !is_pseudo_parameter(&var_name)
+                    && !local_vars.contains(&var_name)
+                {
                     references.insert(var_name);
                 }
             }
@@ -195,8 +223,9 @@ fn traverse_and_update(value: Value, old_id: &str, new_id: &str) -> Value {
                 }
             }
 
-            // Check for GetAtt pattern
-            if let Some(getatt_value) = map.get("Fn::GetAtt") {
+            // Check for GetAtt pattern (array or string form)
+            if let Some(getatt_value) = map.get("Fn::GetAtt").cloned() {
+                // Array form: ["ResourceName", "Attribute"]
                 if let Some(array) = getatt_value.as_array() {
                     if !array.is_empty() {
                         if let Some(resource_name) = array[0].as_str() {
@@ -206,6 +235,18 @@ fn traverse_and_update(value: Value, old_id: &str, new_id: &str) -> Value {
                                 map.insert("Fn::GetAtt".to_string(), Value::Array(new_array));
                                 return Value::Object(map);
                             }
+                        }
+                    }
+                }
+                // String form: "ResourceName.Attribute"
+                else if let Some(getatt_str) = getatt_value.as_str() {
+                    if let Some(dot_pos) = getatt_str.find('.') {
+                        let resource_name = &getatt_str[..dot_pos];
+                        if resource_name == old_id {
+                            let attribute = &getatt_str[dot_pos..]; // includes the dot
+                            let new_getatt = format!("{}{}", new_id, attribute);
+                            map.insert("Fn::GetAtt".to_string(), Value::String(new_getatt));
+                            return Value::Object(map);
                         }
                     }
                 }
@@ -386,6 +427,20 @@ mod tests {
     }
 
     #[test]
+    fn test_update_getatt_string_form() {
+        let template = json!({ "Fn::GetAtt": "OldBucket.Arn" });
+        let result = traverse_and_update(template, "OldBucket", "NewBucket");
+        assert_eq!(result, json!({ "Fn::GetAtt": "NewBucket.Arn" }));
+    }
+
+    #[test]
+    fn test_update_getatt_string_form_not_matching() {
+        let template = json!({ "Fn::GetAtt": "OtherResource.Arn" });
+        let result = traverse_and_update(template.clone(), "OldBucket", "NewBucket");
+        assert_eq!(result, json!({ "Fn::GetAtt": "OtherResource.Arn" }));
+    }
+
+    #[test]
     fn test_update_dependson_string() {
         let template = json!({
             "Type": "AWS::EC2::Instance",
@@ -487,6 +542,38 @@ mod tests {
                 ]
             })
         );
+    }
+
+    #[test]
+    fn test_update_sub_array_local_variable() {
+        // When a variable is defined in the variable map, the rename should still
+        // update both the variable map key AND the template string consistently
+        let template = json!({
+            "Fn::Sub": [
+                "${LocalVar}-${OldBucket}",
+                {"LocalVar": "hardcoded-value"}
+            ]
+        });
+        let result = traverse_and_update(template, "LocalVar", "NewLocalVar");
+        // Both the template string and the map key should be renamed
+        assert_eq!(
+            result,
+            json!({
+                "Fn::Sub": [
+                    "${NewLocalVar}-${OldBucket}",
+                    {"NewLocalVar": "hardcoded-value"}
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn test_update_sub_escape_syntax() {
+        // ${!Literal} should NOT be treated as a reference (it's escaped)
+        let template = json!({ "Fn::Sub": "${!Literal}-${OldBucket}" });
+        let result = traverse_and_update(template, "Literal", "NewLiteral");
+        // Should NOT update the escaped ${!Literal} part
+        assert_eq!(result, json!({ "Fn::Sub": "${!Literal}-${OldBucket}" }));
     }
 
     #[test]
@@ -729,5 +816,82 @@ mod tests {
             assert!(!refs.contains("AWS::StackName"));
             assert!(!refs.contains("AWS::Region"));
         }
+    }
+
+    #[test]
+    fn test_find_all_references_sub_with_variable_map() {
+        // When Fn::Sub has a variable map, variables defined in the map
+        // should NOT be treated as resource references
+        let template = json!({
+            "Resources": {
+                "Lambda": {
+                    "Type": "AWS::Lambda::Function",
+                    "Properties": {
+                        "FunctionName": {
+                            "Fn::Sub": [
+                                "${Prefix}-${BucketName}",
+                                {"Prefix": "my-function"}
+                            ]
+                        },
+                        "Environment": {
+                            "Variables": {
+                                "BUCKET": {"Ref": "MyBucket"}
+                            }
+                        }
+                    }
+                },
+                "MyBucket": {
+                    "Type": "AWS::S3::Bucket"
+                },
+                "BucketName": {
+                    "Type": "AWS::S3::Bucket"
+                }
+            }
+        });
+
+        let references = find_all_references(&template);
+        let lambda_refs = &references["Lambda"];
+
+        // MyBucket should be detected (from Ref)
+        assert!(lambda_refs.contains("MyBucket"));
+
+        // BucketName should be detected (from Fn::Sub template string)
+        assert!(lambda_refs.contains("BucketName"));
+
+        // Prefix should NOT be detected (it's a local variable in the map)
+        assert!(!lambda_refs.contains("Prefix"));
+    }
+
+    #[test]
+    fn test_find_all_references_sub_escape_syntax() {
+        // ${!Literal} syntax escapes the variable, treating it as a literal string
+        // These should NOT be detected as resource references
+        let template = json!({
+            "Resources": {
+                "Lambda": {
+                    "Type": "AWS::Lambda::Function",
+                    "Properties": {
+                        "FunctionName": {
+                            "Fn::Sub": "${!Literal}-${MyBucket}"
+                        }
+                    }
+                },
+                "MyBucket": {
+                    "Type": "AWS::S3::Bucket"
+                },
+                "Literal": {
+                    "Type": "AWS::S3::Bucket"
+                }
+            }
+        });
+
+        let references = find_all_references(&template);
+        let lambda_refs = &references["Lambda"];
+
+        // MyBucket should be detected
+        assert!(lambda_refs.contains("MyBucket"));
+
+        // Literal should NOT be detected (it's escaped with ${!...})
+        assert!(!lambda_refs.contains("Literal"));
     }
 }
