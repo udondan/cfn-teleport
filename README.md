@@ -7,6 +7,7 @@
 A command-line tool for managing CloudFormation resources across and within stacks.
 
 **Features:**
+
 - **Move resources between stacks** - Transfer resources from one CloudFormation stack to another
 - **Rename resources within a stack** - Change logical IDs of resources in the same stack
 - **Automatic reference updates** - All CloudFormation references (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`, etc.) are automatically updated
@@ -67,6 +68,7 @@ cfn-teleport --source Stack1 --target Stack2 --resource Bucket21D68F7E8 --resour
 ```
 
 The tool will:
+
 1. Export resources from the source stack
 2. Import them into the target stack
 3. Update all references in both stacks automatically
@@ -81,6 +83,7 @@ cfn-teleport --source MyStack --target MyStack --resource OldBucketName:NewBucke
 ```
 
 The tool will:
+
 1. Rename the logical ID of the resource
 2. Update all references (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`, etc.) automatically
 3. Preserve the physical resource (no deletion/recreation)
