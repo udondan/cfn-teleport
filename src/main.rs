@@ -907,7 +907,7 @@ fn generate_legend(dependency_info: &HashMap<String, ResourceDependencyInfo>) ->
 
     // Show stack interface line if any outputs or parameters exist
     if has_output_refs || has_parameter_deps {
-        legend.push_str("\n  Stack interface:       ⬇️  outputs   ⬆️  parameters  ↕️  both");
+        legend.push_str("\n  Stack interface:       ⬆️  outputs   ⬇️  parameters  ↕️  both");
     }
 
     Some(legend)
@@ -1011,13 +1011,13 @@ async fn format_resources(
                 if info.referenced_by_outputs && info.depends_on_parameters {
                     marker_str.push_str("↕️");
                 } else if info.referenced_by_outputs {
-                    marker_str.push_str("⬇️");
+                    marker_str.push_str("⬆️");
                     if !has_lr && max_emoji_count == 2 {
                         // Pad single emoji to match 2-emoji width if max is 2
                         marker_str.insert_str(0, "  ");
                     }
                 } else if info.depends_on_parameters {
-                    marker_str.push_str("⬆️");
+                    marker_str.push_str("⬇️");
                     if !has_lr && max_emoji_count == 2 {
                         // Pad single emoji to match 2-emoji width if max is 2
                         marker_str.insert_str(0, "  ");
