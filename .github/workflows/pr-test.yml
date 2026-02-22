@@ -230,7 +230,54 @@ jobs:
             exit 1
           fi
 
-          echo "######### TEST 4: Verify refactor mode REJECTS KeyPair alone (dangling reference) #########"
+          echo "######### TEST 4: Move ParameterTable (parameter dependency validation) #########"
+          # Find ParameterTable logical ID dynamically
+          PARAMETER_TABLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("ParameterTable"))')
+          
+          if [ -z "$PARAMETER_TABLE" ]; then
+            echo "✗ Could not find ParameterTable in stack"
+            echo "  PARAMETER_TABLE: '$PARAMETER_TABLE'"
+            exit 1
+          fi
+          
+          echo "Found ParameterTable: $PARAMETER_TABLE"
+          echo "This table depends on ParameterTableName parameter"
+          echo "Both Stack1 and Stack2 have this parameter, so move should succeed..."
+          
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+            --resource "${PARAMETER_TABLE}"
+          
+          DIFF_OUTPUT=$(npx cdk diff 2>&1 || true)
+          if echo "$DIFF_OUTPUT" | grep -E "${PARAMETER_TABLE}"; then
+            echo "✓ ParameterTable moved successfully (parameter exists in both stacks)"
+          else
+            echo "✗ ParameterTable migration failed"
+            exit 1
+          fi
+          
+          echo "Moving ParameterTable back to ${STACK1}..."
+          run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
+            --resource "${PARAMETER_TABLE}"
+          
+          if npx cdk diff --fail; then
+            echo "✓ ParameterTable successfully moved back"
+          else
+            echo "✗ Failed to move ParameterTable back"
+            exit 1
+          fi
+
+          echo "######### TEST 4b: Verify import mode BLOCKS ParameterTable (parameter dependency) #########"
+          # Import mode should block ParameterTable because it depends on parameters
+          # and import mode does NOT copy Parameters section between stacks
+          if run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
+            --resource "${PARAMETER_TABLE}" 2>&1 | grep -q "Cannot use import mode for resources that depend on stack parameters"; then
+            echo "✓ Import mode correctly blocked ParameterTable with parameter dependency"
+          else
+            echo "✗ Import mode should have blocked ParameterTable (depends on parameters)"
+            exit 1
+          fi
+
+          echo "######### TEST 5: Verify refactor mode REJECTS KeyPair alone (dangling reference) #########"
           # Find KeyPair logical ID dynamically
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
           INSTANCE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("Profile") | not)')
@@ -255,7 +302,7 @@ jobs:
             exit 1
           fi
 
-          echo "######### TEST 5: Verify refactor mode REJECTS KeyPair+Instance+dependencies (requires replacement) #########"
+          echo "######### TEST 6: Verify refactor mode REJECTS KeyPair+Instance+dependencies (requires replacement) #########"
           # Find all related resources
           SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
           INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')

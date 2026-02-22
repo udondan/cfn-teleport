@@ -3,16 +3,32 @@ use aws_sdk_cloudformation as cloudformation;
 use aws_sdk_cloudformation::error::ProvideErrorMetadata;
 use clap::{Parser, ValueEnum};
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
-use std::error::Error;
-use uuid::Uuid;
-mod spinner;
 use std::collections::HashMap;
+use std::error::Error;
 use std::io;
 use std::process;
+use uuid::Uuid;
 mod reference_updater;
+mod spinner;
 mod supported_resource_types;
 
 const DEMO: bool = false;
+
+// Dependency marker emojis
+const EMOJI_INCOMING: &str = "➡️";
+const EMOJI_OUTGOING: &str = "⬅️";
+const EMOJI_BIDIRECTIONAL: &str = "↔️";
+const EMOJI_OUTPUTS: &str = "⬆️";
+const EMOJI_PARAMETERS: &str = "⬇️";
+const EMOJI_BOTH_STACK_INTERFACE: &str = "↕️";
+
+/// Holds dependency information for a resource
+struct ResourceDependencyInfo {
+    has_incoming_deps: bool,     // Other resources reference this one
+    has_outgoing_deps: bool,     // This resource references others
+    referenced_by_outputs: bool, // Outputs reference this one
+    depends_on_parameters: bool, // This resource references stack parameters
+}
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Mode {
@@ -124,6 +140,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
+    // Get source template for dependency analysis
+    let source_template = get_template(&client, &source_stack).await?;
+
+    // Determine if this is a cross-stack move or same-stack rename
+    let is_cross_stack = source_stack != target_stack;
+
+    // Fetch target template early for cross-stack parameter validation
+    let target_template = if is_cross_stack {
+        Some(get_template(&client, &target_stack).await?)
+    } else {
+        None
+    };
+
     let selected_resources = match args.resource.clone() {
         Some(resource) => {
             let source_ids = resource
@@ -151,7 +180,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             filter_resources(resource_refs, &source_ids).await?
         }
-        None => select_resources("Select resources to copy", resource_refs).await?,
+        None => {
+            select_resources(
+                "Select resources to copy",
+                resource_refs,
+                &source_template,
+                target_template.as_ref(),
+                is_cross_stack,
+            )
+            .await?
+        }
     };
 
     if selected_resources.is_empty() {
@@ -198,8 +236,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    // Fetch template once and reuse
-    let template_source = get_template(&client, &source_stack).await?;
+    // Reuse the template we already fetched at line 144
+    let template_source = source_template;
 
     if source_stack == target_stack {
         // Same-stack operation: must be renaming, not just moving
@@ -280,7 +318,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         );
     }
 
-    for resource in format_resources(&selected_resources, Some(new_logical_ids_map.clone())).await?
+    for resource in
+        format_resources(&selected_resources, Some(new_logical_ids_map.clone()), None).await?
     {
         println!("  {}", resource);
     }
@@ -312,7 +351,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Cross-stack move: Use refactor or import based on --mode
     if matches!(args.mode, Mode::Refactor) {
         // Use CloudFormation Stack Refactoring API (safer, atomic, but fewer supported resource types)
-        let template_target = get_template(&client, &target_stack).await?;
+        // Reuse the target template we fetched earlier for cross-stack moves
+        let template_target = if let Some(tmpl) = target_template {
+            tmpl
+        } else {
+            get_template(&client, &target_stack).await?
+        };
         return refactor_stack_resources_cross_stack(
             &client,
             &source_stack,
@@ -325,6 +369,73 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Legacy import/export flow (mode == Mode::Import)
+    // IMPORTANT: Import mode does NOT copy parameters from source to target stack.
+    // Resources that depend on parameters will fail to import because the parameter
+    // reference will be invalid in the target stack, causing "No updates" errors
+    // and leaving the resource in a broken state (deleted from source, not in target).
+    // We MUST block any resources with parameter dependencies in import mode.
+    let mut blocked_resources_with_params = Vec::new();
+    for old_id in new_logical_ids_map.keys() {
+        if let Some(resource) = selected_resources
+            .iter()
+            .find(|r| r.logical_resource_id().unwrap_or_default() == old_id)
+        {
+            // Check if this resource depends on parameters
+            let all_references = reference_updater::find_all_references(&template_source);
+            let resource_references = all_references
+                .get(old_id.as_str())
+                .cloned()
+                .unwrap_or_default();
+
+            // Get parameter names from source template
+            let parameter_names: std::collections::HashSet<String> = template_source
+                .get("Parameters")
+                .and_then(|params| params.as_object())
+                .map(|params_obj| {
+                    params_obj
+                        .keys()
+                        .map(|k| k.to_string())
+                        .collect::<std::collections::HashSet<String>>()
+                })
+                .unwrap_or_default();
+
+            // Check if resource references any parameters
+            let depends_on_params: Vec<String> = resource_references
+                .iter()
+                .filter(|ref_name| parameter_names.contains(*ref_name))
+                .map(|s| s.to_string())
+                .collect();
+
+            if !depends_on_params.is_empty() {
+                blocked_resources_with_params.push((
+                    old_id.clone(),
+                    resource.resource_type().unwrap_or_default().to_string(),
+                    depends_on_params,
+                ));
+            }
+        }
+    }
+
+    if !blocked_resources_with_params.is_empty() {
+        eprintln!("\nCannot use import mode for resources that depend on stack parameters:\n");
+        for (id, typ, params) in &blocked_resources_with_params {
+            eprintln!(
+                "  - {} ({}) - depends on parameters: {}",
+                id,
+                typ,
+                params.join(", ")
+            );
+        }
+        eprintln!(
+            "\nImport mode does NOT copy parameters between stacks, which causes resources to be"
+        );
+        eprintln!("deleted from source stack but fail to import to target stack, leaving them orphaned.\n");
+        eprintln!(
+            "Use --mode refactor instead, or remove parameter dependencies from these resources.\n"
+        );
+        process::exit(1);
+    }
+
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
 
     let template_retained =
@@ -334,8 +445,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
 
-    let (template_target_with_deletion_policy, template_target) = add_resources(
-        get_template(&client, &target_stack).await?,
+    let (template_target_with_deletion_policy, template_target_final) = add_resources(
+        if let Some(tmpl) = target_template {
+            tmpl
+        } else {
+            get_template(&client, &target_stack).await?
+        },
         template_source.clone(),
         new_logical_ids_map.clone(),
     );
@@ -346,7 +461,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &new_logical_ids_map,
     );
     let template_target =
-        reference_updater::update_template_references(template_target, &new_logical_ids_map);
+        reference_updater::update_template_references(template_target_final, &new_logical_ids_map);
 
     for template in [
         template_retained.clone(),
@@ -565,8 +680,21 @@ async fn filter_resources<'a>(
 async fn select_resources<'a>(
     prompt: &str,
     resources: &'a [&aws_sdk_cloudformation::types::StackResourceSummary],
+    template: &serde_json::Value,
+    target_template: Option<&serde_json::Value>,
+    is_cross_stack: bool,
 ) -> Result<Vec<&'a aws_sdk_cloudformation::types::StackResourceSummary>, Box<dyn Error>> {
-    let items = format_resources(resources, None).await?;
+    // Compute dependency markers for all resources
+    let dependency_info = compute_dependency_markers(resources, template);
+
+    // Generate and display legend if markers are present
+    if let Some(legend) = generate_legend(&dependency_info) {
+        println!("{}\n", legend);
+    }
+
+    // Format resources with dependency markers
+    let items = format_resources(resources, None, Some(&dependency_info)).await?;
+
     let selection = MultiSelect::with_theme(&ColorfulTheme::default())
         .with_prompt(prompt)
         .report(false)
@@ -574,10 +702,133 @@ async fn select_resources<'a>(
         .interact_on_opt(&Term::stderr())?;
 
     match selection {
-        Some(indices) => Ok(indices
-            .into_iter()
-            .map(|index| resources[index])
-            .collect::<Vec<_>>()),
+        Some(indices) => {
+            // Validate selection for cross-stack moves
+            if is_cross_stack {
+                let mut blocked_outputs = Vec::new();
+                let mut blocked_parameters = Vec::new();
+
+                // Get target template parameters if available
+                let target_parameters: std::collections::HashSet<String> =
+                    if let Some(target_tmpl) = target_template {
+                        target_tmpl
+                            .get("Parameters")
+                            .and_then(|params| params.as_object())
+                            .map(|params_obj| {
+                                params_obj
+                                    .keys()
+                                    .map(|k| k.to_string())
+                                    .collect::<std::collections::HashSet<String>>()
+                            })
+                            .unwrap_or_default()
+                    } else {
+                        std::collections::HashSet::new()
+                    };
+
+                // Get source template parameters
+                let source_parameters: std::collections::HashSet<String> = template
+                    .get("Parameters")
+                    .and_then(|params| params.as_object())
+                    .map(|params_obj| {
+                        params_obj
+                            .keys()
+                            .map(|k| k.to_string())
+                            .collect::<std::collections::HashSet<String>>()
+                    })
+                    .unwrap_or_default();
+
+                for &index in &indices {
+                    let resource = resources[index];
+                    let logical_id = resource.logical_resource_id().unwrap_or_default();
+
+                    if let Some(info) = dependency_info.get(logical_id) {
+                        // Block resources referenced by outputs
+                        if info.referenced_by_outputs {
+                            blocked_outputs.push((
+                                logical_id.to_string(),
+                                resource.resource_type().unwrap_or_default().to_string(),
+                            ));
+                        }
+
+                        // Block resources that depend on parameters not present in target
+                        if info.depends_on_parameters {
+                            // Find which parameters this resource depends on
+                            let all_references = reference_updater::find_all_references(template);
+                            let resource_references =
+                                all_references.get(logical_id).cloned().unwrap_or_default();
+
+                            // Check which parameters are missing in target
+                            let missing_params: Vec<String> = resource_references
+                                .iter()
+                                .filter(|ref_name| source_parameters.contains(*ref_name))
+                                .filter(|param_name| !target_parameters.contains(*param_name))
+                                .map(|s| s.to_string())
+                                .collect();
+
+                            if !missing_params.is_empty() {
+                                blocked_parameters.push((
+                                    logical_id.to_string(),
+                                    resource.resource_type().unwrap_or_default().to_string(),
+                                    missing_params,
+                                ));
+                            }
+                        }
+                    }
+                }
+
+                // Build error messages
+                let mut error_messages = Vec::new();
+
+                if !blocked_outputs.is_empty() {
+                    let resource_list = blocked_outputs
+                        .iter()
+                        .map(|(id, typ)| format!("  - {} ({})", id, typ))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    error_messages.push(format!(
+                        "Cannot select the following resources because they are referenced by stack outputs:\n{}\n\
+                         Outputs cannot be moved between stacks. Consider:\n\
+                         - Removing or updating the outputs before moving\n\
+                         - Using same-stack rename instead (references will be updated automatically)",
+                        resource_list
+                    ));
+                }
+
+                if !blocked_parameters.is_empty() {
+                    let resource_list = blocked_parameters
+                        .iter()
+                        .map(|(id, typ, params)| {
+                            format!(
+                                "  - {} ({}) - missing parameters: {}",
+                                id,
+                                typ,
+                                params.join(", ")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    error_messages.push(format!(
+                        "Cannot select the following resources because they depend on parameters not present in target stack:\n{}\n\
+                         Consider:\n\
+                         - Adding the required parameters to the target stack\n\
+                         - Removing parameter dependencies from these resources",
+                        resource_list
+                    ));
+                }
+
+                // If any resources are blocked, return error
+                if !error_messages.is_empty() {
+                    return Err(error_messages.join("\n\n").into());
+                }
+            }
+
+            Ok(indices
+                .into_iter()
+                .map(|index| resources[index])
+                .collect::<Vec<_>>())
+        }
         None => Err("User did not select anything".into()),
     }
 }
@@ -682,14 +933,201 @@ async fn get_template(
     Ok(parsed_template)
 }
 
+/// Computes dependency markers for resources based on template analysis.
+///
+/// Analyzes the template to identify which resources:
+/// - Have incoming dependencies (other resources reference them)
+/// - Have outgoing dependencies (they reference other resources)
+/// - Are referenced by stack outputs
+/// - Depend on stack parameters
+///
+/// # Arguments
+/// * `resources` - Slice of resource summaries to analyze
+/// * `template` - The CloudFormation template as JSON
+///
+/// # Returns
+/// HashMap mapping logical resource IDs to their dependency information
+fn compute_dependency_markers(
+    resources: &[&cloudformation::types::StackResourceSummary],
+    template: &serde_json::Value,
+) -> HashMap<String, ResourceDependencyInfo> {
+    let mut dependency_map: HashMap<String, ResourceDependencyInfo> = HashMap::new();
+
+    // Get all references in the template
+    let all_references = reference_updater::find_all_references(template);
+
+    // Check which resources are referenced by outputs
+    let output_references = all_references.get("Outputs").cloned().unwrap_or_default();
+
+    // Get list of parameter names from the template (compute once, reuse for all resources)
+    let parameter_names: std::collections::HashSet<String> = template
+        .get("Parameters")
+        .and_then(|params| params.as_object())
+        .map(|params_obj| {
+            params_obj
+                .keys()
+                .map(|k| k.to_string())
+                .collect::<std::collections::HashSet<String>>()
+        })
+        .unwrap_or_default();
+
+    // Get the set of resources in the template (compute once, reuse for all resources)
+    let resource_names: std::collections::HashSet<String> = template
+        .get("Resources")
+        .and_then(|res| res.as_object())
+        .map(|res_obj| {
+            res_obj
+                .keys()
+                .map(|k| k.to_string())
+                .collect::<std::collections::HashSet<String>>()
+        })
+        .unwrap_or_default();
+
+    // Initialize dependency info for all resources
+    for resource in resources {
+        let logical_id = resource.logical_resource_id().unwrap_or_default();
+        let referenced_by_outputs = output_references.contains(logical_id);
+
+        // Check if this resource is referenced by any other resource (incoming)
+        let mut has_incoming_deps = false;
+        for (referencing_resource, referenced_resources) in &all_references {
+            // Skip the Outputs section - we already handled it
+            if referencing_resource == "Outputs" {
+                continue;
+            }
+            // Check if this resource is in the referenced set
+            if referenced_resources.contains(logical_id) {
+                has_incoming_deps = true;
+                break;
+            }
+        }
+
+        // Check if this resource references other resources (outgoing)
+        // First, get what this resource references
+        let resource_references = all_references.get(logical_id).cloned().unwrap_or_default();
+
+        // A resource has outgoing dependencies if it references OTHER RESOURCES
+        // (not parameters, not pseudo-parameters)
+        let has_outgoing_deps = resource_references
+            .iter()
+            .any(|ref_name| resource_names.contains(ref_name));
+
+        // Check if this resource depends on parameters
+        // Parameters are things referenced by this resource but not in the Resources section
+        let depends_on_parameters = resource_references
+            .iter()
+            .any(|ref_name| parameter_names.contains(ref_name));
+
+        dependency_map.insert(
+            logical_id.to_string(),
+            ResourceDependencyInfo {
+                has_incoming_deps,
+                has_outgoing_deps,
+                referenced_by_outputs,
+                depends_on_parameters,
+            },
+        );
+    }
+
+    dependency_map
+}
+
+/// Generates a legend for dependency markers based on what markers are present.
+///
+/// Only returns a legend if there are actually markers to display.
+/// Only includes entries for markers that are present in the dependency info.
+///
+/// # Arguments
+/// * `dependency_info` - Map of resource IDs to their dependency information
+///
+/// # Returns
+/// Some(legend string) if markers are present, None if no markers
+fn generate_legend(dependency_info: &HashMap<String, ResourceDependencyInfo>) -> Option<String> {
+    let mut has_incoming_deps = false;
+    let mut has_outgoing_deps = false;
+    let mut has_output_refs = false;
+    let mut has_parameter_deps = false;
+
+    // Scan to see which markers are present
+    for info in dependency_info.values() {
+        if info.has_incoming_deps {
+            has_incoming_deps = true;
+        }
+        if info.has_outgoing_deps {
+            has_outgoing_deps = true;
+        }
+        if info.referenced_by_outputs {
+            has_output_refs = true;
+        }
+        if info.depends_on_parameters {
+            has_parameter_deps = true;
+        }
+        // Early exit if we found all four
+        if has_incoming_deps && has_outgoing_deps && has_output_refs && has_parameter_deps {
+            break;
+        }
+    }
+
+    // If no markers, return None
+    if !has_incoming_deps && !has_outgoing_deps && !has_output_refs && !has_parameter_deps {
+        return None;
+    }
+
+    // Build legend with only present markers
+    let mut legend = String::from("Legend:");
+
+    // Show resource dependency line if any resource deps exist
+    if has_incoming_deps || has_outgoing_deps {
+        legend.push_str(&format!(
+            "\n  Resource dependencies: {}  incoming  {}  outgoing    {}  bidirectional",
+            EMOJI_INCOMING, EMOJI_OUTGOING, EMOJI_BIDIRECTIONAL
+        ));
+    }
+
+    // Show stack interface line if any outputs or parameters exist
+    if has_output_refs || has_parameter_deps {
+        legend.push_str(&format!(
+            "\n  Stack interface:       {}  outputs   {}  parameters  {}  both",
+            EMOJI_OUTPUTS, EMOJI_PARAMETERS, EMOJI_BOTH_STACK_INTERFACE
+        ));
+    }
+
+    Some(legend)
+}
+
 async fn format_resources(
     resources: &[&cloudformation::types::StackResourceSummary],
     resource_id_map: Option<HashMap<String, String>>,
+    dependency_info: Option<&HashMap<String, ResourceDependencyInfo>>,
 ) -> Result<Vec<String>, io::Error> {
     let mut max_lengths = [0; 3];
     let mut formatted_resources = Vec::new();
 
     let mut renamed = false;
+
+    // Calculate max emoji count across all resources
+    let max_emoji_count = if let Some(dep_info) = dependency_info {
+        resources
+            .iter()
+            .map(|resource| {
+                let logical_id = resource.logical_resource_id().unwrap_or_default();
+                if let Some(info) = dep_info.get(logical_id) {
+                    let has_lr = info.has_incoming_deps || info.has_outgoing_deps;
+                    let has_ud = info.referenced_by_outputs || info.depends_on_parameters;
+                    match (has_lr, has_ud) {
+                        (true, true) => 2,
+                        (true, false) | (false, true) => 1,
+                        (false, false) => 0,
+                    }
+                } else {
+                    0
+                }
+            })
+            .max()
+            .unwrap_or(0)
+    } else {
+        0
+    };
 
     for resource in resources.iter() {
         let resource_type = resource.resource_type().unwrap_or_default();
@@ -723,30 +1161,121 @@ async fn format_resources(
             None => logical_id.to_string(),
         };
 
+        // Generate marker string based on dependency info
+        // Dynamically adjust spacing based on max emoji count
+        let marker = if max_emoji_count == 0 {
+            // No dependencies at all - no marker column needed
+            String::new()
+        } else if let Some(dep_info) = dependency_info {
+            if let Some(info) = dep_info.get(logical_id) {
+                let mut marker_str = String::new();
+
+                // Left/Right arrows for resource dependencies
+                if info.has_incoming_deps && info.has_outgoing_deps {
+                    marker_str.push_str(EMOJI_BIDIRECTIONAL);
+                } else if info.has_incoming_deps {
+                    marker_str.push_str(EMOJI_INCOMING);
+                } else if info.has_outgoing_deps {
+                    marker_str.push_str(EMOJI_OUTGOING);
+                }
+
+                // Add space between if we have both types
+                let has_lr = !marker_str.is_empty();
+                let has_ud = info.referenced_by_outputs || info.depends_on_parameters;
+                if has_lr && has_ud {
+                    marker_str.push(' ');
+                } else if has_lr && !has_ud && max_emoji_count == 2 {
+                    // Pad single emoji to match 2-emoji width if max is 2
+                    marker_str.push_str("  ");
+                }
+
+                // Up/Down arrows for outputs/parameters
+                if info.referenced_by_outputs && info.depends_on_parameters {
+                    marker_str.push_str(EMOJI_BOTH_STACK_INTERFACE);
+                } else if info.referenced_by_outputs {
+                    marker_str.push_str(EMOJI_OUTPUTS);
+                    if !has_lr && max_emoji_count == 2 {
+                        // Pad single emoji to match 2-emoji width if max is 2
+                        marker_str.insert_str(0, "  ");
+                    }
+                } else if info.depends_on_parameters {
+                    marker_str.push_str(EMOJI_PARAMETERS);
+                    if !has_lr && max_emoji_count == 2 {
+                        // Pad single emoji to match 2-emoji width if max is 2
+                        marker_str.insert_str(0, "  ");
+                    }
+                }
+
+                // If no markers for this resource, pad based on max_emoji_count
+                if marker_str.is_empty() {
+                    match max_emoji_count {
+                        1 => "  ".to_string(),  // Match ~1 emoji width
+                        2 => "   ".to_string(), // Match ~2 emoji width
+                        _ => String::new(),
+                    }
+                } else {
+                    marker_str
+                }
+            } else {
+                // No info for this resource, pad based on max_emoji_count
+                match max_emoji_count {
+                    1 => "  ".to_string(),
+                    2 => "   ".to_string(),
+                    _ => String::new(),
+                }
+            }
+        } else {
+            String::new()
+        };
+
         let output = if renamed {
-            let renamed = if logical_id != new_logical_id {
+            let renamed_indicator = if logical_id != new_logical_id {
                 format!(" ► {}", new_logical_id)
             } else {
                 "".to_string()
             };
+            if max_emoji_count > 0 {
+                format!(
+                    "{:<width1$}  {}  {:<width2$}{:<width3$}  {}",
+                    resource_type,
+                    marker,
+                    logical_id,
+                    renamed_indicator,
+                    physical_id,
+                    width1 = max_lengths[0],
+                    width2 = max_lengths[1],
+                    width3 = max_lengths[2] + 4
+                )
+            } else {
+                format!(
+                    "{:<width1$} {:<width2$}{:<width3$}  {}",
+                    resource_type,
+                    logical_id,
+                    renamed_indicator,
+                    physical_id,
+                    width1 = max_lengths[0],
+                    width2 = max_lengths[1],
+                    width3 = max_lengths[2] + 4
+                )
+            }
+        } else if max_emoji_count > 0 {
             format!(
-                "{:<width1$}  {:<width2$}{:<width3$}   {}",
+                "{:<width1$}  {}  {:<width2$}  {}",
                 resource_type,
+                marker,
                 logical_id,
-                renamed,
                 physical_id,
-                width1 = max_lengths[0] + 2,
-                width2 = max_lengths[1],
-                width3 = max_lengths[2] + 4
+                width1 = max_lengths[0],
+                width2 = max_lengths[1]
             )
         } else {
             format!(
-                "{:<width1$}  {:<width2$}  {}",
+                "{:<width1$} {:<width2$}  {}",
                 resource_type,
                 logical_id,
                 physical_id,
-                width1 = max_lengths[0] + 2,
-                width2 = max_lengths[1] + 2
+                width1 = max_lengths[0],
+                width2 = max_lengths[1]
             )
         };
 

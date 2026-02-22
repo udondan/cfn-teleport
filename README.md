@@ -72,6 +72,15 @@ cfn-teleport --source Stack1 --target Stack2 --resource Bucket21D68F7E8 --resour
 
 cfn-teleport supports two modes for cross-stack resource moves:
 
+| Feature                    | Refactor Mode (Default)                          | Import Mode (Legacy)                        |
+| -------------------------- | ------------------------------------------------ | ------------------------------------------- |
+| **Safety**                 | ✅ Atomic, rolls back on failure                 | ⚠️ Multi-step, can fail mid-way             |
+| **Resource Orphaning**     | ✅ Never happens                                 | ⚠️ Possible on failure                      |
+| **Resource Tags**          | ✅ Updated to new stack                          | ⚠️ Shows old stack name                     |
+| **Supported Types**        | ❌ Fewer (no KeyPair, etc.)                      | ✅ More types                               |
+| **Parameter Dependencies** | ✅ Allowed (target must have matching parameter) | ❌ Blocked (not validated for import mode)  |
+| **Recommendation**         | ✅ Use by default                                | ⚠️ Only for unsupported types               |
+
 ##### Refactor Mode (Default, Recommended)
 
 Uses the AWS CloudFormation Stack Refactoring API:
@@ -81,12 +90,16 @@ cfn-teleport --source Stack1 --target Stack2 --resource MyBucket --mode refactor
 ```
 
 **Advantages:**
+
 - ✅ **Safe and atomic** - Either succeeds completely or rolls back with no changes
 - ✅ **No orphaned resources** - Resources never end up outside of any stack
 - ✅ **Updates resource tags** - `aws:cloudformation:*` tags reflect new stack ownership
+- ✅ **Validates parameter dependencies** - Checks that target stack has required parameters before moving
 
 **Limitations:**
+
 - ❌ **Fewer supported resource types** - Some resources (like `AWS::EC2::KeyPair`) cannot be moved because updating their tags requires resource replacement
+- ❌ **Target stack must have matching parameters** - Resources depending on parameters require the same parameter to exist in the target stack
 
 ##### Import Mode (Legacy)
 
@@ -97,15 +110,19 @@ cfn-teleport --source Stack1 --target Stack2 --resource MyKeyPair --mode import
 ```
 
 **Advantages:**
+
 - ✅ **More resource types** - Can move resources like `AWS::EC2::KeyPair` that don't allow tag updates
 - ✅ **No tag updates required** - Only updates CloudFormation's internal tracking database
 
 **Risks:**
+
 - ⚠️ **Can orphan resources** - If the operation fails mid-way (steps 5-6), resources may be left outside any stack
 - ⚠️ **Not atomic** - Multi-step process that can leave stacks in inconsistent state on failure
 - ⚠️ **Outdated tags** - Resource tags still reference old stack (cosmetic issue only)
+- ⚠️ **Cannot move resources with parameter dependencies** - For safety, import mode blocks all resources that depend on stack parameters (not validated for import mode)
 
 **When to use import mode:**
+
 - You need to move a resource type that refactor mode doesn't support
 - You understand and accept the risk of potential resource orphaning
 - You have a backup/recovery plan if the operation fails
