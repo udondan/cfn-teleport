@@ -146,6 +146,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Determine if this is a cross-stack move or same-stack rename
     let is_cross_stack = source_stack != target_stack;
 
+    // Fetch target template early for cross-stack parameter validation
+    let target_template = if is_cross_stack {
+        Some(get_template(&client, &target_stack).await?)
+    } else {
+        None
+    };
+
     let selected_resources = match args.resource.clone() {
         Some(resource) => {
             let source_ids = resource
@@ -178,6 +185,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 "Select resources to copy",
                 resource_refs,
                 &source_template,
+                target_template.as_ref(),
                 is_cross_stack,
             )
             .await?
@@ -228,8 +236,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    // Fetch template once and reuse
-    let template_source = get_template(&client, &source_stack).await?;
+    // Reuse the template we already fetched at line 144
+    let template_source = source_template;
 
     if source_stack == target_stack {
         // Same-stack operation: must be renaming, not just moving
@@ -343,7 +351,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Cross-stack move: Use refactor or import based on --mode
     if matches!(args.mode, Mode::Refactor) {
         // Use CloudFormation Stack Refactoring API (safer, atomic, but fewer supported resource types)
-        let template_target = get_template(&client, &target_stack).await?;
+        // Reuse the target template we fetched earlier for cross-stack moves
+        let template_target = if let Some(tmpl) = target_template {
+            tmpl
+        } else {
+            get_template(&client, &target_stack).await?
+        };
         return refactor_stack_resources_cross_stack(
             &client,
             &source_stack,
@@ -365,8 +378,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let template_removed =
         remove_resources(template_source.clone(), resource_ids_to_remove.clone());
 
-    let (template_target_with_deletion_policy, template_target) = add_resources(
-        get_template(&client, &target_stack).await?,
+    let (template_target_with_deletion_policy, template_target_final) = add_resources(
+        if let Some(tmpl) = target_template {
+            tmpl
+        } else {
+            get_template(&client, &target_stack).await?
+        },
         template_source.clone(),
         new_logical_ids_map.clone(),
     );
@@ -377,7 +394,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         &new_logical_ids_map,
     );
     let template_target =
-        reference_updater::update_template_references(template_target, &new_logical_ids_map);
+        reference_updater::update_template_references(template_target_final, &new_logical_ids_map);
 
     for template in [
         template_retained.clone(),
@@ -597,6 +614,7 @@ async fn select_resources<'a>(
     prompt: &str,
     resources: &'a [&aws_sdk_cloudformation::types::StackResourceSummary],
     template: &serde_json::Value,
+    target_template: Option<&serde_json::Value>,
     is_cross_stack: bool,
 ) -> Result<Vec<&'a aws_sdk_cloudformation::types::StackResourceSummary>, Box<dyn Error>> {
     // Compute dependency markers for all resources
@@ -620,38 +638,122 @@ async fn select_resources<'a>(
         Some(indices) => {
             // Validate selection for cross-stack moves
             if is_cross_stack {
-                let mut blocked_resources = Vec::new();
+                let mut blocked_outputs = Vec::new();
+                let mut blocked_parameters = Vec::new();
+
+                // Get target template parameters if available
+                let target_parameters: std::collections::HashSet<String> =
+                    if let Some(target_tmpl) = target_template {
+                        target_tmpl
+                            .get("Parameters")
+                            .and_then(|params| params.as_object())
+                            .map(|params_obj| {
+                                params_obj
+                                    .keys()
+                                    .map(|k| k.to_string())
+                                    .collect::<std::collections::HashSet<String>>()
+                            })
+                            .unwrap_or_default()
+                    } else {
+                        std::collections::HashSet::new()
+                    };
+
+                // Get source template parameters
+                let source_parameters: std::collections::HashSet<String> = template
+                    .get("Parameters")
+                    .and_then(|params| params.as_object())
+                    .map(|params_obj| {
+                        params_obj
+                            .keys()
+                            .map(|k| k.to_string())
+                            .collect::<std::collections::HashSet<String>>()
+                    })
+                    .unwrap_or_default();
 
                 for &index in &indices {
                     let resource = resources[index];
                     let logical_id = resource.logical_resource_id().unwrap_or_default();
 
                     if let Some(info) = dependency_info.get(logical_id) {
+                        // Block resources referenced by outputs
                         if info.referenced_by_outputs {
-                            blocked_resources.push((
+                            blocked_outputs.push((
                                 logical_id.to_string(),
                                 resource.resource_type().unwrap_or_default().to_string(),
                             ));
                         }
+
+                        // Block resources that depend on parameters not present in target
+                        if info.depends_on_parameters {
+                            // Find which parameters this resource depends on
+                            let all_references = reference_updater::find_all_references(template);
+                            let resource_references =
+                                all_references.get(logical_id).cloned().unwrap_or_default();
+
+                            // Check which parameters are missing in target
+                            let missing_params: Vec<String> = resource_references
+                                .iter()
+                                .filter(|ref_name| source_parameters.contains(*ref_name))
+                                .filter(|param_name| !target_parameters.contains(*param_name))
+                                .map(|s| s.to_string())
+                                .collect();
+
+                            if !missing_params.is_empty() {
+                                blocked_parameters.push((
+                                    logical_id.to_string(),
+                                    resource.resource_type().unwrap_or_default().to_string(),
+                                    missing_params,
+                                ));
+                            }
+                        }
                     }
                 }
 
-                // If any resources are blocked, return error
-                if !blocked_resources.is_empty() {
-                    let resource_list = blocked_resources
+                // Build error messages
+                let mut error_messages = Vec::new();
+
+                if !blocked_outputs.is_empty() {
+                    let resource_list = blocked_outputs
                         .iter()
                         .map(|(id, typ)| format!("  - {} ({})", id, typ))
                         .collect::<Vec<_>>()
                         .join("\n");
 
-                    return Err(format!(
-                        "Cannot select the following resources for cross-stack move because they are referenced by stack outputs:\n{}\n\n\
+                    error_messages.push(format!(
+                        "Cannot select the following resources because they are referenced by stack outputs:\n{}\n\
                          Outputs cannot be moved between stacks. Consider:\n\
                          - Removing or updating the outputs before moving\n\
                          - Using same-stack rename instead (references will be updated automatically)",
                         resource_list
-                    )
-                    .into());
+                    ));
+                }
+
+                if !blocked_parameters.is_empty() {
+                    let resource_list = blocked_parameters
+                        .iter()
+                        .map(|(id, typ, params)| {
+                            format!(
+                                "  - {} ({}) - missing parameters: {}",
+                                id,
+                                typ,
+                                params.join(", ")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    error_messages.push(format!(
+                        "Cannot select the following resources because they depend on parameters not present in target stack:\n{}\n\
+                         Consider:\n\
+                         - Adding the required parameters to the target stack\n\
+                         - Removing parameter dependencies from these resources",
+                        resource_list
+                    ));
+                }
+
+                // If any resources are blocked, return error
+                if !error_messages.is_empty() {
+                    return Err(error_messages.join("\n\n").into());
                 }
             }
 
@@ -790,12 +892,24 @@ fn compute_dependency_markers(
     // Check which resources are referenced by outputs
     let output_references = all_references.get("Outputs").cloned().unwrap_or_default();
 
-    // Get list of parameter names from the template
+    // Get list of parameter names from the template (compute once, reuse for all resources)
     let parameter_names: std::collections::HashSet<String> = template
         .get("Parameters")
         .and_then(|params| params.as_object())
         .map(|params_obj| {
             params_obj
+                .keys()
+                .map(|k| k.to_string())
+                .collect::<std::collections::HashSet<String>>()
+        })
+        .unwrap_or_default();
+
+    // Get the set of resources in the template (compute once, reuse for all resources)
+    let resource_names: std::collections::HashSet<String> = template
+        .get("Resources")
+        .and_then(|res| res.as_object())
+        .map(|res_obj| {
+            res_obj
                 .keys()
                 .map(|k| k.to_string())
                 .collect::<std::collections::HashSet<String>>()
@@ -824,18 +938,6 @@ fn compute_dependency_markers(
         // Check if this resource references other resources (outgoing)
         // First, get what this resource references
         let resource_references = all_references.get(logical_id).cloned().unwrap_or_default();
-
-        // Get the set of resources in the template
-        let resource_names: std::collections::HashSet<String> = template
-            .get("Resources")
-            .and_then(|res| res.as_object())
-            .map(|res_obj| {
-                res_obj
-                    .keys()
-                    .map(|k| k.to_string())
-                    .collect::<std::collections::HashSet<String>>()
-            })
-            .unwrap_or_default();
 
         // A resource has outgoing dependencies if it references OTHER RESOURCES
         // (not parameters, not pseudo-parameters)
