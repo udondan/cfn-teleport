@@ -227,21 +227,58 @@ jobs:
             exit 1
           fi
 
-          echo "######### TEST 4: Verify refactor mode REJECTS KeyPair (expected failure) #########"
+          echo "######### TEST 4: Verify refactor mode REJECTS KeyPair alone (dangling reference) #########"
           # Find KeyPair logical ID dynamically
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
+          INSTANCE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("Profile") | not)')
+          
           if [ -z "$KEY_PAIR" ]; then
             echo "✗ Could not find KeyPair in stack"
             echo "  KEY_PAIR: '$KEY_PAIR'"
             exit 1
           fi
           echo "Found KeyPair: $KEY_PAIR"
+          echo "Found Instance: $INSTANCE"
 
-          if cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}"; then
-            echo "✗ Refactor mode should have failed with KeyPair but didn't"
-            exit 1
+          # Try to move KeyPair without Instance - should fail with dangling reference error
+          ERROR_OUTPUT=$(cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" 2>&1 || true)
+          
+          if echo "$ERROR_OUTPUT" | grep -q "dangling reference"; then
+            echo "✓ Refactor mode correctly rejected KeyPair due to dangling reference"
           else
-            echo "✓ Refactor mode correctly rejected KeyPair (expected failure)"
+            echo "✗ Refactor mode failed but not with expected error"
+            echo "Error output: $ERROR_OUTPUT"
+            exit 1
+          fi
+
+          echo "######### TEST 5: Verify refactor mode REJECTS KeyPair+Instance+dependencies (requires replacement) #########"
+          # Find all related resources
+          SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
+          INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
+          ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
+          
+          echo "Moving KeyPair with all dependencies:"
+          echo "  KEY_PAIR: $KEY_PAIR"
+          echo "  INSTANCE: $INSTANCE"
+          echo "  SECURITY_GROUP: $SECURITY_GROUP"
+          echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
+          echo "  ROLE: $ROLE"
+          
+          # Try to move KeyPair WITH all dependencies - should fail because KeyPair requires recreation
+          ERROR_OUTPUT=$(cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+            --resource "${KEY_PAIR}" \
+            --resource "${INSTANCE}" \
+            --resource "${SECURITY_GROUP}" \
+            --resource "${INSTANCE_PROFILE}" \
+            --resource "${ROLE}" \
+            2>&1 || true)
+          
+          if echo "$ERROR_OUTPUT" | grep -qE "(replace|replacement|recreate|cannot be updated)"; then
+            echo "✓ Refactor mode correctly rejected KeyPair+Instance due to replacement requirement"
+          else
+            echo "✗ Refactor mode failed but not with expected error (should mention replacement/recreation)"
+            echo "Error output: $ERROR_OUTPUT"
+            exit 1
           fi
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -256,6 +293,21 @@ jobs:
       - name: Test import mode (legacy) with all resource types including KeyPair
         working-directory: test/cdk
         run: |
+          # Find KeyPair and Instance logical IDs dynamically (KEY_PAIR and INSTANCE set in previous step's env are not accessible here)
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
+          INSTANCE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("Profile") | not)')
+          SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
+          INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
+          ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
+          
+          echo "Found resources for import mode test:"
+          echo "  KEY_PAIR: $KEY_PAIR"
+          echo "  INSTANCE: $INSTANCE"
+          echo "  SECURITY_GROUP: $SECURITY_GROUP"
+          echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
+          echo "  ROLE: $ROLE"
+
           echo "######### Testing IMPORT mode migration from ${STACK1} to ${STACK2} #########"
           cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
             --resource "${BUCKET1}" \
@@ -295,11 +347,6 @@ jobs:
           STACK2: CfnTeleportTest2
           BUCKET1: Bucket182C536A1
           BUCKET2: Bucket21D68F7E8
-          INSTANCE: InstanceC1063A87
-          SECURITY_GROUP: SecurityGroupDD263621
-          KEY_PAIR: KeyPair
-          INSTANCE_PROFILE: InstanceInstanceProfileAB5AEF02
-          ROLE: Role1ABCC5F0
           DYNAMO_TABLE: DynamoDbTable6316879D
 
       - name: Test same-stack renaming - comprehensive reference tests
