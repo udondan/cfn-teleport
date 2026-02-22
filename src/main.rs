@@ -55,7 +55,7 @@ impl Template {
     fn to_string(&self) -> Result<String, Box<dyn Error>> {
         match self.format {
             TemplateFormat::Json => Ok(serde_json::to_string(&self.content)?),
-            TemplateFormat::Yaml => Ok(serde_yaml::to_string(&self.content)?),
+            TemplateFormat::Yaml => Ok(serde_yml::to_string(&self.content)?),
         }
     }
 }
@@ -1023,7 +1023,7 @@ async fn get_template(
                 Err(_cf_yaml_err) => {
                     // If CF parser fails, try standard YAML parser as fallback
                     let parsed: serde_json::Value =
-                        serde_yaml::from_str(template_str).map_err(|yaml_err| {
+                        serde_yml::from_str(template_str).map_err(|yaml_err| {
                             format!(
                                 "Failed to parse template as JSON or YAML. YAML error: {}",
                                 yaml_err
@@ -2269,7 +2269,7 @@ Resources:
         assert!(json_result.is_err());
 
         // YAML parsing should work
-        let yaml_result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        let yaml_result = serde_yml::from_str::<serde_json::Value>(yaml_template);
         assert!(yaml_result.is_ok());
         let parsed = yaml_result.unwrap();
         assert_eq!(
@@ -2299,7 +2299,7 @@ Resources:
         assert!(json_result.is_err());
 
         // Fallback to YAML (should succeed)
-        let yaml_result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        let yaml_result = serde_yml::from_str::<serde_json::Value>(yaml_template);
         assert!(yaml_result.is_ok());
     }
 
@@ -2325,7 +2325,7 @@ Resources:
 "#;
 
         // YAML parser should handle basic YAML structure
-        let result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        let result = serde_yml::from_str::<serde_json::Value>(yaml_template);
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert!(parsed["Resources"]["MyBucket"].is_object());
@@ -2356,8 +2356,8 @@ Resources:
       RoleName: !GetAtt MyBucket.Arn
 "#;
 
-        // Standard serde_yaml parser should fail with intrinsic function tags
-        let serde_result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        // Standard YAML parser (serde_yml) should fail with intrinsic function tags
+        let serde_result = serde_yml::from_str::<serde_json::Value>(yaml_template);
         assert!(serde_result.is_err());
 
         // Our cfn_yaml parser should handle CloudFormation tags
