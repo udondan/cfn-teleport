@@ -2409,4 +2409,77 @@ Resources:
         let getatt_value = &parsed["Resources"]["MyRole"]["Properties"]["RoleName"]["Fn::GetAtt"];
         assert!(getatt_value.is_array() || getatt_value.is_string());
     }
+
+    #[test]
+    fn test_template_format_preservation_json() {
+        // Test: Template preserves JSON format when serialized
+        use serde_json::json;
+
+        let json_content = json!({
+            "AWSTemplateFormatVersion": "2010-09-09",
+            "Resources": {
+                "MyBucket": {
+                    "Type": "AWS::S3::Bucket"
+                }
+            }
+        });
+
+        let template = Template::new(json_content, TemplateFormat::Json);
+        let result = template.to_string();
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+
+        // Should be JSON (compact, no newlines between properties)
+        assert!(output.starts_with('{'));
+        assert!(output.ends_with('}'));
+
+        // Should be valid JSON
+        let reparsed: Result<serde_json::Value, _> = serde_json::from_str(&output);
+        assert!(reparsed.is_ok());
+    }
+
+    #[test]
+    fn test_template_format_preservation_yaml() {
+        // Test: Template preserves YAML format when serialized
+        use serde_json::json;
+
+        let yaml_content = json!({
+            "AWSTemplateFormatVersion": "2010-09-09",
+            "Resources": {
+                "MyBucket": {
+                    "Type": "AWS::S3::Bucket"
+                }
+            }
+        });
+
+        let template = Template::new(yaml_content, TemplateFormat::Yaml);
+        let result = template.to_string();
+
+        assert!(result.is_ok());
+        let output = result.unwrap();
+
+        // Should be YAML (contains newlines and indentation)
+        assert!(output.contains('\n'));
+        assert!(output.contains("AWSTemplateFormatVersion:"));
+        assert!(output.contains("Resources:"));
+
+        // Should be valid YAML
+        let reparsed: Result<serde_json::Value, _> = serde_yml::from_str(&output);
+        assert!(reparsed.is_ok());
+    }
+
+    #[test]
+    fn test_template_serialization_error_handling() {
+        // Test: Template::to_string() returns Result, not panicking
+        use serde_json::json;
+
+        // Normal case should succeed
+        let valid_template = Template::new(json!({"key": "value"}), TemplateFormat::Json);
+        assert!(valid_template.to_string().is_ok());
+
+        // Note: It's hard to trigger serialization errors with serde_json/serde_yml
+        // as they can serialize any valid JSON value, but we've verified the
+        // error path exists by returning Result instead of unwrapping
+    }
 }
