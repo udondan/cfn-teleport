@@ -1,7 +1,7 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudformation as cloudformation;
 use aws_sdk_cloudformation::error::ProvideErrorMetadata;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::error::Error;
 use uuid::Uuid;
@@ -13,6 +13,14 @@ mod reference_updater;
 mod supported_resource_types;
 
 const DEMO: bool = false;
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Mode {
+    /// Safe, atomic CloudFormation Stack Refactoring API (supports fewer resource types)
+    Refactor,
+    /// Legacy import/export flow (supports more resource types but can orphan resources on failure)
+    Import,
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -32,6 +40,10 @@ struct Args {
     /// Automatically confirm all prompts
     #[arg(short, long)]
     yes: bool,
+
+    /// Operation mode for cross-stack moves
+    #[arg(long, value_enum, default_value = "refactor")]
+    mode: Mode,
 }
 
 #[tokio::main]
@@ -297,7 +309,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await;
     }
 
-    // Cross-stack move: Use import/export flow
+    // Cross-stack move: Use refactor or import based on --mode
+    if matches!(args.mode, Mode::Refactor) {
+        // Use CloudFormation Stack Refactoring API (safer, atomic, but fewer supported resource types)
+        let template_target = get_template(&client, &target_stack).await?;
+        return refactor_stack_resources_cross_stack(
+            &client,
+            &source_stack,
+            &target_stack,
+            template_source,
+            template_target,
+            new_logical_ids_map,
+        )
+        .await;
+    }
+
+    // Legacy import/export flow (mode == Mode::Import)
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
 
     let template_retained =
@@ -890,7 +917,7 @@ async fn refactor_stack_resources(
         .collect();
 
     // Step 3-6: Create, validate, and execute stack refactor (with simplified output)
-    let spinner = spinner::Spin::new(&format!(
+    let mut spinner = spinner::Spin::new(&format!(
         "Renaming {} resource{} in stack {}",
         id_mapping.len(),
         if id_mapping.len() == 1 { "" } else { "s" },
@@ -929,7 +956,7 @@ async fn refactor_stack_resources(
                 break;
             }
             Some("CREATE_FAILED") | Some("FAILED") => {
-                drop(spinner);
+                spinner.fail();
                 return Err(format!(
                     "Stack refactor validation failed: {}",
                     status.status_reason().unwrap_or("Unknown error")
@@ -961,9 +988,9 @@ async fn refactor_stack_resources(
 
         match status.execution_status().map(|s| s.as_str()) {
             Some("EXECUTE_COMPLETE") => {
-                drop(spinner);
+                spinner.complete();
                 println!(
-                    "✓ Renamed {} resource{} in stack {}",
+                    "Renamed {} resource{} in stack {}",
                     id_mapping.len(),
                     if id_mapping.len() == 1 { "" } else { "s" },
                     stack_name
@@ -974,7 +1001,188 @@ async fn refactor_stack_resources(
                 return Ok(());
             }
             Some("EXECUTE_FAILED") | Some("FAILED") => {
-                drop(spinner);
+                spinner.fail();
+                return Err(format!(
+                    "Stack refactor execution failed: {}",
+                    status.status_reason().unwrap_or("Unknown error")
+                )
+                .into());
+            }
+            _ => {
+                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+            }
+        }
+    }
+}
+
+/// Refactor CloudFormation stack resources across stacks using the Stack Refactoring API.
+/// This function handles cross-stack moves only (use refactor_stack_resources for same-stack).
+///
+/// # Arguments
+/// * `client` - CloudFormation client
+/// * `source_stack_name` - Source stack name
+/// * `target_stack_name` - Target stack name
+/// * `source_template` - Source stack template
+/// * `target_template` - Target stack template
+/// * `id_mapping` - Map of old logical IDs to new logical IDs
+///
+/// # Returns
+/// * `Ok(())` if refactoring succeeds
+/// * `Err` if validation or execution fails
+async fn refactor_stack_resources_cross_stack(
+    client: &cloudformation::Client,
+    source_stack_name: &str,
+    target_stack_name: &str,
+    source_template: serde_json::Value,
+    target_template: serde_json::Value,
+    id_mapping: HashMap<String, String>,
+) -> Result<(), Box<dyn Error>> {
+    use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
+
+    let resource_ids: Vec<String> = id_mapping.keys().cloned().collect();
+
+    // Step 1: Remove resources from source template
+    let source_without_resources = remove_resources(source_template.clone(), resource_ids.clone());
+
+    // Step 2: Add resources to target template
+    // Note: add_resources returns (template_with_deletion_policy, template_without)
+    // For refactor mode, we use the original template without DeletionPolicy modifications
+    let (_, target_with_resources) = add_resources(
+        target_template.clone(),
+        source_template.clone(),
+        id_mapping.clone(),
+    );
+
+    // Step 3: Update references in both templates
+    let source_final =
+        reference_updater::update_template_references(source_without_resources, &id_mapping);
+    let target_final =
+        reference_updater::update_template_references(target_with_resources, &id_mapping);
+
+    // Step 4: Validate both templates
+    validate_template(client, source_final.clone())
+        .await
+        .map_err(|e| format!("Source template validation failed: {}", e))?;
+
+    validate_template(client, target_final.clone())
+        .await
+        .map_err(|e| format!("Target template validation failed: {}", e))?;
+
+    // Step 5: Build resource mappings for CloudFormation
+    let resource_mappings: Vec<ResourceMapping> = id_mapping
+        .iter()
+        .map(|(old_id, new_id)| {
+            ResourceMapping::builder()
+                .source(
+                    ResourceLocation::builder()
+                        .stack_name(source_stack_name)
+                        .logical_resource_id(old_id)
+                        .build(),
+                )
+                .destination(
+                    ResourceLocation::builder()
+                        .stack_name(target_stack_name)
+                        .logical_resource_id(new_id)
+                        .build(),
+                )
+                .build()
+        })
+        .collect();
+
+    // Step 6: Build stack definitions for both stacks
+    let mut spinner = spinner::Spin::new(&format!(
+        "Moving {} resource{} from {} to {}",
+        id_mapping.len(),
+        if id_mapping.len() == 1 { "" } else { "s" },
+        source_stack_name,
+        target_stack_name
+    ));
+
+    let source_stack_definition = StackDefinition::builder()
+        .stack_name(source_stack_name)
+        .template_body(serde_json::to_string(&source_final)?)
+        .build();
+
+    let target_stack_definition = StackDefinition::builder()
+        .stack_name(target_stack_name)
+        .template_body(serde_json::to_string(&target_final)?)
+        .build();
+
+    // Step 7: Create refactor
+    let create_result = client
+        .create_stack_refactor()
+        .stack_definitions(source_stack_definition)
+        .stack_definitions(target_stack_definition)
+        .set_resource_mappings(Some(resource_mappings))
+        .send()
+        .await
+        .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
+
+    let refactor_id = create_result
+        .stack_refactor_id()
+        .ok_or("No stack refactor ID returned")?;
+
+    // Step 8: Wait for validation to complete
+    loop {
+        let status = client
+            .describe_stack_refactor()
+            .stack_refactor_id(refactor_id)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+
+        match status.status().map(|s| s.as_str()) {
+            Some("CREATE_COMPLETE") => {
+                break;
+            }
+            Some("CREATE_FAILED") | Some("FAILED") => {
+                spinner.fail();
+                return Err(format!(
+                    "Stack refactor validation failed: {}",
+                    status.status_reason().unwrap_or("Unknown error")
+                )
+                .into());
+            }
+            _ => {
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        }
+    }
+
+    // Step 9: Execute the refactor
+    client
+        .execute_stack_refactor()
+        .stack_refactor_id(refactor_id)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+
+    // Step 10: Wait for execution to complete
+    loop {
+        let status = client
+            .describe_stack_refactor()
+            .stack_refactor_id(refactor_id)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+
+        match status.execution_status().map(|s| s.as_str()) {
+            Some("EXECUTE_COMPLETE") => {
+                spinner.complete();
+                println!(
+                    "Moved {} resource{} from {} to {}",
+                    id_mapping.len(),
+                    if id_mapping.len() == 1 { "" } else { "s" },
+                    source_stack_name,
+                    target_stack_name
+                );
+                for (old_id, new_id) in id_mapping {
+                    println!("  {} → {}", old_id, new_id);
+                }
+                return Ok(());
+            }
+            Some("EXECUTE_FAILED") | Some("FAILED") => {
+                spinner.fail();
                 return Err(format!(
                     "Stack refactor execution failed: {}",
                     status.status_reason().unwrap_or("Unknown error")
