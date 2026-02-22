@@ -1,7 +1,7 @@
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudformation as cloudformation;
 use aws_sdk_cloudformation::error::ProvideErrorMetadata;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::error::Error;
 use uuid::Uuid;
@@ -13,6 +13,14 @@ mod reference_updater;
 mod supported_resource_types;
 
 const DEMO: bool = false;
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum Mode {
+    /// Safe, atomic CloudFormation Stack Refactoring API (supports fewer resource types)
+    Refactor,
+    /// Legacy import/export flow (supports more resource types but can orphan resources on failure)
+    Import,
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -33,24 +41,14 @@ struct Args {
     #[arg(short, long)]
     yes: bool,
 
-    /// Operation mode: 'refactor' (safe, atomic, fewer resource types) or 'import' (legacy, more resource types, can orphan resources)
-    #[arg(long, value_name = "MODE", default_value = "refactor")]
-    mode: String,
+    /// Operation mode for cross-stack moves
+    #[arg(long, value_enum, default_value = "refactor")]
+    mode: Mode,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-
-    // Validate mode parameter
-    let mode = args.mode.to_lowercase();
-    if mode != "refactor" && mode != "import" {
-        return Err(format!(
-            "Invalid mode '{}'. Must be 'refactor' or 'import'.",
-            args.mode
-        )
-        .into());
-    }
 
     let config = aws_config::load_defaults(BehaviorVersion::v2026_01_12()).await;
     let client = cloudformation::Client::new(&config);
@@ -312,7 +310,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Cross-stack move: Use refactor or import based on --mode
-    if mode == "refactor" {
+    if matches!(args.mode, Mode::Refactor) {
         // Use CloudFormation Stack Refactoring API (safer, atomic, but fewer supported resource types)
         let template_target = get_template(&client, &target_stack).await?;
         return refactor_stack_resources_cross_stack(
@@ -326,7 +324,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await;
     }
 
-    // Legacy import/export flow (mode == "import")
+    // Legacy import/export flow (mode == Mode::Import)
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
 
     let template_retained =
@@ -1047,7 +1045,9 @@ async fn refactor_stack_resources_cross_stack(
     let source_without_resources = remove_resources(source_template.clone(), resource_ids.clone());
 
     // Step 2: Add resources to target template
-    let (target_with_resources, _) = add_resources(
+    // Note: add_resources returns (template_with_deletion_policy, template_without)
+    // For refactor mode, we use the original template without DeletionPolicy modifications
+    let (_, target_with_resources) = add_resources(
         target_template.clone(),
         source_template.clone(),
         id_mapping.clone(),

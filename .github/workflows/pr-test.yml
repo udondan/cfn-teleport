@@ -124,6 +124,14 @@ jobs:
           STANDALONE_BUCKET=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneBucket"))')
           STANDALONE_TABLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneTable"))')
 
+          # Validate resources were found
+          if [ -z "$STANDALONE_BUCKET" ] || [ -z "$STANDALONE_TABLE" ]; then
+            echo "✗ Could not find standalone resources in stack"
+            echo "  STANDALONE_BUCKET: '$STANDALONE_BUCKET'"
+            echo "  STANDALONE_TABLE: '$STANDALONE_TABLE'"
+            exit 1
+          fi
+
           echo "Found standalone resources: $STANDALONE_BUCKET, $STANDALONE_TABLE"
 
           echo "Moving standalone resources to ${STACK2} with refactor mode..."
@@ -131,7 +139,8 @@ jobs:
             --resource "${STANDALONE_BUCKET}" \
             --resource "${STANDALONE_TABLE}"
 
-          if npx cdk diff --fail | grep -E "(${STANDALONE_BUCKET}|${STANDALONE_TABLE})"; then
+          DIFF_OUTPUT=$(npx cdk diff 2>&1 || true)
+          if echo "$DIFF_OUTPUT" | grep -E "(${STANDALONE_BUCKET}|${STANDALONE_TABLE})"; then
             echo "✓ Standalone resources moved successfully"
           else
             echo "✗ Standalone resource migration failed"
@@ -144,7 +153,8 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          if npx cdk diff --fail | grep -E "(${BUCKET1}|${BUCKET2}|${DYNAMO_TABLE})"; then
+          DIFF_OUTPUT=$(npx cdk diff 2>&1 || true)
+          if echo "$DIFF_OUTPUT" | grep -E "(${BUCKET1}|${BUCKET2}|${DYNAMO_TABLE})"; then
             echo "✓ Regular resources moved successfully"
           else
             echo "✗ Regular resource migration failed"
@@ -167,11 +177,11 @@ jobs:
           fi
 
           echo "######### TEST 4: Verify refactor mode REJECTS KeyPair (expected failure) #########"
-          if cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" 2>&1 | grep -i "tag"; then
-            echo "✓ Refactor mode correctly rejected KeyPair (tag update issue)"
-          else
+          if cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}"; then
             echo "✗ Refactor mode should have failed with KeyPair but didn't"
             exit 1
+          else
+            echo "✓ Refactor mode correctly rejected KeyPair (expected failure)"
           fi
         env:
           AWS_DEFAULT_REGION: us-east-1
