@@ -48,6 +48,54 @@ The CloudFormation Guard code itself contains portions copied from [serde_yaml](
 4. Added `MarkedValue::to_json_value()` for converting to `serde_json::Value`
 5. Created simplified public API for parsing CF YAML templates
 
+## Important Limitation: Tag Format Conversion
+
+**Parsing**: This module successfully parses CloudFormation YAML with intrinsic function tags:
+```yaml
+BucketName: !Ref MyParameter
+QueueName: !Sub '${AWS::StackName}-queue'
+```
+
+**Serialization**: When templates are serialized back to YAML (using `serde_yml`), the short-form tags are converted to long-form:
+```yaml
+BucketName:
+  Ref: MyParameter
+QueueName:
+  Fn::Sub: '${AWS::StackName}-queue'
+```
+
+**Why this happens**: 
+- This module only handles **parsing** (YAML → JSON)
+- Serialization (JSON → YAML) is done by `serde_yml`, which doesn't support CloudFormation tags
+- The internal representation stores intrinsic functions as JSON objects: `!Ref X` → `{"Ref": "X"}`
+- When serialized, these become nested YAML structures, not tags
+
+**Impact**:
+- ✅ **Functionally equivalent**: Both forms are valid CloudFormation YAML and behave identically
+- ✅ **CloudFormation accepts both**: The AWS APIs process both formats the same way
+- ❌ **Format not preserved**: Original `!Tag` syntax is lost, replaced with long-form
+- ⚠️ **Users are warned**: cfn-teleport displays a warning when CF tags are detected in input
+
+**Example transformation**:
+```yaml
+# Input template
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketParameter
+
+# Output template (after processing)
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Ref: BucketParameter
+```
+
+Both templates are functionally identical in CloudFormation.
+
 ## Maintenance
 
 Since this code is vendored, updates won't happen automatically. Monitor these repositories for security fixes or important updates:

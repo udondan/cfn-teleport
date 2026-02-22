@@ -1017,9 +1017,37 @@ async fn get_template(
         Ok(parsed) => Ok(Template::new(parsed, TemplateFormat::Json)),
         Err(_json_err) => {
             // Fallback to YAML parsing with CloudFormation tag support
+            // Check if template contains CloudFormation tags (!Ref, !Sub, etc.)
+            let has_cf_tags = template_str.contains("!Ref")
+                || template_str.contains("!Sub")
+                || template_str.contains("!GetAtt")
+                || template_str.contains("!Join")
+                || template_str.contains("!Select")
+                || template_str.contains("!Split")
+                || template_str.contains("!FindInMap")
+                || template_str.contains("!Base64")
+                || template_str.contains("!GetAZs")
+                || template_str.contains("!ImportValue")
+                || template_str.contains("!If")
+                || template_str.contains("!Not")
+                || template_str.contains("!And")
+                || template_str.contains("!Or")
+                || template_str.contains("!Equals");
+
             // Try the CF-aware parser first (handles !Ref, !Sub, etc.)
             match cfn_yaml::parse_yaml_to_json(template_str) {
-                Ok(parsed) => Ok(Template::new(parsed, TemplateFormat::Yaml)),
+                Ok(parsed) => {
+                    if has_cf_tags {
+                        eprintln!("\n⚠️  Warning: Template contains CloudFormation intrinsic function tags (!Ref, !Sub, etc.)");
+                        eprintln!(
+                            "   These will be converted to long-form when the template is updated:"
+                        );
+                        eprintln!("   - '!Ref MyParam' becomes 'Ref: MyParam'");
+                        eprintln!("   - '!Sub ${{...}}' becomes 'Fn::Sub: ${{...}}'");
+                        eprintln!("   Both forms are functionally equivalent and accepted by CloudFormation.\n");
+                    }
+                    Ok(Template::new(parsed, TemplateFormat::Yaml))
+                }
                 Err(_cf_yaml_err) => {
                     // If CF parser fails, try standard YAML parser as fallback
                     let parsed: serde_json::Value =
