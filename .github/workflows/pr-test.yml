@@ -156,6 +156,21 @@ jobs:
       - name: Test refactor mode (default) with supported resource types
         working-directory: test/cdk
         run: |
+          # Helper function to run cfn-teleport with visible output
+          run_cfn_teleport() {
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo "▶ Running: cfn-teleport $@"
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            cfn-teleport "$@" 2>&1
+            local exit_code=$?
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            echo "▶ Exit code: $exit_code"
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo ""
+            return $exit_code
+          }
+
           echo "######### TEST 1: Refactor mode with standalone resources #########"
 
           # Find standalone resources
@@ -174,7 +189,7 @@ jobs:
           echo "Found standalone resources: $STANDALONE_BUCKET, $STANDALONE_TABLE"
 
           echo "Moving standalone resources to ${STACK2} with refactor mode..."
-          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${STANDALONE_BUCKET}" \
             --resource "${STANDALONE_TABLE}"
 
@@ -187,7 +202,7 @@ jobs:
           fi
 
           echo "######### TEST 2: Move regular resources (no KeyPair) #########"
-          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
@@ -201,7 +216,7 @@ jobs:
           fi
 
           echo "######### TEST 3: Move all resources back to ${STACK1} #########"
-          cfn-teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
+          run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
             --resource "${STANDALONE_BUCKET}" \
             --resource "${STANDALONE_TABLE}" \
             --resource "${BUCKET1}" \
@@ -219,7 +234,7 @@ jobs:
           # Find KeyPair logical ID dynamically
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
           INSTANCE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("Profile") | not)')
-          
+
           if [ -z "$KEY_PAIR" ]; then
             echo "✗ Could not find KeyPair in stack"
             echo "  KEY_PAIR: '$KEY_PAIR'"
@@ -229,8 +244,8 @@ jobs:
           echo "Found Instance: $INSTANCE"
 
           # Try to move KeyPair without Instance - should fail with dangling reference error
-          ERROR_OUTPUT=$(cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" 2>&1 || true)
-          
+          ERROR_OUTPUT=$(run_cfn_teleport_capture --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" || true)
+
           if echo "$ERROR_OUTPUT" | grep -q "dangling reference"; then
             echo "✓ Refactor mode correctly rejected KeyPair due to dangling reference"
           else
@@ -244,23 +259,23 @@ jobs:
           SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
           INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
           ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
-          
+
           echo "Moving KeyPair with all dependencies:"
           echo "  KEY_PAIR: $KEY_PAIR"
           echo "  INSTANCE: $INSTANCE"
           echo "  SECURITY_GROUP: $SECURITY_GROUP"
           echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
           echo "  ROLE: $ROLE"
-          
+
           # Try to move KeyPair WITH all dependencies - should fail because KeyPair requires recreation
-          ERROR_OUTPUT=$(cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+          ERROR_OUTPUT=$(run_cfn_teleport_capture --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${KEY_PAIR}" \
             --resource "${INSTANCE}" \
             --resource "${SECURITY_GROUP}" \
             --resource "${INSTANCE_PROFILE}" \
             --resource "${ROLE}" \
-            2>&1 || true)
-          
+            || true)
+
           if echo "$ERROR_OUTPUT" | grep -q "Stack Refactor does not support AWS::EC2::KeyPair"; then
             echo "✓ Refactor mode correctly rejected KeyPair+Instance due to replacement requirement"
           else
@@ -288,7 +303,7 @@ jobs:
           SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
           INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
           ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
-          
+
           echo "Found resources for import mode test:"
           echo "  KEY_PAIR: $KEY_PAIR"
           echo "  INSTANCE: $INSTANCE"
@@ -297,7 +312,7 @@ jobs:
           echo "  ROLE: $ROLE"
 
           echo "######### Testing IMPORT mode migration from ${STACK1} to ${STACK2} #########"
-          cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
             --resource "${INSTANCE}" \
@@ -313,7 +328,7 @@ jobs:
           fi
 
           echo "######### Testing IMPORT mode migration from ${STACK2} back to ${STACK1} #########"
-          cfn-teleport --source "${STACK2}" --target "${STACK1}" --yes --mode import \
+          run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode import \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
             --resource "${INSTANCE}" \
@@ -372,7 +387,7 @@ jobs:
           echo "=========================================="
           echo "TEST 1: Ref reference in Output"
           echo "=========================================="
-          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${RENAME_BUCKET_ID}:RenamedBucket"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
@@ -397,7 +412,7 @@ jobs:
           echo "=========================================="
           echo "TEST 2: GetAtt reference in Output"
           echo "=========================================="
-          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${RENAME_TABLE_ID}:RenamedTable"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
@@ -422,7 +437,7 @@ jobs:
           echo "=========================================="
           echo "TEST 3: Fn::Sub reference in Output"
           echo "=========================================="
-          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${RENAME_QUEUE_ID}:RenamedQueue"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
@@ -457,7 +472,7 @@ jobs:
             exit 1
           fi
 
-          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${DEPENDENCY_BUCKET_ID}:RenamedDependencyBucket"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
@@ -491,7 +506,7 @@ jobs:
             exit 1
           fi
 
-          cfn-teleport --source "${STACK1}" --target "${STACK1}" --yes \
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
             --resource "${LAMBDA_TARGET_BUCKET_ID}:RenamedLambdaTarget"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
