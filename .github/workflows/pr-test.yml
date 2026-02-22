@@ -30,19 +30,11 @@ jobs:
               - Cargo.toml
               - Cargo.lock
 
-  # Build and prepare in parallel (nightly test, stable build, CDK deploy)
+  # Build Rust binary (lint, test, build)
   build:
     needs: changes
     if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - job: nightly
-            rust-toolchain: nightly
-          - job: stable
-            rust-toolchain: stable
-          - job: cdk
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -50,69 +42,66 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      # Rust steps (nightly + stable)
       - name: Update local toolchain
-        if: matrix.job != 'cdk'
         run: rustup update
 
-      - name: Install toolchain
-        if: matrix.job != 'cdk'
+      - name: Install stable toolchain
         run: |
-          rustup install ${{ matrix.rust-toolchain }}
-          rustup default ${{ matrix.rust-toolchain }}
+          rustup install stable
+          rustup default stable
 
       - name: Install clippy
-        if: matrix.job == 'stable'
         run: rustup component add clippy
 
       - name: Toolchain info
-        if: matrix.job != 'cdk'
         run: |
           cargo --version --verbose
           rustc --version
-          [ "${{ matrix.job }}" == 'stable' ] && cargo clippy --version || :
+          cargo clippy --version
 
       - name: Rust dependency cache
-        if: matrix.job != 'cdk'
         uses: actions/cache@v5
         with:
           path: target
-          key: ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.rust-toolchain }}-target-
+            ${{ runner.os }}-stable-target-
 
       - name: Lint
-        if: matrix.job == 'stable'
         run: |
           cargo fmt -- --check
           cargo clippy -- -D warnings
 
       - name: Test
-        if: matrix.job != 'cdk'
         run: |
           cargo check
           cargo test --all
 
       - name: Build binary
-        if: matrix.job == 'stable'
         run: cargo install --path .
 
       - name: Upload binary artifact
-        if: matrix.job == 'stable'
         uses: actions/upload-artifact@v4
         with:
           name: cfn-teleport-binary
           path: ~/.cargo/bin/cfn-teleport
           retention-days: 1
 
-      # CDK steps
-      - uses: actions/setup-node@v6
-        if: matrix.job == 'cdk'
+  # Deploy CDK test stacks (runs in parallel with build)
+  cdk-deploy:
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: 24
 
       - name: npm dependency cache
-        if: matrix.job == 'cdk'
         uses: actions/cache@v5
         with:
           path: test/cdk/.npm
@@ -120,8 +109,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Prepare test stacks
-        if: matrix.job == 'cdk'
+      - name: Deploy test stacks
         working-directory: test/cdk
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -129,9 +117,9 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: make install && make deploy
 
-  # Integration tests (waits for build job to complete)
+  # Integration tests (waits for both build and cdk-deploy to complete)
   integration-test:
-    needs: build
+    needs: [build, cdk-deploy]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -545,7 +533,7 @@ jobs:
           STACK1: CfnTeleportTest1
 
       - name: Delete test stacks
-        if: always()
+        if: always() && needs.cdk-deploy.result != 'skipped'
         run: make test-reset
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -558,6 +546,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+      - cdk-deploy
       - integration-test
     steps:
       - name: Report success
