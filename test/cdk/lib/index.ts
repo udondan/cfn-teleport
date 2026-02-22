@@ -6,6 +6,7 @@ import {
   aws_s3,
   aws_sqs,
   CfnOutput,
+  CfnParameter,
   Fn,
   RemovalPolicy,
   Stack,
@@ -27,6 +28,31 @@ export class TestStack extends Stack {
     Tags.of(this).add('ApplicationName', 'cfn-teleport-test');
 
     if (props.resources) {
+      // ========================================
+      // PARAMETER TEST RESOURCES
+      // Resources that depend on stack parameters (cannot be moved cross-stack)
+      // ========================================
+
+      // Stack parameter for testing parameter dependencies
+      const tableNameParameter = new CfnParameter(this, 'ParameterTableName', {
+        type: 'String',
+        default: 'cfn-teleport-param-test',
+        description: 'Table name controlled by stack parameter',
+      });
+
+      // Table that uses the parameter - this cannot be moved cross-stack
+      // because it depends on a stack parameter
+      new aws_dynamodb.Table(this, 'ParameterTable', {
+        tableName: tableNameParameter.valueAsString,
+        removalPolicy: RemovalPolicy.DESTROY,
+        partitionKey: {
+          name: 'id',
+          type: aws_dynamodb.AttributeType.STRING,
+        },
+      });
+
+      // ========================================
+
       const vpc = aws_ec2.Vpc.fromLookup(this, 'ImportVPC', {
         isDefault: true,
       });
