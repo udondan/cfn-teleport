@@ -38,6 +38,16 @@ impl Spin {
             println!(": {}", success_prefix);
         }
     }
+
+    pub fn fail(&mut self) {
+        let error_prefix = style("✗".to_string()).red();
+
+        if let Some(spinner) = self.spinner.take() {
+            spinner.text(&self.message).symbol("✗").failure();
+        } else {
+            println!(": {}", error_prefix);
+        }
+    }
 }
 
 fn flush() {

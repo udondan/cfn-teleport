@@ -917,7 +917,7 @@ async fn refactor_stack_resources(
         .collect();
 
     // Step 3-6: Create, validate, and execute stack refactor (with simplified output)
-    let spinner = spinner::Spin::new(&format!(
+    let mut spinner = spinner::Spin::new(&format!(
         "Renaming {} resource{} in stack {}",
         id_mapping.len(),
         if id_mapping.len() == 1 { "" } else { "s" },
@@ -956,7 +956,7 @@ async fn refactor_stack_resources(
                 break;
             }
             Some("CREATE_FAILED") | Some("FAILED") => {
-                drop(spinner);
+                spinner.fail();
                 return Err(format!(
                     "Stack refactor validation failed: {}",
                     status.status_reason().unwrap_or("Unknown error")
@@ -988,9 +988,9 @@ async fn refactor_stack_resources(
 
         match status.execution_status().map(|s| s.as_str()) {
             Some("EXECUTE_COMPLETE") => {
-                drop(spinner);
+                spinner.complete();
                 println!(
-                    "✓ Renamed {} resource{} in stack {}",
+                    "Renamed {} resource{} in stack {}",
                     id_mapping.len(),
                     if id_mapping.len() == 1 { "" } else { "s" },
                     stack_name
@@ -1001,7 +1001,7 @@ async fn refactor_stack_resources(
                 return Ok(());
             }
             Some("EXECUTE_FAILED") | Some("FAILED") => {
-                drop(spinner);
+                spinner.fail();
                 return Err(format!(
                     "Stack refactor execution failed: {}",
                     status.status_reason().unwrap_or("Unknown error")
@@ -1090,7 +1090,7 @@ async fn refactor_stack_resources_cross_stack(
         .collect();
 
     // Step 6: Build stack definitions for both stacks
-    let spinner = spinner::Spin::new(&format!(
+    let mut spinner = spinner::Spin::new(&format!(
         "Moving {} resource{} from {} to {}",
         id_mapping.len(),
         if id_mapping.len() == 1 { "" } else { "s" },
@@ -1136,7 +1136,7 @@ async fn refactor_stack_resources_cross_stack(
                 break;
             }
             Some("CREATE_FAILED") | Some("FAILED") => {
-                drop(spinner);
+                spinner.fail();
                 return Err(format!(
                     "Stack refactor validation failed: {}",
                     status.status_reason().unwrap_or("Unknown error")
@@ -1168,9 +1168,9 @@ async fn refactor_stack_resources_cross_stack(
 
         match status.execution_status().map(|s| s.as_str()) {
             Some("EXECUTE_COMPLETE") => {
-                drop(spinner);
+                spinner.complete();
                 println!(
-                    "✓ Moved {} resource{} from {} to {}",
+                    "Moved {} resource{} from {} to {}",
                     id_mapping.len(),
                     if id_mapping.len() == 1 { "" } else { "s" },
                     source_stack_name,
@@ -1182,7 +1182,7 @@ async fn refactor_stack_resources_cross_stack(
                 return Ok(());
             }
             Some("EXECUTE_FAILED") | Some("FAILED") => {
-                drop(spinner);
+                spinner.fail();
                 return Err(format!(
                     "Stack refactor execution failed: {}",
                     status.status_reason().unwrap_or("Unknown error")
