@@ -369,6 +369,73 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Legacy import/export flow (mode == Mode::Import)
+    // IMPORTANT: Import mode does NOT copy parameters from source to target stack.
+    // Resources that depend on parameters will fail to import because the parameter
+    // reference will be invalid in the target stack, causing "No updates" errors
+    // and leaving the resource in a broken state (deleted from source, not in target).
+    // We MUST block any resources with parameter dependencies in import mode.
+    let mut blocked_resources_with_params = Vec::new();
+    for old_id in new_logical_ids_map.keys() {
+        if let Some(resource) = selected_resources
+            .iter()
+            .find(|r| r.logical_resource_id().unwrap_or_default() == old_id)
+        {
+            // Check if this resource depends on parameters
+            let all_references = reference_updater::find_all_references(&template_source);
+            let resource_references = all_references
+                .get(old_id.as_str())
+                .cloned()
+                .unwrap_or_default();
+
+            // Get parameter names from source template
+            let parameter_names: std::collections::HashSet<String> = template_source
+                .get("Parameters")
+                .and_then(|params| params.as_object())
+                .map(|params_obj| {
+                    params_obj
+                        .keys()
+                        .map(|k| k.to_string())
+                        .collect::<std::collections::HashSet<String>>()
+                })
+                .unwrap_or_default();
+
+            // Check if resource references any parameters
+            let depends_on_params: Vec<String> = resource_references
+                .iter()
+                .filter(|ref_name| parameter_names.contains(*ref_name))
+                .map(|s| s.to_string())
+                .collect();
+
+            if !depends_on_params.is_empty() {
+                blocked_resources_with_params.push((
+                    old_id.clone(),
+                    resource.resource_type().unwrap_or_default().to_string(),
+                    depends_on_params,
+                ));
+            }
+        }
+    }
+
+    if !blocked_resources_with_params.is_empty() {
+        eprintln!("\nCannot use import mode for resources that depend on stack parameters:\n");
+        for (id, typ, params) in &blocked_resources_with_params {
+            eprintln!(
+                "  - {} ({}) - depends on parameters: {}",
+                id,
+                typ,
+                params.join(", ")
+            );
+        }
+        eprintln!(
+            "\nImport mode does NOT copy parameters between stacks, which causes resources to be"
+        );
+        eprintln!("deleted from source stack but fail to import to target stack, leaving them orphaned.\n");
+        eprintln!(
+            "Use --mode refactor instead, or remove parameter dependencies from these resources.\n"
+        );
+        process::exit(1);
+    }
+
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
 
     let template_retained =
