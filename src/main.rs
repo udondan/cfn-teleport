@@ -852,6 +852,18 @@ fn validate_move_references(
     // Get all resources being moved
     let moving_resources: HashSet<String> = new_logical_ids_map.keys().cloned().collect();
 
+    // Get all parameter names from the template (parameters are not resources)
+    let parameter_names: HashSet<String> = source_template
+        .get("Parameters")
+        .and_then(|params| params.as_object())
+        .map(|params_obj| {
+            params_obj
+                .keys()
+                .map(|k| k.to_string())
+                .collect::<HashSet<String>>()
+        })
+        .unwrap_or_default();
+
     // Find all references in the source template
     let all_references = reference_updater::find_all_references(source_template);
 
@@ -879,6 +891,11 @@ fn validate_move_references(
 
         // Check each referenced resource
         for referenced in referenced_resources {
+            // Skip parameter references - parameters are stack-level config, not resources
+            if parameter_names.contains(referenced) {
+                continue;
+            }
+
             let is_referenced_resource_moving = moving_resources.contains(referenced);
 
             // Problem: referencing resource stays, but referenced resource moves
@@ -2091,5 +2108,37 @@ mod tests {
 
         let result = validate_move_references(&template, &id_mapping);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_move_references_parameter_reference() {
+        // Test: Resource references a parameter - should succeed (parameters are stack config, not resources)
+        let template = json!({
+            "Parameters": {
+                "TableName": {
+                    "Type": "String",
+                    "Default": "my-table"
+                }
+            },
+            "Resources": {
+                "DynamoTable": {
+                    "Type": "AWS::DynamoDB::Table",
+                    "Properties": {
+                        "TableName": {"Ref": "TableName"}
+                    }
+                },
+                "OtherResource": {
+                    "Type": "AWS::S3::Bucket",
+                    "Properties": {}
+                }
+            }
+        });
+
+        let mut id_mapping = HashMap::new();
+        id_mapping.insert("DynamoTable".to_string(), "DynamoTable".to_string());
+        // Not moving OtherResource
+
+        let result = validate_move_references(&template, &id_mapping);
+        assert!(result.is_ok()); // Should succeed because TableName is a parameter, not a resource
     }
 }
