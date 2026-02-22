@@ -30,6 +30,35 @@ struct ResourceDependencyInfo {
     depends_on_parameters: bool, // This resource references stack parameters
 }
 
+/// CloudFormation template format
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TemplateFormat {
+    Json,
+    Yaml,
+}
+
+/// Wrapper for CloudFormation templates that preserves their original format
+#[derive(Clone)]
+struct Template {
+    content: serde_json::Value,
+    format: TemplateFormat,
+}
+
+impl Template {
+    fn new(content: serde_json::Value, format: TemplateFormat) -> Self {
+        Self { content, format }
+    }
+
+    /// Serialize the template to string in its original format.
+    /// YAML templates are serialized as YAML, JSON templates as JSON.
+    fn to_string(&self) -> Result<String, Box<dyn Error>> {
+        match self.format {
+            TemplateFormat::Json => Ok(serde_json::to_string(&self.content)?),
+            TemplateFormat::Yaml => Ok(serde_yaml::to_string(&self.content)?),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Mode {
     /// Safe, atomic CloudFormation Stack Refactoring API (supports fewer resource types)
@@ -180,8 +209,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
             select_resources(
                 "Select resources to copy",
                 resource_refs,
-                &source_template,
-                target_template.as_ref(),
+                &source_template.content,
+                target_template.as_ref().map(|t| &t.content),
                 is_cross_stack,
             )
             .await?
@@ -271,7 +300,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
         }
 
         // Check for name collisions: new name already exists in stack
-        let existing_resources = if let Some(resources) = template_source.get("Resources") {
+        let existing_resources = if let Some(resources) = template_source.content.get("Resources") {
             if let Some(obj) = resources.as_object() {
                 obj.keys()
                     .cloned()
@@ -324,13 +353,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
         user_confirm()?;
     }
 
-    let template_source_str = serde_json::to_string(&template_source)?;
+    let template_source_str = template_source.to_string()?;
 
     // Validate that resources being moved don't have dangling references
     // (i.e., resources staying in source stack that reference moving resources)
     // Only validate for cross-stack moves, not same-stack renames
     if source_stack != target_stack {
-        validate_move_references(&template_source, &new_logical_ids_map)?;
+        validate_move_references(&template_source.content, &new_logical_ids_map)?;
     }
 
     // Same-stack rename: Use CloudFormation Stack Refactoring API
@@ -377,7 +406,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
             .find(|r| r.logical_resource_id().unwrap_or_default() == old_id)
         {
             // Check if this resource depends on parameters
-            let all_references = reference_updater::find_all_references(&template_source);
+            let all_references = reference_updater::find_all_references(&template_source.content);
             let resource_references = all_references
                 .get(old_id.as_str())
                 .cloned()
@@ -385,6 +414,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
             // Get parameter names from source template
             let parameter_names: std::collections::HashSet<String> = template_source
+                .content
                 .get("Parameters")
                 .and_then(|params| params.as_object())
                 .map(|params_obj| {
@@ -435,20 +465,28 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
 
-    let template_retained =
-        retain_resources(template_source.clone(), resource_ids_to_remove.clone());
-    let template_retained_str = serde_json::to_string(&template_retained)?;
+    let template_retained = retain_resources(
+        template_source.content.clone(),
+        resource_ids_to_remove.clone(),
+    );
+    let template_retained_str =
+        Template::new(template_retained.clone(), template_source.format).to_string()?;
 
-    let template_removed =
-        remove_resources(template_source.clone(), resource_ids_to_remove.clone());
+    let template_removed = remove_resources(
+        template_source.content.clone(),
+        resource_ids_to_remove.clone(),
+    );
+
+    // Fetch target template if not already available to get its format
+    let target_template_actual = if let Some(tmpl) = target_template {
+        tmpl
+    } else {
+        get_template(&client, &target_stack).await?
+    };
 
     let (template_target_with_deletion_policy, template_target_final) = add_resources(
-        if let Some(tmpl) = target_template {
-            tmpl
-        } else {
-            get_template(&client, &target_stack).await?
-        },
-        template_source.clone(),
+        target_template_actual.content.clone(),
+        template_source.content.clone(),
         new_logical_ids_map.clone(),
     );
 
@@ -486,11 +524,23 @@ async fn run() -> Result<(), Box<dyn Error>> {
     );
 
     if template_source_str != template_retained_str {
-        update_stack(&client, &source_stack, template_retained).await?;
+        update_stack(
+            &client,
+            &source_stack,
+            template_retained,
+            template_source.format,
+        )
+        .await?;
         wait_for_stack_update_completion(&client, &source_stack, None).await?;
     }
 
-    update_stack(&client, &source_stack, template_removed).await?;
+    update_stack(
+        &client,
+        &source_stack,
+        template_removed,
+        template_source.format,
+    )
+    .await?;
     wait_for_stack_update_completion(&client, &source_stack, Some(spinner)).await?;
 
     let spinner = spinner::Spin::new(&format!(
@@ -503,6 +553,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
         &client,
         &target_stack,
         template_target_with_deletion_policy,
+        target_template_actual.format,
         selected_resources,
         new_logical_ids_map,
     )
@@ -512,7 +563,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
     execute_changeset(&client, &target_stack, &changeset_name).await?;
     wait_for_stack_update_completion(&client, &target_stack, None).await?;
 
-    update_stack(&client, &target_stack, template_target).await?;
+    update_stack(
+        &client,
+        &target_stack,
+        template_target,
+        target_template_actual.format,
+    )
+    .await?;
     wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
 
     Ok(())
@@ -950,11 +1007,25 @@ fn user_confirm() -> Result<(), Box<dyn Error>> {
 async fn get_template(
     client: &cloudformation::Client,
     stack_name: &str,
-) -> Result<serde_json::Value, Box<dyn Error>> {
+) -> Result<Template, Box<dyn Error>> {
     let resp = client.get_template().stack_name(stack_name).send().await?;
-    let template = resp.template_body().ok_or("No template found")?;
-    let parsed_template = serde_json::from_str(template)?;
-    Ok(parsed_template)
+    let template_str = resp.template_body().ok_or("No template found")?;
+
+    // Try JSON first (faster and more common in automated deployments)
+    match serde_json::from_str(template_str) {
+        Ok(parsed) => Ok(Template::new(parsed, TemplateFormat::Json)),
+        Err(_json_err) => {
+            // Fallback to YAML parsing if JSON fails
+            let parsed: serde_json::Value =
+                serde_yaml::from_str(template_str).map_err(|yaml_err| {
+                    format!(
+                        "Failed to parse template as JSON or YAML. YAML error: {}",
+                        yaml_err
+                    )
+                })?;
+            Ok(Template::new(parsed, TemplateFormat::Yaml))
+        }
+    }
 }
 
 /// Computes dependency markers for resources based on template analysis.
@@ -1412,13 +1483,13 @@ async fn validate_template(
 async fn refactor_stack_resources(
     client: &cloudformation::Client,
     stack_name: &str,
-    template: serde_json::Value,
+    template: Template,
     id_mapping: HashMap<String, String>,
 ) -> Result<(), Box<dyn Error>> {
     use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
 
     // Step 1: Create updated template with renamed resources and updated references
-    let mut updated_template = template.clone();
+    let mut updated_template = template.content.clone();
 
     // Rename resources in the Resources section
     if let Some(resources) = updated_template
@@ -1479,7 +1550,7 @@ async fn refactor_stack_resources(
 
     let stack_definition = StackDefinition::builder()
         .stack_name(stack_name)
-        .template_body(serde_json::to_string(&updated_template)?)
+        .template_body(Template::new(updated_template.clone(), template.format).to_string()?)
         .build();
 
     // Create refactor
@@ -1586,8 +1657,8 @@ async fn refactor_stack_resources_cross_stack(
     client: &cloudformation::Client,
     source_stack_name: &str,
     target_stack_name: &str,
-    source_template: serde_json::Value,
-    target_template: serde_json::Value,
+    source_template: Template,
+    target_template: Template,
     id_mapping: HashMap<String, String>,
 ) -> Result<(), Box<dyn Error>> {
     use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
@@ -1598,17 +1669,18 @@ async fn refactor_stack_resources_cross_stack(
     // Check both directions:
     // 1. Resources staying in source that reference moving resources
     // 2. Resources being moved that depend on staying resources
-    validate_move_references(&source_template, &id_mapping)?;
+    validate_move_references(&source_template.content, &id_mapping)?;
 
     // Step 1: Remove resources from source template
-    let source_without_resources = remove_resources(source_template.clone(), resource_ids.clone());
+    let source_without_resources =
+        remove_resources(source_template.content.clone(), resource_ids.clone());
 
     // Step 2: Add resources to target template
     // Note: add_resources returns (template_with_deletion_policy, template_without)
     // For refactor mode, we use the original template without DeletionPolicy modifications
     let (_, target_with_resources) = add_resources(
-        target_template.clone(),
-        source_template.clone(),
+        target_template.content.clone(),
+        source_template.content.clone(),
         id_mapping.clone(),
     );
 
@@ -1659,12 +1731,12 @@ async fn refactor_stack_resources_cross_stack(
 
     let source_stack_definition = StackDefinition::builder()
         .stack_name(source_stack_name)
-        .template_body(serde_json::to_string(&source_final)?)
+        .template_body(Template::new(source_final.clone(), source_template.format).to_string()?)
         .build();
 
     let target_stack_definition = StackDefinition::builder()
         .stack_name(target_stack_name)
-        .template_body(serde_json::to_string(&target_final)?)
+        .template_body(Template::new(target_final.clone(), target_template.format).to_string()?)
         .build();
 
     // Step 7: Create refactor
@@ -1759,11 +1831,12 @@ async fn update_stack(
     client: &cloudformation::Client,
     stack_name: &str,
     template: serde_json::Value,
+    format: TemplateFormat,
 ) -> Result<(), cloudformation::Error> {
     match client
         .update_stack()
         .stack_name(stack_name)
-        .template_body(serde_json::to_string(&template).unwrap())
+        .template_body(Template::new(template, format).to_string().unwrap())
         // @TODO: we can detect the required capabilities from the output of validate_template()
         .capabilities(cloudformation::types::Capability::CapabilityIam)
         .capabilities(cloudformation::types::Capability::CapabilityNamedIam)
@@ -1860,10 +1933,11 @@ async fn create_changeset(
     client: &cloudformation::Client,
     stack_name: &str,
     template: serde_json::Value,
+    format: TemplateFormat,
     resources_to_import: Vec<&cloudformation::types::StackResourceSummary>,
     new_logical_ids_map: HashMap<String, String>,
 ) -> Result<std::string::String, cloudformation::Error> {
-    let template_string = serde_json::to_string(&template).unwrap();
+    let template_string = Template::new(template.clone(), format).to_string().unwrap();
     let resource_identifiers = get_resource_identifier_mapping(client, &template_string).await?;
     let resources = resources_to_import
         .iter()
@@ -2140,5 +2214,114 @@ mod tests {
 
         let result = validate_move_references(&template, &id_mapping);
         assert!(result.is_ok()); // Should succeed because TableName is a parameter, not a resource
+    }
+
+    #[test]
+    fn test_parse_template_json() {
+        // Test: Parse valid JSON template
+        let json_template = r#"{
+            "AWSTemplateFormatVersion": "2010-09-09",
+            "Resources": {
+                "MyBucket": {
+                    "Type": "AWS::S3::Bucket",
+                    "Properties": {
+                        "BucketName": "test-bucket"
+                    }
+                }
+            }
+        }"#;
+
+        let result = serde_json::from_str::<serde_json::Value>(json_template);
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert_eq!(
+            parsed["AWSTemplateFormatVersion"].as_str(),
+            Some("2010-09-09")
+        );
+        assert!(parsed["Resources"]["MyBucket"].is_object());
+    }
+
+    #[test]
+    fn test_parse_template_yaml() {
+        // Test: Parse valid YAML template (this currently fails in production code)
+        let yaml_template = r#"AWSTemplateFormatVersion: 2010-09-09
+Description: "Creates an S3 bucket to store logs."
+
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: test-bucket
+"#;
+
+        // This test demonstrates the bug - JSON parser can't handle YAML
+        let json_result = serde_json::from_str::<serde_json::Value>(yaml_template);
+        assert!(json_result.is_err()); // JSON parsing should fail for YAML
+
+        // Once we implement the fix, YAML parsing should work
+        let yaml_result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        assert!(yaml_result.is_ok());
+        let parsed = yaml_result.unwrap();
+        assert_eq!(
+            parsed["AWSTemplateFormatVersion"].as_str(),
+            Some("2010-09-09")
+        );
+        assert!(parsed["Resources"]["MyBucket"].is_object());
+    }
+
+    #[test]
+    fn test_parse_template_auto_detect_json() {
+        // Test: Auto-detection of JSON format
+        let json_template = r#"{"AWSTemplateFormatVersion": "2010-09-09", "Resources": {}}"#;
+
+        // Try JSON first (should succeed)
+        let result = serde_json::from_str::<serde_json::Value>(json_template);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_template_auto_detect_yaml() {
+        // Test: Auto-detection of YAML format
+        let yaml_template = "AWSTemplateFormatVersion: 2010-09-09\nResources: {}";
+
+        // Try JSON first (should fail)
+        let json_result = serde_json::from_str::<serde_json::Value>(yaml_template);
+        assert!(json_result.is_err());
+
+        // Fallback to YAML (should succeed)
+        let yaml_result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        assert!(yaml_result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_template_malformed() {
+        // Test: Malformed template (neither valid JSON nor valid structured YAML)
+        let malformed_template = "{[}]invalid";
+
+        // JSON parser should fail
+        let json_result = serde_json::from_str::<serde_json::Value>(malformed_template);
+        assert!(json_result.is_err());
+    }
+
+    #[test]
+    fn test_parse_template_yaml_with_cloudformation_structure() {
+        // Test: YAML template with CloudFormation structure
+        let yaml_template = r#"AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: bucket-name
+"#;
+
+        // YAML parser should handle basic YAML structure
+        let result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        assert!(result.is_ok());
+        let parsed = result.unwrap();
+        assert!(parsed["Resources"]["MyBucket"].is_object());
+        assert_eq!(
+            parsed["Resources"]["MyBucket"]["Type"].as_str(),
+            Some("AWS::S3::Bucket")
+        );
     }
 }
