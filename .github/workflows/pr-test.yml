@@ -273,10 +273,10 @@ jobs:
             --resource "${ROLE}" \
             2>&1 || true)
           
-          if echo "$ERROR_OUTPUT" | grep -qE "(replace|replacement|recreate|cannot be updated)"; then
+          if echo "$ERROR_OUTPUT" | grep -q "Stack Refactor does not support AWS::EC2::KeyPair"; then
             echo "✓ Refactor mode correctly rejected KeyPair+Instance due to replacement requirement"
           else
-            echo "✗ Refactor mode failed but not with expected error (should mention replacement/recreation)"
+            echo "✗ Refactor mode failed but not with expected error (should mention Stack Refactor does not support AWS::EC2::KeyPair)"
             echo "Error output: $ERROR_OUTPUT"
             exit 1
           fi
