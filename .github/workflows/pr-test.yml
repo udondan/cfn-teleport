@@ -296,6 +296,21 @@ jobs:
       - name: Test import mode (legacy) with all resource types including KeyPair
         working-directory: test/cdk
         run: |
+          # Helper function to run cfn-teleport with visible output
+          run_cfn_teleport() {
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo "▶ Running: cfn-teleport $@"
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            cfn-teleport "$@" 2>&1
+            local exit_code=$?
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            echo "▶ Exit code: $exit_code"
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo ""
+            return $exit_code
+          }
+
           # Find KeyPair and Instance logical IDs dynamically (KEY_PAIR and INSTANCE set in previous step's env are not accessible here)
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
@@ -355,6 +370,21 @@ jobs:
       - name: Test same-stack renaming - comprehensive reference tests
         working-directory: test/cdk
         run: |
+          # Helper function to run cfn-teleport with visible output
+          run_cfn_teleport() {
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo "▶ Running: cfn-teleport $@"
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            cfn-teleport "$@" 2>&1
+            local exit_code=$?
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            echo "▶ Exit code: $exit_code"
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo ""
+            return $exit_code
+          }
+
           echo "######### Finding rename test resources #########"
           # CDK generates logical IDs with hashes, e.g., RenameBucket615F0D5B
           # Find the actual resource IDs by looking at the stack template
