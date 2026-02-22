@@ -122,11 +122,12 @@ jobs:
 
       - name: Prepare test stacks
         if: matrix.job == 'cdk'
+        working-directory: test/cdk
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: make test
+        run: make install && make deploy
 
   # Integration tests (waits for build job to complete)
   integration-test:
