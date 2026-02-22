@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.47.0](https://github.com/udondan/cfn-teleport/compare/v0.46.0...v0.47.0) (2026-02-22)
+
+
+### Features
+
+* add --mode parameter to choose between refactor and import methods ([#1259](https://github.com/udondan/cfn-teleport/issues/1259)) ([83180b3](https://github.com/udondan/cfn-teleport/commit/83180b3e3926fd28211c537816f566a5998e0313))
+* add comprehensive same-stack resource renaming with automatic reference updates ([#1257](https://github.com/udondan/cfn-teleport/issues/1257)) ([cfdf8d9](https://github.com/udondan/cfn-teleport/commit/cfdf8d9ba5768d083309d94c820893131a63641d))
+* add visual dependency markers to resource selection UI ([#1261](https://github.com/udondan/cfn-teleport/issues/1261)) ([7d2056a](https://github.com/udondan/cfn-teleport/commit/7d2056ac8e81351b9cdad421caef756838f43858))
+
+
+### Bug Fixes
+
+* centralize error handling to properly display error messages with newlines ([#1264](https://github.com/udondan/cfn-teleport/issues/1264)) ([2b8994d](https://github.com/udondan/cfn-teleport/commit/2b8994d64a07f2b04cf46a8e5a08bc02d9d478b4))
+
 ## [0.46.0](https://github.com/udondan/cfn-teleport/compare/v0.45.0...v0.46.0) (2026-02-08)
 
 
