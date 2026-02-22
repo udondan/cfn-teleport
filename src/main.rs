@@ -852,6 +852,18 @@ fn validate_move_references(
     // Get all resources being moved
     let moving_resources: HashSet<String> = new_logical_ids_map.keys().cloned().collect();
 
+    // Get all parameter names from the template (parameters are not resources)
+    let parameter_names: HashSet<String> = source_template
+        .get("Parameters")
+        .and_then(|params| params.as_object())
+        .map(|params_obj| {
+            params_obj
+                .keys()
+                .map(|k| k.to_string())
+                .collect::<HashSet<String>>()
+        })
+        .unwrap_or_default();
+
     // Find all references in the source template
     let all_references = reference_updater::find_all_references(source_template);
 
@@ -879,6 +891,11 @@ fn validate_move_references(
 
         // Check each referenced resource
         for referenced in referenced_resources {
+            // Skip parameter references - parameters are stack-level config, not resources
+            if parameter_names.contains(referenced) {
+                continue;
+            }
+
             let is_referenced_resource_moving = moving_resources.contains(referenced);
 
             // Problem: referencing resource stays, but referenced resource moves
@@ -887,6 +904,16 @@ fn validate_move_references(
                     "  - Resource '{}' references '{}', but only '{}' is being moved. \
                      Either move both resources together, or remove the reference before moving.",
                     referencing_resource, referenced, referenced
+                ));
+            }
+
+            // NEW: Problem: referencing resource moves, but referenced resource stays
+            // This catches resources being moved that depend on resources staying behind
+            if is_referencing_resource_moving && !is_referenced_resource_moving {
+                errors.push(format!(
+                    "  - Resource '{}' depends on '{}' which is not being moved. \
+                     Either move both resources together, or remove the dependency before moving.",
+                    referencing_resource, referenced
                 ));
             }
         }
@@ -1567,6 +1594,12 @@ async fn refactor_stack_resources_cross_stack(
 
     let resource_ids: Vec<String> = id_mapping.keys().cloned().collect();
 
+    // Validate that resources being moved don't have dangling references
+    // Check both directions:
+    // 1. Resources staying in source that reference moving resources
+    // 2. Resources being moved that depend on staying resources
+    validate_move_references(&source_template, &id_mapping)?;
+
     // Step 1: Remove resources from source template
     let source_without_resources = remove_resources(source_template.clone(), resource_ids.clone());
 
@@ -1946,4 +1979,166 @@ async fn wait_for_changeset_created(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_validate_move_references_outgoing_dependency() {
+        // Test: Moving resource depends on staying resource - should error
+        let template = json!({
+            "Resources": {
+                "Instance": {
+                    "Type": "AWS::EC2::Instance",
+                    "Properties": {
+                        "SecurityGroupIds": [
+                            {"Ref": "SecurityGroup"}
+                        ]
+                    }
+                },
+                "SecurityGroup": {
+                    "Type": "AWS::EC2::SecurityGroup",
+                    "Properties": {}
+                }
+            }
+        });
+
+        let mut id_mapping = HashMap::new();
+        id_mapping.insert("Instance".to_string(), "Instance".to_string());
+        // Not moving SecurityGroup
+
+        let result = validate_move_references(&template, &id_mapping);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Instance"));
+        assert!(err_msg.contains("SecurityGroup"));
+        assert!(err_msg.contains("depends on"));
+    }
+
+    #[test]
+    fn test_validate_move_references_circular_dependencies() {
+        // Test: Resources reference each other, both being moved - should succeed
+        let template = json!({
+            "Resources": {
+                "ResourceA": {
+                    "Type": "AWS::S3::Bucket",
+                    "Properties": {
+                        "Tags": [
+                            {"Key": "RefB", "Value": {"Ref": "ResourceB"}}
+                        ]
+                    }
+                },
+                "ResourceB": {
+                    "Type": "AWS::DynamoDB::Table",
+                    "Properties": {
+                        "Tags": [
+                            {"Key": "RefA", "Value": {"Ref": "ResourceA"}}
+                        ]
+                    }
+                }
+            }
+        });
+
+        let mut id_mapping = HashMap::new();
+        id_mapping.insert("ResourceA".to_string(), "ResourceA".to_string());
+        id_mapping.insert("ResourceB".to_string(), "ResourceB".to_string());
+
+        let result = validate_move_references(&template, &id_mapping);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_move_references_standalone_resource() {
+        // Test: Resource has no dependencies - should succeed
+        let template = json!({
+            "Resources": {
+                "StandaloneBucket": {
+                    "Type": "AWS::S3::Bucket",
+                    "Properties": {
+                        "BucketName": "test-bucket"
+                    }
+                },
+                "OtherBucket": {
+                    "Type": "AWS::S3::Bucket",
+                    "Properties": {}
+                }
+            }
+        });
+
+        let mut id_mapping = HashMap::new();
+        id_mapping.insert(
+            "StandaloneBucket".to_string(),
+            "StandaloneBucket".to_string(),
+        );
+
+        let result = validate_move_references(&template, &id_mapping);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_move_references_move_all_dependencies_together() {
+        // Test: Moving Instance + SecurityGroup + Role together - should succeed
+        let template = json!({
+            "Resources": {
+                "Instance": {
+                    "Type": "AWS::EC2::Instance",
+                    "Properties": {
+                        "SecurityGroupIds": [{"Ref": "SecurityGroup"}],
+                        "IamInstanceProfile": {"Ref": "Role"}
+                    }
+                },
+                "SecurityGroup": {
+                    "Type": "AWS::EC2::SecurityGroup",
+                    "Properties": {}
+                },
+                "Role": {
+                    "Type": "AWS::IAM::Role",
+                    "Properties": {}
+                }
+            }
+        });
+
+        let mut id_mapping = HashMap::new();
+        id_mapping.insert("Instance".to_string(), "Instance".to_string());
+        id_mapping.insert("SecurityGroup".to_string(), "SecurityGroup".to_string());
+        id_mapping.insert("Role".to_string(), "Role".to_string());
+
+        let result = validate_move_references(&template, &id_mapping);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_move_references_parameter_reference() {
+        // Test: Resource references a parameter - should succeed (parameters are stack config, not resources)
+        let template = json!({
+            "Parameters": {
+                "TableName": {
+                    "Type": "String",
+                    "Default": "my-table"
+                }
+            },
+            "Resources": {
+                "DynamoTable": {
+                    "Type": "AWS::DynamoDB::Table",
+                    "Properties": {
+                        "TableName": {"Ref": "TableName"}
+                    }
+                },
+                "OtherResource": {
+                    "Type": "AWS::S3::Bucket",
+                    "Properties": {}
+                }
+            }
+        });
+
+        let mut id_mapping = HashMap::new();
+        id_mapping.insert("DynamoTable".to_string(), "DynamoTable".to_string());
+        // Not moving OtherResource
+
+        let result = validate_move_references(&template, &id_mapping);
+        assert!(result.is_ok()); // Should succeed because TableName is a parameter, not a resource
+    }
 }
