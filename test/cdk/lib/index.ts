@@ -68,8 +68,8 @@ export class TestStack extends Stack {
         },
       });
 
-      const keyPair = new aws_ec2.CfnKeyPair(this, 'KeyPair', {
-        keyName: 'cfn-teleport-test',
+      const keyPair = new aws_ec2.KeyPair(this, 'KeyPair', {
+        keyPairName: 'cfn-teleport-test',
       });
 
       const role = new aws_iam.Role(this, 'Role', {
@@ -98,7 +98,7 @@ export class TestStack extends Stack {
           aws_ec2.InstanceClass.T2,
           aws_ec2.InstanceSize.MICRO,
         ),
-        keyName: keyPair.keyName,
+        keyPair: keyPair,
       });
 
       // ========================================

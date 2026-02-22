@@ -118,14 +118,14 @@ jobs:
         working-directory: test/cdk
         run: |
           echo "######### TEST 1: Refactor mode with standalone resources #########"
-          
+
           # Find standalone resources
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           STANDALONE_BUCKET=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneBucket"))')
           STANDALONE_TABLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneTable"))')
-          
+
           echo "Found standalone resources: $STANDALONE_BUCKET, $STANDALONE_TABLE"
-          
+
           echo "Moving standalone resources to ${STACK2} with refactor mode..."
           cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${STANDALONE_BUCKET}" \
@@ -159,13 +159,13 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          if ! npx cdk diff --fail; then
-            echo "✓ All resources successfully moved back"
+          if npx cdk diff --fail; then
+            echo "✓ All resources successfully moved back (no drift detected)"
           else
-            echo "✗ Failed to move resources back"
+            echo "✗ Failed to move resources back (drift detected)"
             exit 1
           fi
-          
+
           echo "######### TEST 4: Verify refactor mode REJECTS KeyPair (expected failure) #########"
           if cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" 2>&1 | grep -i "tag"; then
             echo "✓ Refactor mode correctly rejected KeyPair (tag update issue)"
@@ -242,7 +242,7 @@ jobs:
           # CDK generates logical IDs with hashes, e.g., RenameBucket615F0D5B
           # Find the actual resource IDs by looking at the stack template
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-          
+
           # Find all test resources
           RENAME_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameBucket")) | select(startswith("RenameBucketOutput") | not)')
           RENAME_TABLE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameTable")) | select(startswith("RenameTableOutput") | not)')
@@ -251,7 +251,7 @@ jobs:
           DEPENDENT_TABLE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("DependentTable"))')
           LAMBDA_TARGET_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("LambdaTargetBucket"))')
           TEST_FUNCTION_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("TestFunction")) | select(contains("ServiceRole") | not) | select(contains("LogRetention") | not)')
-          
+
           echo "Found test resources:"
           echo "  RenameBucket: $RENAME_BUCKET_ID"
           echo "  RenameTable: $RENAME_TABLE_ID"
@@ -260,7 +260,7 @@ jobs:
           echo "  DependentTable: $DEPENDENT_TABLE_ID"
           echo "  LambdaTargetBucket: $LAMBDA_TARGET_BUCKET_ID"
           echo "  TestFunction: $TEST_FUNCTION_ID"
-          
+
           if [ -z "$RENAME_BUCKET_ID" ] || [ -z "$RENAME_TABLE_ID" ] || [ -z "$RENAME_QUEUE_ID" ]; then
             echo "✗ Could not find required rename test resources in stack"
             exit 1
@@ -274,7 +274,7 @@ jobs:
             --resource "${RENAME_BUCKET_ID}:RenamedBucket"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-          
+
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedBucket' > /dev/null; then
             echo "✓ Resource renamed successfully"
           else
@@ -299,7 +299,7 @@ jobs:
             --resource "${RENAME_TABLE_ID}:RenamedTable"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-          
+
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedTable' > /dev/null; then
             echo "✓ Table renamed successfully"
           else
@@ -324,7 +324,7 @@ jobs:
             --resource "${RENAME_QUEUE_ID}:RenamedQueue"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-          
+
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedQueue' > /dev/null; then
             echo "✓ Queue renamed successfully"
           else
@@ -359,7 +359,7 @@ jobs:
             --resource "${DEPENDENCY_BUCKET_ID}:RenamedDependencyBucket"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-          
+
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedDependencyBucket' > /dev/null; then
             echo "✓ Dependency bucket renamed successfully"
           else
@@ -393,7 +393,7 @@ jobs:
             --resource "${LAMBDA_TARGET_BUCKET_ID}:RenamedLambdaTarget"
 
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-          
+
           if echo "$TEMPLATE" | jq -e '.Resources.RenamedLambdaTarget' > /dev/null; then
             echo "✓ Lambda target bucket renamed successfully"
           else
@@ -431,7 +431,7 @@ jobs:
           STACK1: CfnTeleportTest1
 
       - name: Delete test stacks
-        if: matrix.rust-toolchain == 'stable'
+        if: always() && matrix.rust-toolchain == 'stable'
         run: |
           make test-reset
         env:
