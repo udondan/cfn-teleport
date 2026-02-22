@@ -244,7 +244,7 @@ jobs:
           echo "Found Instance: $INSTANCE"
 
           # Try to move KeyPair without Instance - should fail with dangling reference error
-          ERROR_OUTPUT=$(run_cfn_teleport_capture --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" || true)
+          ERROR_OUTPUT=$(run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" || true)
 
           if echo "$ERROR_OUTPUT" | grep -q "dangling reference"; then
             echo "✓ Refactor mode correctly rejected KeyPair due to dangling reference"
@@ -268,7 +268,7 @@ jobs:
           echo "  ROLE: $ROLE"
 
           # Try to move KeyPair WITH all dependencies - should fail because KeyPair requires recreation
-          ERROR_OUTPUT=$(run_cfn_teleport_capture --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+          ERROR_OUTPUT=$(run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${KEY_PAIR}" \
             --resource "${INSTANCE}" \
             --resource "${SECURITY_GROUP}" \
