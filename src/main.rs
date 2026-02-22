@@ -63,7 +63,15 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() {
+    if let Err(err) = run().await {
+        // Print error with proper formatting (interprets escape sequences)
+        eprintln!("\n{}\n", err);
+        process::exit(1);
+    }
+}
+
+async fn run() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
     let config = aws_config::load_defaults(BehaviorVersion::v2026_01_12()).await;
@@ -89,28 +97,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
 
             if is_credentials_error {
-                eprintln!("\nAWS credentials not found.\n");
-                eprintln!("Please ensure you're authenticated with AWS using one of the following methods:");
-                eprintln!("  • AWS CLI: Run 'aws configure'");
-                eprintln!(
-                    "  • Environment variables: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY"
-                );
-                eprintln!("  • IAM role (if running on EC2/ECS/Lambda)");
-                eprintln!("\nFor more information, visit:");
-                eprintln!(
-                    "  https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html\n"
-                );
-                process::exit(1);
+                return Err("AWS credentials not found.\n\nPlease ensure you're authenticated with AWS using one of the following methods:\n  • AWS CLI: Run 'aws configure'\n  • Environment variables: Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY\n  • IAM role (if running on EC2/ECS/Lambda)\n\nFor more information, visit:\n  https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html".into());
             } else {
                 // Handle other AWS errors cleanly
                 let message = err.message().unwrap_or("An AWS error occurred");
 
                 if let Some(code) = err.code() {
-                    eprintln!("\nAWS Error ({}): {}\n", code, message);
+                    return Err(format!("AWS Error ({}): {}", code, message).into());
                 } else {
-                    eprintln!("\n{}\n", message);
+                    return Err(message.into());
                 }
-                process::exit(1);
             }
         }
     };
@@ -171,12 +167,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .collect();
 
             if !non_existing_ids.is_empty() {
-                eprintln!(
+                return Err(format!(
                     "ERROR: The following resources do not exist on stack '{}':\n - {}",
                     source_stack,
                     non_existing_ids.to_owned().join("\n - "),
-                );
-                process::exit(1);
+                )
+                .into());
             }
             filter_resources(resource_refs, &source_ids).await?
         }
@@ -417,23 +413,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if !blocked_resources_with_params.is_empty() {
-        eprintln!("\nCannot use import mode for resources that depend on stack parameters:\n");
+        let mut error_msg =
+            String::from("Cannot use import mode for resources that depend on stack parameters:\n");
         for (id, typ, params) in &blocked_resources_with_params {
-            eprintln!(
-                "  - {} ({}) - depends on parameters: {}",
+            error_msg.push_str(&format!(
+                "  - {} ({}) - depends on parameters: {}\n",
                 id,
                 typ,
                 params.join(", ")
-            );
+            ));
         }
-        eprintln!(
-            "\nImport mode does NOT copy parameters between stacks, which causes resources to be"
+        error_msg.push_str(
+            "\nImport mode does NOT copy parameters between stacks, which causes resources to be\n",
         );
-        eprintln!("deleted from source stack but fail to import to target stack, leaving them orphaned.\n");
-        eprintln!(
-            "Use --mode refactor instead, or remove parameter dependencies from these resources.\n"
+        error_msg.push_str("deleted from source stack but fail to import to target stack, leaving them orphaned.\n\n");
+        error_msg.push_str(
+            "Use --mode refactor instead, or remove parameter dependencies from these resources.",
         );
-        process::exit(1);
+        return Err(error_msg.into());
     }
 
     let resource_ids_to_remove: Vec<_> = new_logical_ids_map.keys().cloned().collect();
