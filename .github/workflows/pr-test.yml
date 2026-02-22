@@ -177,6 +177,15 @@ jobs:
           fi
 
           echo "######### TEST 4: Verify refactor mode REJECTS KeyPair (expected failure) #########"
+          # Find KeyPair logical ID dynamically
+          KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
+          if [ -z "$KEY_PAIR" ]; then
+            echo "✗ Could not find KeyPair in stack"
+            echo "  KEY_PAIR: '$KEY_PAIR'"
+            exit 1
+          fi
+          echo "Found KeyPair: $KEY_PAIR"
+
           if cfn-teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}"; then
             echo "✗ Refactor mode should have failed with KeyPair but didn't"
             exit 1
@@ -192,7 +201,6 @@ jobs:
           BUCKET1: Bucket182C536A1
           BUCKET2: Bucket21D68F7E8
           DYNAMO_TABLE: DynamoDbTable6316879D
-          KEY_PAIR: KeyPair
 
       - name: Test import mode (legacy) with all resource types including KeyPair
         if: matrix.rust-toolchain == 'stable'
