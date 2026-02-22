@@ -8,6 +8,7 @@ use std::error::Error;
 use std::io;
 use std::process;
 use uuid::Uuid;
+mod cfn_yaml;
 mod reference_updater;
 mod spinner;
 mod supported_resource_types;
@@ -1015,15 +1016,22 @@ async fn get_template(
     match serde_json::from_str(template_str) {
         Ok(parsed) => Ok(Template::new(parsed, TemplateFormat::Json)),
         Err(_json_err) => {
-            // Fallback to YAML parsing if JSON fails
-            let parsed: serde_json::Value =
-                serde_yaml::from_str(template_str).map_err(|yaml_err| {
-                    format!(
-                        "Failed to parse template as JSON or YAML. YAML error: {}",
-                        yaml_err
-                    )
-                })?;
-            Ok(Template::new(parsed, TemplateFormat::Yaml))
+            // Fallback to YAML parsing with CloudFormation tag support
+            // Try the CF-aware parser first (handles !Ref, !Sub, etc.)
+            match cfn_yaml::parse_yaml_to_json(template_str) {
+                Ok(parsed) => Ok(Template::new(parsed, TemplateFormat::Yaml)),
+                Err(_cf_yaml_err) => {
+                    // If CF parser fails, try standard YAML parser as fallback
+                    let parsed: serde_json::Value =
+                        serde_yaml::from_str(template_str).map_err(|yaml_err| {
+                            format!(
+                                "Failed to parse template as JSON or YAML. YAML error: {}",
+                                yaml_err
+                            )
+                        })?;
+                    Ok(Template::new(parsed, TemplateFormat::Yaml))
+                }
+            }
         }
     }
 }
@@ -1832,11 +1840,13 @@ async fn update_stack(
     stack_name: &str,
     template: serde_json::Value,
     format: TemplateFormat,
-) -> Result<(), cloudformation::Error> {
+) -> Result<(), Box<dyn Error>> {
+    let template_body = Template::new(template, format).to_string()?;
+
     match client
         .update_stack()
         .stack_name(stack_name)
-        .template_body(Template::new(template, format).to_string().unwrap())
+        .template_body(template_body)
         // @TODO: we can detect the required capabilities from the output of validate_template()
         .capabilities(cloudformation::types::Capability::CapabilityIam)
         .capabilities(cloudformation::types::Capability::CapabilityNamedIam)
@@ -1936,8 +1946,8 @@ async fn create_changeset(
     format: TemplateFormat,
     resources_to_import: Vec<&cloudformation::types::StackResourceSummary>,
     new_logical_ids_map: HashMap<String, String>,
-) -> Result<std::string::String, cloudformation::Error> {
-    let template_string = Template::new(template.clone(), format).to_string().unwrap();
+) -> Result<std::string::String, Box<dyn Error>> {
+    let template_string = Template::new(template.clone(), format).to_string()?;
     let resource_identifiers = get_resource_identifier_mapping(client, &template_string).await?;
     let resources = resources_to_import
         .iter()
@@ -2243,7 +2253,7 @@ mod tests {
 
     #[test]
     fn test_parse_template_yaml() {
-        // Test: Parse valid YAML template (this currently fails in production code)
+        // Test: Parse valid YAML template without CloudFormation intrinsic function tags
         let yaml_template = r#"AWSTemplateFormatVersion: 2010-09-09
 Description: "Creates an S3 bucket to store logs."
 
@@ -2254,11 +2264,11 @@ Resources:
       BucketName: test-bucket
 "#;
 
-        // This test demonstrates the bug - JSON parser can't handle YAML
+        // JSON parsing should fail for YAML
         let json_result = serde_json::from_str::<serde_json::Value>(yaml_template);
-        assert!(json_result.is_err()); // JSON parsing should fail for YAML
+        assert!(json_result.is_err());
 
-        // Once we implement the fix, YAML parsing should work
+        // YAML parsing should work
         let yaml_result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
         assert!(yaml_result.is_ok());
         let parsed = yaml_result.unwrap();
@@ -2323,5 +2333,52 @@ Resources:
             parsed["Resources"]["MyBucket"]["Type"].as_str(),
             Some("AWS::S3::Bucket")
         );
+    }
+
+    #[test]
+    fn test_parse_template_yaml_with_cloudformation_intrinsic_functions() {
+        // Test: YAML template with CloudFormation intrinsic function tags (!Ref, !Sub, !GetAtt)
+        let yaml_template = r#"AWSTemplateFormatVersion: 2010-09-09
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-bucket'
+  
+  MyQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref MyBucket
+  
+  MyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !GetAtt MyBucket.Arn
+"#;
+
+        // Standard serde_yaml parser should fail with intrinsic function tags
+        let serde_result = serde_yaml::from_str::<serde_json::Value>(yaml_template);
+        assert!(serde_result.is_err());
+
+        // Our cfn_yaml parser should handle CloudFormation tags
+        let cf_result = cfn_yaml::parse_yaml_to_json(yaml_template);
+        assert!(
+            cf_result.is_ok(),
+            "Failed to parse CF YAML: {:?}",
+            cf_result
+        );
+        let parsed = cf_result.unwrap();
+
+        // Verify intrinsic functions are converted to long-form JSON
+        assert!(parsed["Resources"]["MyBucket"]["Properties"]["BucketName"].is_object());
+        assert!(parsed["Resources"]["MyBucket"]["Properties"]["BucketName"]["Fn::Sub"].is_string());
+
+        assert!(parsed["Resources"]["MyQueue"]["Properties"]["QueueName"].is_object());
+        assert!(parsed["Resources"]["MyQueue"]["Properties"]["QueueName"]["Ref"].is_string());
+
+        assert!(parsed["Resources"]["MyRole"]["Properties"]["RoleName"].is_object());
+        // !GetAtt with dot notation can be either string or array depending on parser
+        let getatt_value = &parsed["Resources"]["MyRole"]["Properties"]["RoleName"]["Fn::GetAtt"];
+        assert!(getatt_value.is_array() || getatt_value.is_string());
     }
 }
