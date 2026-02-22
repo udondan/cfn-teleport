@@ -14,6 +14,14 @@ mod supported_resource_types;
 
 const DEMO: bool = false;
 
+// Dependency marker emojis
+const EMOJI_INCOMING: &str = "➡️";
+const EMOJI_OUTGOING: &str = "⬅️";
+const EMOJI_BIDIRECTIONAL: &str = "↔️";
+const EMOJI_OUTPUTS: &str = "⬆️";
+const EMOJI_PARAMETERS: &str = "⬇️";
+const EMOJI_BOTH_STACK_INTERFACE: &str = "↕️";
+
 /// Holds dependency information for a resource
 struct ResourceDependencyInfo {
     has_incoming_deps: bool,     // Other resources reference this one
@@ -901,13 +909,18 @@ fn generate_legend(dependency_info: &HashMap<String, ResourceDependencyInfo>) ->
 
     // Show resource dependency line if any resource deps exist
     if has_incoming_deps || has_outgoing_deps {
-        legend
-            .push_str("\n  Resource dependencies: ➡️  incoming  ⬅️  outgoing    ↔️  bidirectional");
+        legend.push_str(&format!(
+            "\n  Resource dependencies: {}  incoming  {}  outgoing    {}  bidirectional",
+            EMOJI_INCOMING, EMOJI_OUTGOING, EMOJI_BIDIRECTIONAL
+        ));
     }
 
     // Show stack interface line if any outputs or parameters exist
     if has_output_refs || has_parameter_deps {
-        legend.push_str("\n  Stack interface:       ⬆️  outputs   ⬇️  parameters  ↕️  both");
+        legend.push_str(&format!(
+            "\n  Stack interface:       {}  outputs   {}  parameters  {}  both",
+            EMOJI_OUTPUTS, EMOJI_PARAMETERS, EMOJI_BOTH_STACK_INTERFACE
+        ));
     }
 
     Some(legend)
@@ -990,11 +1003,11 @@ async fn format_resources(
 
                 // Left/Right arrows for resource dependencies
                 if info.has_incoming_deps && info.has_outgoing_deps {
-                    marker_str.push_str("↔️");
+                    marker_str.push_str(EMOJI_BIDIRECTIONAL);
                 } else if info.has_incoming_deps {
-                    marker_str.push_str("➡️");
+                    marker_str.push_str(EMOJI_INCOMING);
                 } else if info.has_outgoing_deps {
-                    marker_str.push_str("⬅️");
+                    marker_str.push_str(EMOJI_OUTGOING);
                 }
 
                 // Add space between if we have both types
@@ -1009,15 +1022,15 @@ async fn format_resources(
 
                 // Up/Down arrows for outputs/parameters
                 if info.referenced_by_outputs && info.depends_on_parameters {
-                    marker_str.push_str("↕️");
+                    marker_str.push_str(EMOJI_BOTH_STACK_INTERFACE);
                 } else if info.referenced_by_outputs {
-                    marker_str.push_str("⬆️");
+                    marker_str.push_str(EMOJI_OUTPUTS);
                     if !has_lr && max_emoji_count == 2 {
                         // Pad single emoji to match 2-emoji width if max is 2
                         marker_str.insert_str(0, "  ");
                     }
                 } else if info.depends_on_parameters {
-                    marker_str.push_str("⬇️");
+                    marker_str.push_str(EMOJI_PARAMETERS);
                     if !has_lr && max_emoji_count == 2 {
                         // Pad single emoji to match 2-emoji width if max is 2
                         marker_str.insert_str(0, "  ");
