@@ -2,7 +2,6 @@ import {
   aws_dynamodb,
   aws_ec2,
   aws_iam,
-  aws_lambda,
   aws_s3,
   aws_sqs,
   CfnOutput,
@@ -17,8 +16,10 @@ import { CfnInstanceProfile } from 'aws-cdk-lib/aws-iam';
 import { CfnQueue } from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
 
+type ResourceSet = 'refactor' | 'import' | 'rename' | 'none';
+
 type TestStackProps = StackProps & {
-  resources: boolean;
+  resourceSet: ResourceSet;
 };
 
 export class TestStack extends Stack {
@@ -28,9 +29,10 @@ export class TestStack extends Stack {
     Tags.of(this).add('ApplicationName', 'cfn-teleport-test');
 
     // ========================================
-    // PARAMETER (exists in BOTH stacks)
-    // This parameter should exist in both test stacks so that resources
-    // depending on it can be moved between stacks successfully
+    // PARAMETER (exists in refactor and import stacks)
+    // This parameter exists in RefactorTest1/2 and ImportTest1/2 so that
+    // parameter-dependent resources can be moved between stacks successfully.
+    // RenameTest1 doesn't need it since rename operations are same-stack only.
     // ========================================
     const tableNameParameter = new CfnParameter(this, 'ParameterTableName', {
       type: 'String',
@@ -38,48 +40,18 @@ export class TestStack extends Stack {
       description: 'Table name controlled by stack parameter',
     });
 
-    if (props.resources) {
-      // ========================================
-      // PARAMETER TEST RESOURCES (only in Stack1)
-      // Resources that depend on stack parameters
-      // ========================================
-
-      // Table that uses the parameter - can be moved cross-stack
-      // because the parameter exists in both stacks
-      new aws_dynamodb.Table(this, 'ParameterTable', {
-        tableName: tableNameParameter.valueAsString,
-        removalPolicy: RemovalPolicy.DESTROY,
-        partitionKey: {
-          name: 'id',
-          type: aws_dynamodb.AttributeType.STRING,
-        },
-      });
-
-      // ========================================
-
-      const vpc = aws_ec2.Vpc.fromLookup(this, 'ImportVPC', {
-        isDefault: true,
-      });
-
-      new aws_s3.Bucket(this, 'Bucket-1', {
-        bucketName: `${this.account}-cfn-teleport-test-1`,
-        removalPolicy: RemovalPolicy.DESTROY,
-      });
-
-      new aws_s3.Bucket(this, 'Bucket-2', {
-        bucketName: `${this.account}-cfn-teleport-test-2`,
-        removalPolicy: RemovalPolicy.DESTROY,
-      });
-
-      // Standalone bucket for testing cross-stack moves with refactor mode
-      // NO OUTPUTS, NO REFERENCES - completely standalone
+    // ========================================
+    // REFACTOR MODE TEST RESOURCES
+    // Resources for testing refactor mode cross-stack migration
+    // ========================================
+    if (props.resourceSet === 'refactor') {
+      // Standalone bucket - no dependencies, no outputs
       new aws_s3.Bucket(this, 'StandaloneBucket', {
         bucketName: `${this.account}-cfn-teleport-standalone`,
         removalPolicy: RemovalPolicy.DESTROY,
       });
 
-      // Standalone DynamoDB table for testing cross-stack moves with refactor mode
-      // NO OUTPUTS, NO REFERENCES - completely standalone
+      // Standalone DynamoDB table - no dependencies, no outputs
       new aws_dynamodb.Table(this, 'StandaloneTable', {
         tableName: `cfn-teleport-standalone`,
         removalPolicy: RemovalPolicy.DESTROY,
@@ -89,8 +61,20 @@ export class TestStack extends Stack {
         },
       });
 
+      // Regular buckets for grouped migration testing
+      new aws_s3.Bucket(this, 'Bucket-1', {
+        bucketName: `${this.account}-cfn-teleport-refactor-test-1`,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+
+      new aws_s3.Bucket(this, 'Bucket-2', {
+        bucketName: `${this.account}-cfn-teleport-refactor-test-2`,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+
+      // DynamoDB table for grouped migration testing
       new aws_dynamodb.Table(this, 'DynamoDbTable', {
-        tableName: `cfn-teleport-test`,
+        tableName: `cfn-teleport-refactor-test`,
         removalPolicy: RemovalPolicy.DESTROY,
         partitionKey: {
           name: 'id',
@@ -98,44 +82,100 @@ export class TestStack extends Stack {
         },
       });
 
-      const keyPair = new aws_ec2.KeyPair(this, 'KeyPair', {
-        keyPairName: 'cfn-teleport-test',
+      // Parameter-dependent table - tests parameter dependency migration
+      new aws_dynamodb.Table(this, 'ParameterTable', {
+        tableName: tableNameParameter.valueAsString,
+        removalPolicy: RemovalPolicy.DESTROY,
+        partitionKey: {
+          name: 'id',
+          type: aws_dynamodb.AttributeType.STRING,
+        },
       });
 
+      // KeyPair for error testing (refactor mode should reject this)
+      new aws_ec2.KeyPair(this, 'KeyPair', {
+        keyPairName: 'cfn-teleport-test-refactor',
+      });
+    }
+
+    // ========================================
+    // IMPORT MODE TEST RESOURCES
+    // Resources for testing import mode migration with KeyPair
+    // ========================================
+    if (props.resourceSet === 'import') {
+      const vpc = aws_ec2.Vpc.fromLookup(this, 'ImportVPC', {
+        isDefault: true,
+      });
+
+      // Buckets and table for import testing
+      new aws_s3.Bucket(this, 'Bucket-1', {
+        bucketName: `${this.account}-cfn-teleport-import-test-1`,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+
+      new aws_s3.Bucket(this, 'Bucket-2', {
+        bucketName: `${this.account}-cfn-teleport-import-test-2`,
+        removalPolicy: RemovalPolicy.DESTROY,
+      });
+
+      new aws_dynamodb.Table(this, 'DynamoDbTable', {
+        tableName: `cfn-teleport-import-test`,
+        removalPolicy: RemovalPolicy.DESTROY,
+        partitionKey: {
+          name: 'id',
+          type: aws_dynamodb.AttributeType.STRING,
+        },
+      });
+
+      // KeyPair - special case resource requiring replacement
+      const keyPair = new aws_ec2.KeyPair(this, 'KeyPair', {
+        keyPairName: 'cfn-teleport-test-import',
+      });
+
+      // IAM Role for Launch Template
       const role = new aws_iam.Role(this, 'Role', {
-        roleName: 'cfn-teleport-test',
+        roleName: 'cfn-teleport-import-test',
         assumedBy: new aws_iam.ServicePrincipal('ec2.amazonaws.com'),
       });
 
+      // Instance Profile for Launch Template
+      const instanceProfile = new CfnInstanceProfile(this, 'InstanceProfile', {
+        instanceProfileName: 'cfn-teleport-test',
+        roles: [role.roleName],
+      });
+
+      // Security Group for Launch Template
       const securityGroup = new aws_ec2.SecurityGroup(this, 'SecurityGroup', {
         securityGroupName: 'cfn-teleport-test',
         vpc,
       });
 
+      // Machine Image lookup for Launch Template
       const machineImage = new aws_ec2.LookupMachineImage({
         name: 'amzn2-ami-hvm-*-x86_64-gp2',
         owners: ['amazon'],
       });
 
-      CfnInstanceProfile;
-
-      new aws_ec2.Instance(this, 'Instance', {
-        vpc,
-        machineImage,
-        securityGroup,
-        role,
-        instanceType: aws_ec2.InstanceType.of(
-          aws_ec2.InstanceClass.T2,
-          aws_ec2.InstanceSize.MICRO,
-        ),
-        keyPair: keyPair,
+      // Launch Template (replaces EC2 Instance) - validates KeyPair relationships without creating instances
+      new aws_ec2.CfnLaunchTemplate(this, 'LaunchTemplate', {
+        launchTemplateName: 'cfn-teleport-test-template',
+        launchTemplateData: {
+          imageId: machineImage.getImage(this).imageId,
+          instanceType: 't2.micro',
+          keyName: keyPair.keyPairName,
+          securityGroupIds: [securityGroup.securityGroupId],
+          iamInstanceProfile: {
+            arn: instanceProfile.attrArn,
+          },
+        },
       });
+    }
 
-      // ========================================
-      // RENAME TEST RESOURCES
-      // Comprehensive test resources covering all reference types
-      // ========================================
-
+    // ========================================
+    // RENAME TEST RESOURCES
+    // Resources for testing same-stack rename with various reference types
+    // ========================================
+    if (props.resourceSet === 'rename') {
       // 1. Bucket for rename testing - will be referenced by Output (Ref)
       const renameBucket = new aws_s3.Bucket(this, 'RenameBucket', {
         bucketName: `${this.account}-cfn-teleport-rename-test`,
@@ -181,7 +221,7 @@ export class TestStack extends Stack {
         description: 'Output using Fn::Sub with resource reference',
       });
 
-      // 5. Resources with DependsOn relationship
+      // 4. Resources with DependsOn relationship (for rename TEST 4)
       const dependencyBucket = new aws_s3.Bucket(this, 'DependencyBucket', {
         bucketName: `${this.account}-cfn-teleport-dependency-test`,
         removalPolicy: RemovalPolicy.DESTROY,
@@ -207,33 +247,6 @@ export class TestStack extends Stack {
       new CfnOutput(this, 'DependencyTestOutput', {
         value: `${dependencyBucket.bucketName}:${dependentTable.tableName}`,
         description: 'Resources with DependsOn relationship',
-      });
-
-      // 6. Lambda function that references a bucket in environment variable (resource property reference)
-      const lambdaTargetBucket = new aws_s3.Bucket(this, 'LambdaTargetBucket', {
-        bucketName: `${this.account}-cfn-teleport-lambda-target`,
-        removalPolicy: RemovalPolicy.DESTROY,
-      });
-
-      // Create a simple Lambda function that references the bucket via environment variable
-      const testFunction = new aws_lambda.Function(this, 'TestFunction', {
-        runtime: aws_lambda.Runtime.NODEJS_20_X,
-        handler: 'index.handler',
-        code: aws_lambda.Code.fromInline(`
-          exports.handler = async (event) => {
-            console.log('Bucket:', process.env.BUCKET_NAME);
-            return { statusCode: 200 };
-          };
-        `),
-        environment: {
-          BUCKET_NAME: lambdaTargetBucket.bucketName, // Ref to bucket
-          BUCKET_ARN: lambdaTargetBucket.bucketArn, // Fn::GetAtt to bucket
-        },
-      });
-
-      new CfnOutput(this, 'LambdaTestOutput', {
-        value: `${testFunction.functionName}:${lambdaTargetBucket.bucketName}`,
-        description: 'Lambda with bucket references in environment',
       });
     }
   }

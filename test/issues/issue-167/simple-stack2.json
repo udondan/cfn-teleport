@@ -1,0 +1,10 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "Simple JSON stack for testing",
+  "Resources": {
+    "TestQueue": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {}
+    }
+  }
+}
