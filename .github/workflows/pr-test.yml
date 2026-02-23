@@ -305,10 +305,9 @@ jobs:
             exit 1
           fi
 
-          echo "######### TEST 5: Verify refactor mode REJECTS KeyPair alone (dangling reference) #########"
+          echo "######### TEST 5: Verify refactor mode REJECTS KeyPair (does not support tag updates) #########"
           # Find KeyPair logical ID dynamically
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
-          INSTANCE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("Profile") | not)')
 
           if [ -z "$KEY_PAIR" ]; then
             echo "✗ Could not find KeyPair in stack"
@@ -316,45 +315,13 @@ jobs:
             exit 1
           fi
           echo "Found KeyPair: $KEY_PAIR"
-          echo "Found Instance: $INSTANCE"
 
-          # Try to move KeyPair without Instance - should fail with dangling reference error
+          # Try to move KeyPair - should fail because KeyPair doesn't support tag updates after creation
           ERROR_OUTPUT=$(run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor --resource "${KEY_PAIR}" || true)
           echo "$ERROR_OUTPUT"
 
-          if echo "$ERROR_OUTPUT" | grep -q "dangling reference"; then
-            echo "✓ Refactor mode correctly rejected KeyPair due to dangling reference"
-          else
-            echo "✗ Refactor mode failed but not with expected error"
-            echo "Error output: $ERROR_OUTPUT"
-            exit 1
-          fi
-
-          echo "######### TEST 6: Verify refactor mode REJECTS KeyPair+Instance+dependencies (requires replacement) #########"
-          # Find all related resources
-          SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
-          INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
-          ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
-
-          echo "Moving KeyPair with all dependencies:"
-          echo "  KEY_PAIR: $KEY_PAIR"
-          echo "  INSTANCE: $INSTANCE"
-          echo "  SECURITY_GROUP: $SECURITY_GROUP"
-          echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
-          echo "  ROLE: $ROLE"
-
-          # Try to move KeyPair WITH all dependencies - should fail because KeyPair requires recreation
-          ERROR_OUTPUT=$(run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
-            --resource "${KEY_PAIR}" \
-            --resource "${INSTANCE}" \
-            --resource "${SECURITY_GROUP}" \
-            --resource "${INSTANCE_PROFILE}" \
-            --resource "${ROLE}" \
-            || true)
-          echo "$ERROR_OUTPUT"
-
           if echo "$ERROR_OUTPUT" | grep -q "Stack Refactor does not support AWS::EC2::KeyPair"; then
-            echo "✓ Refactor mode correctly rejected KeyPair+Instance due to replacement requirement"
+            echo "✓ Refactor mode correctly rejected KeyPair (does not support tag updates after creation)"
           else
             echo "✗ Refactor mode failed but not with expected error (should mention Stack Refactor does not support AWS::EC2::KeyPair)"
             echo "Error output: $ERROR_OUTPUT"
