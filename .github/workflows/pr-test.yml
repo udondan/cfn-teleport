@@ -650,10 +650,9 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRenameTest1
 
-  # Verify stack formats and cleanup
-  cleanup:
+  # Verify stack template formats
+  verify-formats:
     needs: [cdk-deploy, test-refactor, test-import, test-rename]
-    if: always() && needs.cdk-deploy.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -668,8 +667,16 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+  # Cleanup - always runs even if tests or format verification fail
+  cleanup:
+    needs: [cdk-deploy, test-refactor, test-import, test-rename, verify-formats]
+    if: always() && needs.cdk-deploy.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Delete test stacks
-        if: always()
         run: make test-reset
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -686,6 +693,7 @@ jobs:
       - test-refactor
       - test-import
       - test-rename
+      - verify-formats
       - cleanup
     steps:
       - name: Report success
