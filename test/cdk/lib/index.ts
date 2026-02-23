@@ -29,9 +29,10 @@ export class TestStack extends Stack {
     Tags.of(this).add('ApplicationName', 'cfn-teleport-test');
 
     // ========================================
-    // PARAMETER (exists in ALL stacks)
-    // This parameter should exist in all test stacks so that resources
-    // depending on it can be moved between stacks successfully
+    // PARAMETER (exists in refactor and import stacks)
+    // This parameter exists in RefactorTest1/2 and ImportTest1/2 so that
+    // parameter-dependent resources can be moved between stacks successfully.
+    // RenameTest1 doesn't need it since rename operations are same-stack only.
     // ========================================
     const tableNameParameter = new CfnParameter(this, 'ParameterTableName', {
       type: 'String',
@@ -220,7 +221,7 @@ export class TestStack extends Stack {
         description: 'Output using Fn::Sub with resource reference',
       });
 
-      // 4. Resources with DependsOn relationship
+      // 4. Resources with DependsOn relationship (for rename TEST 4)
       const dependencyBucket = new aws_s3.Bucket(this, 'DependencyBucket', {
         bucketName: `${this.account}-cfn-teleport-dependency-test`,
         removalPolicy: RemovalPolicy.DESTROY,
