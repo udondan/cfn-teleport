@@ -7,7 +7,11 @@ Parameters:
     Default: cfn-teleport-param-test
     Description: Table name controlled by stack parameter (must match Stack1 parameter name)
 
-Resources: {}
+Resources:
+  # CloudFormation requires at least one resource - this is a minimal placeholder
+  # Real test resources will be moved here from Stack1 during integration tests
+  WaitConditionHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
 
 Outputs:
   StackFormat:
