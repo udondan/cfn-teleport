@@ -87,11 +87,19 @@ jobs:
           path: ~/.cargo/bin/cfn-teleport
           retention-days: 1
 
-  # Deploy test stacks (CDK + CloudFormation YAML templates)
+  # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
     needs: changes
     if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack:
+          - {name: "CfnTeleportRefactorTest1", type: "cdk"}
+          - {name: "CfnTeleportRefactorTest2", type: "yaml", template: "refactor-test2-template.yaml"}
+          - {name: "CfnTeleportImportTest1", type: "cdk"}
+          - {name: "CfnTeleportImportTest2", type: "yaml", template: "import-test2-template.yaml"}
+          - {name: "CfnTeleportRenameTest1", type: "cdk"}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -102,6 +110,7 @@ jobs:
           node-version: 24
 
       - name: npm dependency cache
+        if: matrix.stack.type == 'cdk'
         uses: actions/cache@v5
         with:
           path: test/cdk/.npm
@@ -109,13 +118,32 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      - name: Deploy test stacks
+      - name: Deploy CDK stack
+        if: matrix.stack.type == 'cdk'
         working-directory: test/cdk
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: make install && make deploy
+        run: |
+          npm ci --cache .npm --prefer-offline
+          npm run build
+          npx cdk deploy --require-approval never "${{ matrix.stack.name }}"
+
+      - name: Deploy YAML stack
+        if: matrix.stack.type == 'yaml'
+        working-directory: test/cdk
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          aws cloudformation deploy \
+            --template-file ${{ matrix.stack.template }} \
+            --stack-name ${{ matrix.stack.name }} \
+            --parameter-overrides ParameterTableName=cfn-teleport-param-test \
+            --tags ApplicationName=cfn-teleport-test \
+            --no-fail-on-empty-changeset
 
   # Refactor mode tests (runs in parallel with import and rename tests)
   test-refactor:

@@ -258,6 +258,21 @@ Improve integration test infrastructure to enable parallel test execution and el
 - Estimated: 5 min
 - Status: Verified - test-reset calls `cd test/cdk && make DESTROY` which handles all 5 stacks
 
+**T024b** - Parallelize stack deployment (matrix strategy) ✅
+- File: `.github/workflows/pr-test.yml`
+- Replaced sequential deployment with GitHub Actions matrix strategy
+- Matrix deploys 5 stacks in parallel:
+  - CfnTeleportRefactorTest1 (CDK)
+  - CfnTeleportRefactorTest2 (YAML)
+  - CfnTeleportImportTest1 (CDK)
+  - CfnTeleportImportTest2 (YAML)
+  - CfnTeleportRenameTest1 (CDK)
+- Conditional steps based on stack type (cdk vs yaml)
+- Benefits: Reduces deployment time from ~2min sequential to <1min parallel
+- Dependencies: T024
+- Estimated: 45 min
+- Status: Implemented with matrix strategy (cleaner than 5 separate jobs)
+
 ### Testing & Validation Phase (US-1, US-2, US-3)
 
 **T025** - Push to feature branch and trigger CI
