@@ -5,16 +5,36 @@ import { TestStack } from '../lib';
 
 const app = new cdk.App();
 
-// Stack 1: Deployed via CDK (JSON format)
-// Contains all test resources initially
-new TestStack(app, 'CfnTeleportTest1', {
+// Refactor Test Stack (JSON format via CDK)
+// Contains resources for testing refactor mode cross-stack migration
+new TestStack(app, 'CfnTeleportRefactorTest1', {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION,
   },
-  resources: true,
+  resourceSet: 'refactor',
 });
 
-// Stack 2: Deployed via AWS CLI using YAML template (stack2-template.yaml)
-// This ensures we test YAML format preservation
-// Note: Stack 2 is NOT created by CDK - see Makefile deploy target
+// Import Test Stack (JSON format via CDK)
+// Contains resources for testing import mode with KeyPair and Launch Template
+new TestStack(app, 'CfnTeleportImportTest1', {
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: process.env.CDK_DEFAULT_REGION,
+  },
+  resourceSet: 'import',
+});
+
+// Rename Test Stack (JSON format via CDK)
+// Contains resources for testing same-stack rename operations
+new TestStack(app, 'CfnTeleportRenameTest1', {
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: process.env.CDK_DEFAULT_REGION,
+  },
+  resourceSet: 'rename',
+});
+
+// Target stacks (RefactorTest2, ImportTest2) are deployed via AWS CLI
+// using YAML templates to ensure YAML format preservation testing
+// See Makefile deploy target for YAML stack deployment

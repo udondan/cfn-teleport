@@ -12,19 +12,38 @@ synth: build
 
 deploy: build
 	@echo "=========================================="
-	@echo "Deploying CfnTeleportTest1 (JSON via CDK)"
+	@echo "Deploying Refactor Test Stacks"
 	@echo "=========================================="
-	@npx cdk deploy --require-approval never "CfnTeleportTest1"
+	@echo "Deploying CfnTeleportRefactorTest1 (JSON via CDK)..."
+	@npx cdk deploy --require-approval never "CfnTeleportRefactorTest1"
 	@echo ""
-	@echo "=========================================="
-	@echo "Deploying CfnTeleportTest2 (YAML via AWS CLI)"
-	@echo "=========================================="
+	@echo "Deploying CfnTeleportRefactorTest2 (YAML via AWS CLI)..."
 	@aws cloudformation deploy \
-		--template-file stack2-template.yaml \
-		--stack-name CfnTeleportTest2 \
+		--template-file refactor-test2-template.yaml \
+		--stack-name CfnTeleportRefactorTest2 \
 		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
+	@echo ""
+	@echo "=========================================="
+	@echo "Deploying Import Test Stacks"
+	@echo "=========================================="
+	@echo "Deploying CfnTeleportImportTest1 (JSON via CDK)..."
+	@npx cdk deploy --require-approval never "CfnTeleportImportTest1"
+	@echo ""
+	@echo "Deploying CfnTeleportImportTest2 (YAML via AWS CLI)..."
+	@aws cloudformation deploy \
+		--template-file import-test2-template.yaml \
+		--stack-name CfnTeleportImportTest2 \
+		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
+		--tags ApplicationName=cfn-teleport-test \
+		--no-fail-on-empty-changeset
+	@echo ""
+	@echo "=========================================="
+	@echo "Deploying Rename Test Stack"
+	@echo "=========================================="
+	@echo "Deploying CfnTeleportRenameTest1 (JSON via CDK)..."
+	@npx cdk deploy --require-approval never "CfnTeleportRenameTest1"
 	@echo ""
 	@echo "=========================================="
 	@echo "Verifying stack formats"
@@ -32,27 +51,48 @@ deploy: build
 	@$(MAKE) verify-formats
 
 verify-formats:
-	@echo "Checking CfnTeleportTest1 format (should be JSON)..."
-	@aws cloudformation get-template --stack-name CfnTeleportTest1 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template1.txt
-	@head -c 1 /tmp/template1.txt | grep -q '{' && \
-		echo "✅ CfnTeleportTest1 is JSON format" || \
-		(echo "❌ CfnTeleportTest1 is NOT JSON format" && exit 1)
+	@echo "Checking JSON format stacks (CDK-deployed)..."
+	@aws cloudformation get-template --stack-name CfnTeleportRefactorTest1 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-refactor1.txt
+	@head -c 1 /tmp/template-refactor1.txt | grep -q '{' && \
+		echo "✅ CfnTeleportRefactorTest1 is JSON format" || \
+		(echo "❌ CfnTeleportRefactorTest1 is NOT JSON format" && exit 1)
+	@aws cloudformation get-template --stack-name CfnTeleportImportTest1 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-import1.txt
+	@head -c 1 /tmp/template-import1.txt | grep -q '{' && \
+		echo "✅ CfnTeleportImportTest1 is JSON format" || \
+		(echo "❌ CfnTeleportImportTest1 is NOT JSON format" && exit 1)
+	@aws cloudformation get-template --stack-name CfnTeleportRenameTest1 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-rename1.txt
+	@head -c 1 /tmp/template-rename1.txt | grep -q '{' && \
+		echo "✅ CfnTeleportRenameTest1 is JSON format" || \
+		(echo "❌ CfnTeleportRenameTest1 is NOT JSON format" && exit 1)
 	@echo ""
-	@echo "Checking CfnTeleportTest2 format (should be YAML)..."
-	@aws cloudformation get-template --stack-name CfnTeleportTest2 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template2.txt
-	@head -c 1 /tmp/template2.txt | grep -q '{' && \
-		(echo "❌ CfnTeleportTest2 is JSON format (should be YAML)" && exit 1) || \
-		echo "✅ CfnTeleportTest2 is YAML format"
-	@rm -f /tmp/template1.txt /tmp/template2.txt
+	@echo "Checking YAML format stacks (AWS CLI-deployed)..."
+	@aws cloudformation get-template --stack-name CfnTeleportRefactorTest2 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-refactor2.txt
+	@head -c 1 /tmp/template-refactor2.txt | grep -q '{' && \
+		(echo "❌ CfnTeleportRefactorTest2 is JSON format (should be YAML)" && exit 1) || \
+		echo "✅ CfnTeleportRefactorTest2 is YAML format"
+	@aws cloudformation get-template --stack-name CfnTeleportImportTest2 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-import2.txt
+	@head -c 1 /tmp/template-import2.txt | grep -q '{' && \
+		(echo "❌ CfnTeleportImportTest2 is JSON format (should be YAML)" && exit 1) || \
+		echo "✅ CfnTeleportImportTest2 is YAML format"
+	@rm -f /tmp/template-refactor1.txt /tmp/template-refactor2.txt /tmp/template-import1.txt /tmp/template-import2.txt /tmp/template-rename1.txt
 	@echo ""
-	@echo "✅ Both stacks have correct formats!"
+	@echo "✅ All stacks have correct formats!"
 
 DESTROY:
-	@echo "Destroying CfnTeleportTest1 (CDK)..."
-	@npx cdk destroy --force "CfnTeleportTest1" || true
-	@echo "Destroying CfnTeleportTest2 (CloudFormation)..."
-	@aws cloudformation delete-stack --stack-name CfnTeleportTest2 || true
-	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportTest2 || true
+	@echo "Destroying Refactor Test Stacks..."
+	@npx cdk destroy --force "CfnTeleportRefactorTest1" || true
+	@aws cloudformation delete-stack --stack-name CfnTeleportRefactorTest2 || true
+	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportRefactorTest2 || true
+	@echo ""
+	@echo "Destroying Import Test Stacks..."
+	@npx cdk destroy --force "CfnTeleportImportTest1" || true
+	@aws cloudformation delete-stack --stack-name CfnTeleportImportTest2 || true
+	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportImportTest2 || true
+	@echo ""
+	@echo "Destroying Rename Test Stack..."
+	@npx cdk destroy --force "CfnTeleportRenameTest1" || true
+	@echo ""
+	@echo "✅ All test stacks destroyed"
 
 info:
 	@npx cdk doctor

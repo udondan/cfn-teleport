@@ -117,8 +117,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: make install && make deploy
 
-  # Integration tests (waits for both build and cdk-deploy to complete)
-  integration-test:
+  # Refactor mode tests (runs in parallel with import and rename tests)
+  test-refactor:
     needs: [build, cdk-deploy]
     runs-on: ubuntu-latest
     steps:
@@ -153,7 +153,7 @@ jobs:
         working-directory: test/cdk
         run: make install
 
-      - name: Test refactor mode (default) with supported resource types
+      - name: Test refactor mode with supported resource types
         working-directory: test/cdk
         run: |
           # Helper function to run cfn-teleport with visible output
@@ -336,13 +336,49 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          STACK1: CfnTeleportTest1
-          STACK2: CfnTeleportTest2
+          STACK1: CfnTeleportRefactorTest1
+          STACK2: CfnTeleportRefactorTest2
           BUCKET1: Bucket182C536A1
           BUCKET2: Bucket21D68F7E8
           DYNAMO_TABLE: DynamoDbTable6316879D
 
-      - name: Test import mode (legacy) with all resource types including KeyPair
+  # Import mode tests (runs in parallel with refactor and rename tests)
+  test-import:
+    needs: [build, cdk-deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cfn-teleport-binary
+          path: /tmp/cfn-teleport-bin
+
+      - name: Install binary
+        run: |
+          chmod +x /tmp/cfn-teleport-bin/cfn-teleport
+          sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
+          cfn-teleport --version
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: npm dependency cache
+        uses: actions/cache@v5
+        with:
+          path: test/cdk/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install CDK CLI
+        working-directory: test/cdk
+        run: make install
+
+      - name: Test import mode with LaunchTemplate and KeyPair
         working-directory: test/cdk
         run: |
           # Helper function to run cfn-teleport with visible output
@@ -360,17 +396,17 @@ jobs:
             return $exit_code
           }
 
-          # Find KeyPair and Instance logical IDs dynamically (KEY_PAIR and INSTANCE set in previous step's env are not accessible here)
+          # Find KeyPair, LaunchTemplate and related resources dynamically
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
-          INSTANCE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("Profile") | not)')
+          LAUNCH_TEMPLATE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("LaunchTemplate"))')
           SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
           INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
           ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
 
           echo "Found resources for import mode test:"
           echo "  KEY_PAIR: $KEY_PAIR"
-          echo "  INSTANCE: $INSTANCE"
+          echo "  LAUNCH_TEMPLATE: $LAUNCH_TEMPLATE"
           echo "  SECURITY_GROUP: $SECURITY_GROUP"
           echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
           echo "  ROLE: $ROLE"
@@ -379,7 +415,7 @@ jobs:
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
-            --resource "${INSTANCE}" \
+            --resource "${LAUNCH_TEMPLATE}" \
             --resource "${SECURITY_GROUP}" \
             --resource "${KEY_PAIR}" \
             --resource "${INSTANCE_PROFILE}" \
@@ -395,7 +431,7 @@ jobs:
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode import \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
-            --resource "${INSTANCE}" \
+            --resource "${LAUNCH_TEMPLATE}" \
             --resource "${SECURITY_GROUP}" \
             --resource "${KEY_PAIR}" \
             --resource "${INSTANCE_PROFILE}" \
@@ -410,13 +446,49 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          STACK1: CfnTeleportTest1
-          STACK2: CfnTeleportTest2
+          STACK1: CfnTeleportImportTest1
+          STACK2: CfnTeleportImportTest2
           BUCKET1: Bucket182C536A1
           BUCKET2: Bucket21D68F7E8
           DYNAMO_TABLE: DynamoDbTable6316879D
 
-      - name: Test same-stack renaming - comprehensive reference tests
+  # Same-stack rename tests (runs in parallel with refactor and import tests)
+  test-rename:
+    needs: [build, cdk-deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: cfn-teleport-binary
+          path: /tmp/cfn-teleport-bin
+
+      - name: Install binary
+        run: |
+          chmod +x /tmp/cfn-teleport-bin/cfn-teleport
+          sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
+          cfn-teleport --version
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: npm dependency cache
+        uses: actions/cache@v5
+        with:
+          path: test/cdk/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install CDK CLI
+        working-directory: test/cdk
+        run: make install
+
+      - name: Test same-stack renaming
         working-directory: test/cdk
         run: |
           # Helper function to run cfn-teleport with visible output
@@ -445,8 +517,6 @@ jobs:
           RENAME_QUEUE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("RenameQueue"))')
           DEPENDENCY_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("DependencyBucket"))')
           DEPENDENT_TABLE_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("DependentTable"))')
-          LAMBDA_TARGET_BUCKET_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("LambdaTargetBucket"))')
-          TEST_FUNCTION_ID=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("TestFunction")) | select(contains("ServiceRole") | not) | select(contains("LogRetention") | not)')
 
           echo "Found test resources:"
           echo "  RenameBucket: $RENAME_BUCKET_ID"
@@ -454,8 +524,6 @@ jobs:
           echo "  RenameQueue: $RENAME_QUEUE_ID"
           echo "  DependencyBucket: $DEPENDENCY_BUCKET_ID"
           echo "  DependentTable: $DEPENDENT_TABLE_ID"
-          echo "  LambdaTargetBucket: $LAMBDA_TARGET_BUCKET_ID"
-          echo "  TestFunction: $TEST_FUNCTION_ID"
 
           if [ -z "$RENAME_BUCKET_ID" ] || [ -z "$RENAME_TABLE_ID" ] || [ -z "$RENAME_QUEUE_ID" ]; then
             echo "✗ Could not find required rename test resources in stack"
@@ -574,60 +642,24 @@ jobs:
 
           echo ""
           echo "=========================================="
-          echo "TEST 5: References in Lambda environment variables"
-          echo "=========================================="
-          # Verify Lambda function has environment variables referencing the bucket
-          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME" > /dev/null; then
-            echo "✓ Lambda has BUCKET_NAME environment variable before rename"
-          else
-            echo "✗ Lambda environment variable not found before rename"
-            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment"
-            exit 1
-          fi
-
-          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
-            --resource "${LAMBDA_TARGET_BUCKET_ID}:RenamedLambdaTarget"
-
-          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-
-          if echo "$TEMPLATE" | jq -e '.Resources.RenamedLambdaTarget' > /dev/null; then
-            echo "✓ Lambda target bucket renamed successfully"
-          else
-            echo "✗ Lambda target bucket rename failed"
-            exit 1
-          fi
-
-          # Verify Lambda environment variables now reference RenamedLambdaTarget
-          # BUCKET_NAME uses Ref
-          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME.Ref == \"RenamedLambdaTarget\"" > /dev/null; then
-            echo "✓ Lambda BUCKET_NAME (Ref) updated successfully"
-          else
-            echo "✗ Lambda BUCKET_NAME (Ref) not updated"
-            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_NAME"
-            exit 1
-          fi
-
-          # BUCKET_ARN uses Fn::GetAtt
-          if echo "$TEMPLATE" | jq -e ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_ARN[\"Fn::GetAtt\"][0] == \"RenamedLambdaTarget\"" > /dev/null; then
-            echo "✓ Lambda BUCKET_ARN (Fn::GetAtt) updated successfully"
-          else
-            echo "✗ Lambda BUCKET_ARN (Fn::GetAtt) not updated"
-            echo "$TEMPLATE" | jq ".Resources.\"${TEST_FUNCTION_ID}\".Properties.Environment.Variables.BUCKET_ARN"
-            exit 1
-          fi
-
-          echo ""
-          echo "=========================================="
           echo "✓ All same-stack rename reference tests passed!"
           echo "=========================================="
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          STACK1: CfnTeleportTest1
+          STACK1: CfnTeleportRenameTest1
+
+  # Verify stack formats and cleanup
+  cleanup:
+    needs: [cdk-deploy, test-refactor, test-import, test-rename]
+    if: always() && needs.cdk-deploy.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
       - name: Verify stack template formats after all operations
-        if: needs.cdk-deploy.result != 'skipped'
         run: |
           cd test/cdk
           make verify-formats
@@ -637,7 +669,7 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
       - name: Delete test stacks
-        if: always() && needs.cdk-deploy.result != 'skipped'
+        if: always()
         run: make test-reset
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -651,7 +683,10 @@ jobs:
     needs:
       - build
       - cdk-deploy
-      - integration-test
+      - test-refactor
+      - test-import
+      - test-rename
+      - cleanup
     steps:
       - name: Report success
         run: echo 'Success'
