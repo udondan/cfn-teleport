@@ -221,7 +221,7 @@ jobs:
             --resource "${STANDALONE_BUCKET}" \
             --resource "${STANDALONE_TABLE}"
 
-          DIFF_OUTPUT=$(npx cdk diff 2>&1 || true)
+          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
           if echo "$DIFF_OUTPUT" | grep -E "(${STANDALONE_BUCKET}|${STANDALONE_TABLE})"; then
             echo "✓ Standalone resources moved successfully"
           else
@@ -235,7 +235,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          DIFF_OUTPUT=$(npx cdk diff 2>&1 || true)
+          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
           if echo "$DIFF_OUTPUT" | grep -E "(${BUCKET1}|${BUCKET2}|${DYNAMO_TABLE})"; then
             echo "✓ Regular resources moved successfully"
           else
@@ -251,7 +251,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          if npx cdk diff --fail; then
+          if npx cdk diff --fail CfnTeleportRefactorTest1; then
             echo "✓ All resources successfully moved back (no drift detected)"
           else
             echo "✗ Failed to move resources back (drift detected)"
@@ -275,7 +275,7 @@ jobs:
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
           
-          DIFF_OUTPUT=$(npx cdk diff 2>&1 || true)
+          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
           if echo "$DIFF_OUTPUT" | grep -E "${PARAMETER_TABLE}"; then
             echo "✓ ParameterTable moved successfully (parameter exists in both stacks)"
           else
@@ -287,7 +287,7 @@ jobs:
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
           
-          if npx cdk diff --fail; then
+          if npx cdk diff --fail CfnTeleportRefactorTest1; then
             echo "✓ ParameterTable successfully moved back"
           else
             echo "✗ Failed to move ParameterTable back"
@@ -450,7 +450,7 @@ jobs:
             --resource "${ROLE}" \
             --resource "${DYNAMO_TABLE}"
 
-          if npx cdk diff --fail; then
+          if npx cdk diff --fail CfnTeleportImportTest1; then
             echo "Migration failed, cdk diff did not show changes"
             exit 1
           fi
@@ -466,7 +466,7 @@ jobs:
             --resource "${ROLE}" \
             --resource "${DYNAMO_TABLE}"
 
-          if ! npx cdk diff --fail; then
+          if ! npx cdk diff --fail CfnTeleportImportTest1; then
             echo "Migration failed, cdk diff did show changes"
             exit 1
           fi
