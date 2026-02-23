@@ -7,9 +7,7 @@ Parameters:
     Default: cfn-teleport-param-test
     Description: Table name controlled by stack parameter (must match Stack1 parameter name)
 
-Resources:
-  # Empty stack initially - resources will be moved here from Stack1
-  # The parameter must exist so that resources referencing it can be moved
+Resources: {}
 
 Outputs:
   StackFormat:
