@@ -21,7 +21,3 @@ Outputs:
   ParameterName:
     Description: Name of the parameter (for verification)
     Value: !Ref ParameterTableName
-
-Tags:
-  - Key: ApplicationName
-    Value: cfn-teleport-test
