@@ -87,8 +87,8 @@ jobs:
           path: ~/.cargo/bin/cfn-teleport
           retention-days: 1
 
-  # Deploy CDK test stacks (runs in parallel with build)
-  cdk-deploy:
+  # Deploy test stacks (CDK + CloudFormation YAML templates)
+  prepare-stacks:
     needs: changes
     if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
@@ -119,7 +119,7 @@ jobs:
 
   # Refactor mode tests (runs in parallel with import and rename tests)
   test-refactor:
-    needs: [build, cdk-deploy]
+    needs: [build, prepare-stacks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -344,7 +344,7 @@ jobs:
 
   # Import mode tests (runs in parallel with refactor and rename tests)
   test-import:
-    needs: [build, cdk-deploy]
+    needs: [build, prepare-stacks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -454,7 +454,7 @@ jobs:
 
   # Same-stack rename tests (runs in parallel with refactor and import tests)
   test-rename:
-    needs: [build, cdk-deploy]
+    needs: [build, prepare-stacks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -652,7 +652,7 @@ jobs:
 
   # Verify stack template formats
   verify-formats:
-    needs: [cdk-deploy, test-refactor, test-import, test-rename]
+    needs: [prepare-stacks, test-refactor, test-import, test-rename]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -669,8 +669,8 @@ jobs:
 
   # Cleanup - always runs even if tests or format verification fail
   cleanup:
-    needs: [cdk-deploy, test-refactor, test-import, test-rename, verify-formats]
-    if: always() && needs.cdk-deploy.result != 'skipped'
+    needs: [prepare-stacks, test-refactor, test-import, test-rename, verify-formats]
+    if: always() && needs.prepare-stacks.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -689,7 +689,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
-      - cdk-deploy
+      - prepare-stacks
       - test-refactor
       - test-import
       - test-rename

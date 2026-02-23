@@ -63,18 +63,18 @@ export class TestStack extends Stack {
 
       // Regular buckets for grouped migration testing
       new aws_s3.Bucket(this, 'Bucket-1', {
-        bucketName: `${this.account}-cfn-teleport-test-1`,
+        bucketName: `${this.account}-cfn-teleport-refactor-test-1`,
         removalPolicy: RemovalPolicy.DESTROY,
       });
 
       new aws_s3.Bucket(this, 'Bucket-2', {
-        bucketName: `${this.account}-cfn-teleport-test-2`,
+        bucketName: `${this.account}-cfn-teleport-refactor-test-2`,
         removalPolicy: RemovalPolicy.DESTROY,
       });
 
       // DynamoDB table for grouped migration testing
       new aws_dynamodb.Table(this, 'DynamoDbTable', {
-        tableName: `cfn-teleport-test`,
+        tableName: `cfn-teleport-refactor-test`,
         removalPolicy: RemovalPolicy.DESTROY,
         partitionKey: {
           name: 'id',
@@ -109,17 +109,17 @@ export class TestStack extends Stack {
 
       // Buckets and table for import testing
       new aws_s3.Bucket(this, 'Bucket-1', {
-        bucketName: `${this.account}-cfn-teleport-test-1`,
+        bucketName: `${this.account}-cfn-teleport-import-test-1`,
         removalPolicy: RemovalPolicy.DESTROY,
       });
 
       new aws_s3.Bucket(this, 'Bucket-2', {
-        bucketName: `${this.account}-cfn-teleport-test-2`,
+        bucketName: `${this.account}-cfn-teleport-import-test-2`,
         removalPolicy: RemovalPolicy.DESTROY,
       });
 
       new aws_dynamodb.Table(this, 'DynamoDbTable', {
-        tableName: `cfn-teleport-test`,
+        tableName: `cfn-teleport-import-test`,
         removalPolicy: RemovalPolicy.DESTROY,
         partitionKey: {
           name: 'id',
@@ -134,7 +134,7 @@ export class TestStack extends Stack {
 
       // IAM Role for Launch Template
       const role = new aws_iam.Role(this, 'Role', {
-        roleName: 'cfn-teleport-test',
+        roleName: 'cfn-teleport-import-test',
         assumedBy: new aws_iam.ServicePrincipal('ec2.amazonaws.com'),
       });
 
