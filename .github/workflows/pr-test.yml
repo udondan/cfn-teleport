@@ -676,6 +676,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: npm dependency cache
+        uses: actions/cache@v5
+        with:
+          path: test/cdk/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install CDK dependencies
+        working-directory: test/cdk
+        run: make install
+
       - name: Delete test stacks
         run: make test-reset
         env:
