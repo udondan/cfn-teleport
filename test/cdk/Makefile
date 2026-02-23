@@ -33,22 +33,14 @@ deploy: build
 
 verify-formats:
 	@echo "Checking CfnTeleportTest1 format (should be JSON)..."
-	@TEMPLATE1=$$(aws cloudformation get-template --stack-name CfnTeleportTest1 --query 'TemplateBody' --output text); \
-	if echo "$$TEMPLATE1" | head -c 1 | grep -q '{'; then \
-		echo "✅ CfnTeleportTest1 is JSON format"; \
-	else \
-		echo "❌ CfnTeleportTest1 is NOT JSON format"; \
-		exit 1; \
-	fi
+	@aws cloudformation get-template --stack-name CfnTeleportTest1 --query 'TemplateBody' --output json | jq -r '.' | head -c 1 | grep -q '{' && \
+		echo "✅ CfnTeleportTest1 is JSON format" || \
+		(echo "❌ CfnTeleportTest1 is NOT JSON format" && exit 1)
 	@echo ""
 	@echo "Checking CfnTeleportTest2 format (should be YAML)..."
-	@TEMPLATE2=$$(aws cloudformation get-template --stack-name CfnTeleportTest2 --query 'TemplateBody' --output text); \
-	if echo "$$TEMPLATE2" | head -c 1 | grep -q '{'; then \
-		echo "❌ CfnTeleportTest2 is JSON format (should be YAML)"; \
-		exit 1; \
-	else \
-		echo "✅ CfnTeleportTest2 is YAML format"; \
-	fi
+	@aws cloudformation get-template --stack-name CfnTeleportTest2 --query 'TemplateBody' --output json | jq -r '.' | head -c 1 | grep -q '{' && \
+		(echo "❌ CfnTeleportTest2 is JSON format (should be YAML)" && exit 1) || \
+		echo "✅ CfnTeleportTest2 is YAML format"
 	@echo ""
 	@echo "✅ Both stacks have correct formats!"
 
