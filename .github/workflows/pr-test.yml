@@ -1,9 +1,11 @@
 ---
 name: Test
 
+# Use workflow-wide concurrency (not per-branch) to prevent race conditions
+# on shared CloudFormation test stacks. Multiple PRs will queue sequentially.
 concurrency:
-  group: pr-test-${{ github.ref }}
-  cancel-in-progress: false
+  group: pr-test
+  cancel-in-progress: false  # Ensure cleanup always runs
 
 on:
   pull_request:
