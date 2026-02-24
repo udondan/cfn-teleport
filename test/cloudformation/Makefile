@@ -7,7 +7,7 @@ deploy: phony
 	@echo "=========================================="
 	@echo "Deploying CfnTeleportRefactorTest1 (JSON)..."
 	@aws cloudformation deploy \
-		--template-file refactor-test1.json \
+		--template-file CfnTeleportRefactorTest1.json \
 		--stack-name CfnTeleportRefactorTest1 \
 		--capabilities CAPABILITY_IAM \
 		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
@@ -16,7 +16,7 @@ deploy: phony
 	@echo ""
 	@echo "Deploying CfnTeleportRefactorTest2 (YAML)..."
 	@aws cloudformation deploy \
-		--template-file refactor-test2-template.yaml \
+		--template-file CfnTeleportRefactorTest2.yaml \
 		--stack-name CfnTeleportRefactorTest2 \
 		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
 		--tags ApplicationName=cfn-teleport-test \
@@ -27,7 +27,7 @@ deploy: phony
 	@echo "=========================================="
 	@echo "Deploying CfnTeleportImportTest1 (JSON)..."
 	@aws cloudformation deploy \
-		--template-file import-test1.json \
+		--template-file CfnTeleportImportTest1.json \
 		--stack-name CfnTeleportImportTest1 \
 		--capabilities CAPABILITY_IAM \
 		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
@@ -36,7 +36,7 @@ deploy: phony
 	@echo ""
 	@echo "Deploying CfnTeleportImportTest2 (YAML)..."
 	@aws cloudformation deploy \
-		--template-file import-test2-template.yaml \
+		--template-file CfnTeleportImportTest2.yaml \
 		--stack-name CfnTeleportImportTest2 \
 		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
 		--tags ApplicationName=cfn-teleport-test \
@@ -47,7 +47,7 @@ deploy: phony
 	@echo "=========================================="
 	@echo "Deploying CfnTeleportRenameTest1 (JSON)..."
 	@aws cloudformation deploy \
-		--template-file rename-test1.json \
+		--template-file CfnTeleportRenameTest1.json \
 		--stack-name CfnTeleportRenameTest1 \
 		--capabilities CAPABILITY_IAM \
 		--tags ApplicationName=cfn-teleport-test \
