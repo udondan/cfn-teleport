@@ -183,7 +183,7 @@ jobs:
               --stack-name "$stack_name" \
               --change-set-name "$change_set_name" \
               --template-body file:///tmp/current-template.json \
-              --capabilities CAPABILITY_IAM \
+              --capabilities CAPABILITY_NAMED_IAM \
               2>&1 || true)
 
             # Check if change set was created or if there are no changes
@@ -413,7 +413,7 @@ jobs:
               --stack-name "$stack_name" \
               --change-set-name "$change_set_name" \
               --template-body file:///tmp/current-template.json \
-              --capabilities CAPABILITY_IAM \
+              --capabilities CAPABILITY_NAMED_IAM \
               2>&1 || true)
 
             # Check if change set was created or if there are no changes
