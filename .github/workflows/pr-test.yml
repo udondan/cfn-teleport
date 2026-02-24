@@ -184,7 +184,6 @@ jobs:
               --change-set-name "$change_set_name" \
               --template-body file:///tmp/current-template.json \
               --capabilities CAPABILITY_NAMED_IAM \
-              --use-previous-parameter-values \
               2>&1 || true)
 
             # Check if change set was created or if there are no changes
@@ -415,7 +414,6 @@ jobs:
               --change-set-name "$change_set_name" \
               --template-body file:///tmp/current-template.json \
               --capabilities CAPABILITY_NAMED_IAM \
-              --use-previous-parameter-values \
               2>&1 || true)
 
             # Check if change set was created or if there are no changes
