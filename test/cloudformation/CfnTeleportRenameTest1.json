@@ -1,4 +1,11 @@
 {
+  "Parameters": {
+    "ParameterTableName": {
+      "Type": "String",
+      "Default": "cfn-teleport-param-test",
+      "Description": "Table name controlled by stack parameter"
+    }
+  },
   "Resources": {
     "RenameBucket615F0D5B": {
       "Type": "AWS::S3::Bucket",
