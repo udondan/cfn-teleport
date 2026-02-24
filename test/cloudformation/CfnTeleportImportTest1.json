@@ -7,6 +7,12 @@
     }
   },
   "Resources": {
+    "WaitConditionHandle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle",
+      "Metadata": {
+        "Comment": "Minimal placeholder resource to ensure stack always has at least one resource. CloudFormation requires every stack to have at least one resource, so this remains when all other resources are moved during import mode tests."
+      }
+    },
     "Bucket182C536A1": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
