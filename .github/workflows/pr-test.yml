@@ -175,20 +175,41 @@ jobs:
             aws cloudformation get-template \
               --stack-name "$stack_name" \
               --query 'TemplateBody' \
-              --output text > /tmp/current-template.json
+              --output json | jq -r '.' > /tmp/current-template-${stack_name}.json
 
             # Create change set with current template
-            local change_set_name="drift-check-$(date +%s)"
+            local change_set_name="drift-check-$(date +%s)-$"
             local output=$(aws cloudformation create-change-set \
               --stack-name "$stack_name" \
               --change-set-name "$change_set_name" \
-              --template-body file:///tmp/current-template.json \
+              --template-body file:///tmp/current-template-${stack_name}.json \
               --capabilities CAPABILITY_NAMED_IAM \
               2>&1 || true)
 
-            # Check if change set was created or if there are no changes
-            if echo "$output" | grep -q "didn't contain changes"; then
+            # Check if change set was rejected due to no changes
+            if echo "$output" | grep -q "didn't contain changes\|No updates are to be performed"; then
               echo "✓ No drift detected (no changes)"
+
+              if [ "$expect_changes" = "yes" ]; then
+                echo "✗ Expected changes but found none"
+                return 1
+              fi
+              return 0
+            fi
+
+            # Change set was created, wait for it
+            echo "Waiting for change set..."
+            sleep 2
+
+            # Check if changes exist
+            local changes=$(aws cloudformation describe-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" \
+              --query 'Changes' \
+              --output json 2>/dev/null || echo "[]")
+
+            if [ "$changes" = "[]" ] || [ -z "$changes" ]; then
+              echo "✓ No drift detected (empty change set)"
               aws cloudformation delete-change-set \
                 --stack-name "$stack_name" \
                 --change-set-name "$change_set_name" 2>/dev/null || true
@@ -198,27 +219,27 @@ jobs:
                 return 1
               fi
               return 0
-            else
-              echo "✓ Drift detected (changes found)"
-
-              # Show the changes
-              aws cloudformation describe-change-set \
-                --stack-name "$stack_name" \
-                --change-set-name "$change_set_name" \
-                --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType]' \
-                --output table || true
-
-              # Clean up
-              aws cloudformation delete-change-set \
-                --stack-name "$stack_name" \
-                --change-set-name "$change_set_name" || true
-
-              if [ "$expect_changes" = "no" ]; then
-                echo "✗ Expected no changes but found drift"
-                return 1
-              fi
-              return 0
             fi
+
+            echo "✓ Drift detected (changes found)"
+
+            # Show the changes
+            aws cloudformation describe-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" \
+              --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType]' \
+              --output table
+
+            # Clean up
+            aws cloudformation delete-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" 2>/dev/null || true
+
+            if [ "$expect_changes" = "no" ]; then
+              echo "✗ Expected no changes but found drift"
+              return 1
+            fi
+            return 0
           }
 
           echo "######### TEST 1: Refactor mode with standalone resources #########"
@@ -405,20 +426,41 @@ jobs:
             aws cloudformation get-template \
               --stack-name "$stack_name" \
               --query 'TemplateBody' \
-              --output text > /tmp/current-template.json
+              --output json | jq -r '.' > /tmp/current-template-${stack_name}.json
 
             # Create change set with current template
-            local change_set_name="drift-check-$(date +%s)"
+            local change_set_name="drift-check-$(date +%s)-$"
             local output=$(aws cloudformation create-change-set \
               --stack-name "$stack_name" \
               --change-set-name "$change_set_name" \
-              --template-body file:///tmp/current-template.json \
+              --template-body file:///tmp/current-template-${stack_name}.json \
               --capabilities CAPABILITY_NAMED_IAM \
               2>&1 || true)
 
-            # Check if change set was created or if there are no changes
-            if echo "$output" | grep -q "didn't contain changes"; then
+            # Check if change set was rejected due to no changes
+            if echo "$output" | grep -q "didn't contain changes\|No updates are to be performed"; then
               echo "✓ No drift detected (no changes)"
+
+              if [ "$expect_changes" = "yes" ]; then
+                echo "✗ Expected changes but found none"
+                return 1
+              fi
+              return 0
+            fi
+
+            # Change set was created, wait for it
+            echo "Waiting for change set..."
+            sleep 2
+
+            # Check if changes exist
+            local changes=$(aws cloudformation describe-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" \
+              --query 'Changes' \
+              --output json 2>/dev/null || echo "[]")
+
+            if [ "$changes" = "[]" ] || [ -z "$changes" ]; then
+              echo "✓ No drift detected (empty change set)"
               aws cloudformation delete-change-set \
                 --stack-name "$stack_name" \
                 --change-set-name "$change_set_name" 2>/dev/null || true
@@ -428,27 +470,27 @@ jobs:
                 return 1
               fi
               return 0
-            else
-              echo "✓ Drift detected (changes found)"
-
-              # Show the changes
-              aws cloudformation describe-change-set \
-                --stack-name "$stack_name" \
-                --change-set-name "$change_set_name" \
-                --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType]' \
-                --output table || true
-
-              # Clean up
-              aws cloudformation delete-change-set \
-                --stack-name "$stack_name" \
-                --change-set-name "$change_set_name" || true
-
-              if [ "$expect_changes" = "no" ]; then
-                echo "✗ Expected no changes but found drift"
-                return 1
-              fi
-              return 0
             fi
+
+            echo "✓ Drift detected (changes found)"
+
+            # Show the changes
+            aws cloudformation describe-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" \
+              --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType]' \
+              --output table
+
+            # Clean up
+            aws cloudformation delete-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" 2>/dev/null || true
+
+            if [ "$expect_changes" = "no" ]; then
+              echo "✗ Expected no changes but found drift"
+              return 1
+            fi
+            return 0
           }
 
           # Find KeyPair, LaunchTemplate and related resources dynamically
