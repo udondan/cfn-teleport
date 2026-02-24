@@ -9,7 +9,7 @@ deploy: phony
 	@aws cloudformation deploy \
 		--template-file CfnTeleportRefactorTest1.json \
 		--stack-name CfnTeleportRefactorTest1 \
-		--capabilities CAPABILITY_IAM \
+		--capabilities CAPABILITY_NAMED_IAM \
 		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
@@ -29,7 +29,7 @@ deploy: phony
 	@aws cloudformation deploy \
 		--template-file CfnTeleportImportTest1.json \
 		--stack-name CfnTeleportImportTest1 \
-		--capabilities CAPABILITY_IAM \
+		--capabilities CAPABILITY_NAMED_IAM \
 		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
@@ -49,7 +49,7 @@ deploy: phony
 	@aws cloudformation deploy \
 		--template-file CfnTeleportRenameTest1.json \
 		--stack-name CfnTeleportRenameTest1 \
-		--capabilities CAPABILITY_IAM \
+		--capabilities CAPABILITY_NAMED_IAM \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
 	@echo ""

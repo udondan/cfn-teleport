@@ -121,7 +121,7 @@ jobs:
           aws cloudformation deploy \
             --template-file ${{ matrix.template }} \
             --stack-name "$STACK_NAME" \
-            --capabilities CAPABILITY_IAM \
+            --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides ParameterTableName=cfn-teleport-param-test \
             --tags ApplicationName=cfn-teleport-test \
             --no-fail-on-empty-changeset
