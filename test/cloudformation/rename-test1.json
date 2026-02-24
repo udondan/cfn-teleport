@@ -1,0 +1,163 @@
+{
+  "Parameters": {
+    "ParameterTableName": {
+      "Type": "String",
+      "Default": "cfn-teleport-param-test",
+      "Description": "Table name controlled by stack parameter"
+    }
+  },
+  "Resources": {
+    "RenameBucket615F0D5B": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "031700846815-cfn-teleport-rename-test",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "RenameTable6568E4D3": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "TableName": "cfn-teleport-rename-test",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "RenameQueue572D3C6A": {
+      "Type": "AWS::SQS::Queue",
+      "Properties": {
+        "QueueName": "cfn-teleport-rename-test-queue",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "DependencyBucket7E39B8FB": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "031700846815-cfn-teleport-dependency-test",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "DependentTable645F32A3": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "TableName": "cfn-teleport-dependent-table",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "DependsOn": [
+        "DependencyBucket7E39B8FB"
+      ],
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    }
+  },
+  "Outputs": {
+    "RenameBucketOutput": {
+      "Description": "Bucket name for rename testing (Ref)",
+      "Value": {
+        "Ref": "RenameBucket615F0D5B"
+      }
+    },
+    "RenameTableOutput": {
+      "Description": "Table ARN for rename testing (GetAtt)",
+      "Value": {
+        "Fn::GetAtt": [
+          "RenameTable6568E4D3",
+          "Arn"
+        ]
+      }
+    },
+    "SubTestOutput": {
+      "Description": "Output using Fn::Sub with resource reference",
+      "Value": {
+        "Fn::Sub": [
+          "Queue ${QueueRef} in region ${AWS::Region}",
+          {
+            "QueueRef": {
+              "Ref": "RenameQueue572D3C6A"
+            }
+          }
+        ]
+      }
+    },
+    "DependencyTestOutput": {
+      "Description": "Resources with DependsOn relationship",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            {
+              "Ref": "DependencyBucket7E39B8FB"
+            },
+            ":",
+            {
+              "Ref": "DependentTable645F32A3"
+            }
+          ]
+        ]
+      }
+    }
+  }
+}

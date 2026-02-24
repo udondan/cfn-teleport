@@ -1,0 +1,159 @@
+{
+  "Parameters": {
+    "ParameterTableName": {
+      "Type": "String",
+      "Default": "cfn-teleport-param-test",
+      "Description": "Table name controlled by stack parameter"
+    }
+  },
+  "Resources": {
+    "StandaloneBucket478A1338": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "031700846815-cfn-teleport-standalone",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "StandaloneTable7669510F": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "TableName": "cfn-teleport-standalone",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "Bucket182C536A1": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "031700846815-cfn-teleport-refactor-test-1",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "Bucket21D68F7E8": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "031700846815-cfn-teleport-refactor-test-2",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "DynamoDbTable6316879D": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "TableName": "cfn-teleport-refactor-test",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "ParameterTableB33FAE39": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "TableName": {
+          "Ref": "ParameterTableName"
+        },
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "KeyPair1622897B": {
+      "Type": "AWS::EC2::KeyPair",
+      "Properties": {
+        "KeyFormat": "pem",
+        "KeyName": "cfn-teleport-test-refactor",
+        "KeyType": "rsa",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      }
+    }
+  }
+}

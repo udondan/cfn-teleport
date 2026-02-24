@@ -1,0 +1,168 @@
+{
+  "Parameters": {
+    "ParameterTableName": {
+      "Type": "String",
+      "Default": "cfn-teleport-param-test",
+      "Description": "Table name controlled by stack parameter"
+    }
+  },
+  "Resources": {
+    "Bucket182C536A1": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "031700846815-cfn-teleport-import-test-1",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "Bucket21D68F7E8": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "031700846815-cfn-teleport-import-test-2",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "DynamoDbTable6316879D": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "TableName": "cfn-teleport-import-test",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "KeyPair1622897B": {
+      "Type": "AWS::EC2::KeyPair",
+      "Properties": {
+        "KeyFormat": "pem",
+        "KeyName": "cfn-teleport-test-import",
+        "KeyType": "rsa",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      }
+    },
+    "Role1ABCC5F0": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ec2.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "RoleName": "cfn-teleport-import-test",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      }
+    },
+    "InstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "InstanceProfileName": "cfn-teleport-test",
+        "Roles": [
+          {
+            "Ref": "Role1ABCC5F0"
+          }
+        ]
+      }
+    },
+    "SecurityGroupDD263621": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "CfnTeleportImportTest1/SecurityGroup",
+        "GroupName": "cfn-teleport-test",
+        "SecurityGroupEgress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "Description": "Allow all outbound traffic by default",
+            "IpProtocol": "-1"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ],
+        "VpcId": "vpc-e615339c"
+      }
+    },
+    "LaunchTemplate": {
+      "Type": "AWS::EC2::LaunchTemplate",
+      "Properties": {
+        "LaunchTemplateData": {
+          "IamInstanceProfile": {
+            "Arn": {
+              "Fn::GetAtt": [
+                "InstanceProfile",
+                "Arn"
+              ]
+            }
+          },
+          "ImageId": "ami-06d3b5e1ed9e1d982",
+          "InstanceType": "t2.micro",
+          "KeyName": {
+            "Ref": "KeyPair1622897B"
+          },
+          "SecurityGroupIds": [
+            {
+              "Fn::GetAtt": [
+                "SecurityGroupDD263621",
+                "GroupId"
+              ]
+            }
+          ]
+        },
+        "LaunchTemplateName": "cfn-teleport-test-template"
+      }
+    }
+  }
+}

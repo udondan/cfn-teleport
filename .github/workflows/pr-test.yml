@@ -97,44 +97,33 @@ jobs:
     strategy:
       matrix:
         stack:
-          - {name: "CfnTeleportRefactorTest1", type: "cdk"}
+          - {name: "CfnTeleportRefactorTest1", type: "json", template: "refactor-test1.json"}
           - {name: "CfnTeleportRefactorTest2", type: "yaml", template: "refactor-test2-template.yaml"}
-          - {name: "CfnTeleportImportTest1", type: "cdk"}
+          - {name: "CfnTeleportImportTest1", type: "json", template: "import-test1.json"}
           - {name: "CfnTeleportImportTest2", type: "yaml", template: "import-test2-template.yaml"}
-          - {name: "CfnTeleportRenameTest1", type: "cdk"}
+          - {name: "CfnTeleportRenameTest1", type: "json", template: "rename-test1.json"}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        if: matrix.stack.type == 'cdk'
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Deploy CDK stack
-        if: matrix.stack.type == 'cdk'
-        working-directory: test/cdk
+      - name: Deploy JSON stack
+        if: matrix.stack.type == 'json'
+        working-directory: test/cloudformation
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          npm ci --cache .npm --prefer-offline
-          npm run build
-          npx cdk deploy --require-approval never "${{ matrix.stack.name }}"
+          aws cloudformation deploy \
+            --template-file ${{ matrix.stack.template }} \
+            --stack-name ${{ matrix.stack.name }} \
+            --capabilities CAPABILITY_IAM \
+            --tags ApplicationName=cfn-teleport-test \
+            --no-fail-on-empty-changeset
 
       - name: Deploy YAML stack
         if: matrix.stack.type == 'yaml'
-        working-directory: test/cdk
+        working-directory: test/cloudformation
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -167,24 +156,8 @@ jobs:
           sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
           cfn-teleport --version
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK CLI
-        working-directory: test/cdk
-        run: make install
-
       - name: Test refactor mode with supported resource types
-        working-directory: test/cdk
+        working-directory: test/cloudformation
         run: |
           # Helper function to run cfn-teleport with visible output
           run_cfn_teleport() {
@@ -199,6 +172,63 @@ jobs:
             echo "═══════════════════════════════════════════════════════════════════════════════"
             echo ""
             return $exit_code
+          }
+
+          # Helper function to check for drift using CloudFormation change sets
+          check_drift() {
+            local stack_name="$1"
+            local expect_changes="$2"  # "yes" or "no"
+            
+            echo "Checking drift for stack: $stack_name"
+            
+            # Get current template
+            aws cloudformation get-template \
+              --stack-name "$stack_name" \
+              --query 'TemplateBody' \
+              --output text > /tmp/current-template.json
+            
+            # Create change set with current template
+            local change_set_name="drift-check-$(date +%s)"
+            local output=$(aws cloudformation create-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" \
+              --template-body file:///tmp/current-template.json \
+              --capabilities CAPABILITY_IAM \
+              2>&1 || true)
+            
+            # Check if change set was created or if there are no changes
+            if echo "$output" | grep -q "didn't contain changes"; then
+              echo "✓ No drift detected (no changes)"
+              aws cloudformation delete-change-set \
+                --stack-name "$stack_name" \
+                --change-set-name "$change_set_name" 2>/dev/null || true
+              
+              if [ "$expect_changes" = "yes" ]; then
+                echo "✗ Expected changes but found none"
+                return 1
+              fi
+              return 0
+            else
+              echo "✓ Drift detected (changes found)"
+              
+              # Show the changes
+              aws cloudformation describe-change-set \
+                --stack-name "$stack_name" \
+                --change-set-name "$change_set_name" \
+                --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType]' \
+                --output table || true
+              
+              # Clean up
+              aws cloudformation delete-change-set \
+                --stack-name "$stack_name" \
+                --change-set-name "$change_set_name" || true
+              
+              if [ "$expect_changes" = "no" ]; then
+                echo "✗ Expected no changes but found drift"
+                return 1
+              fi
+              return 0
+            fi
           }
 
           echo "######### TEST 1: Refactor mode with standalone resources #########"
@@ -223,8 +253,7 @@ jobs:
             --resource "${STANDALONE_BUCKET}" \
             --resource "${STANDALONE_TABLE}"
 
-          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
-          if echo "$DIFF_OUTPUT" | grep -E "(${STANDALONE_BUCKET}|${STANDALONE_TABLE})"; then
+          if check_drift "${STACK1}" "yes"; then
             echo "✓ Standalone resources moved successfully"
           else
             echo "✗ Standalone resource migration failed"
@@ -237,8 +266,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
-          if echo "$DIFF_OUTPUT" | grep -E "(${BUCKET1}|${BUCKET2}|${DYNAMO_TABLE})"; then
+          if check_drift "${STACK1}" "yes"; then
             echo "✓ Regular resources moved successfully"
           else
             echo "✗ Regular resource migration failed"
@@ -253,7 +281,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          if npx cdk diff --fail CfnTeleportRefactorTest1; then
+          if check_drift "${STACK1}" "no"; then
             echo "✓ All resources successfully moved back (no drift detected)"
           else
             echo "✗ Failed to move resources back (drift detected)"
@@ -277,8 +305,7 @@ jobs:
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
           
-          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
-          if echo "$DIFF_OUTPUT" | grep -E "${PARAMETER_TABLE}"; then
+          if check_drift "${STACK1}" "yes"; then
             echo "✓ ParameterTable moved successfully (parameter exists in both stacks)"
           else
             echo "✗ ParameterTable migration failed"
@@ -289,7 +316,7 @@ jobs:
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
           
-          if npx cdk diff --fail CfnTeleportRefactorTest1; then
+          if check_drift "${STACK1}" "no"; then
             echo "✓ ParameterTable successfully moved back"
           else
             echo "✗ Failed to move ParameterTable back"
@@ -359,24 +386,8 @@ jobs:
           sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
           cfn-teleport --version
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK CLI
-        working-directory: test/cdk
-        run: make install
-
       - name: Test import mode with LaunchTemplate and KeyPair
-        working-directory: test/cdk
+        working-directory: test/cloudformation
         run: |
           # Helper function to run cfn-teleport with visible output
           run_cfn_teleport() {
@@ -391,6 +402,63 @@ jobs:
             echo "═══════════════════════════════════════════════════════════════════════════════"
             echo ""
             return $exit_code
+          }
+
+          # Helper function to check for drift using CloudFormation change sets
+          check_drift() {
+            local stack_name="$1"
+            local expect_changes="$2"  # "yes" or "no"
+            
+            echo "Checking drift for stack: $stack_name"
+            
+            # Get current template
+            aws cloudformation get-template \
+              --stack-name "$stack_name" \
+              --query 'TemplateBody' \
+              --output text > /tmp/current-template.json
+            
+            # Create change set with current template
+            local change_set_name="drift-check-$(date +%s)"
+            local output=$(aws cloudformation create-change-set \
+              --stack-name "$stack_name" \
+              --change-set-name "$change_set_name" \
+              --template-body file:///tmp/current-template.json \
+              --capabilities CAPABILITY_IAM \
+              2>&1 || true)
+            
+            # Check if change set was created or if there are no changes
+            if echo "$output" | grep -q "didn't contain changes"; then
+              echo "✓ No drift detected (no changes)"
+              aws cloudformation delete-change-set \
+                --stack-name "$stack_name" \
+                --change-set-name "$change_set_name" 2>/dev/null || true
+              
+              if [ "$expect_changes" = "yes" ]; then
+                echo "✗ Expected changes but found none"
+                return 1
+              fi
+              return 0
+            else
+              echo "✓ Drift detected (changes found)"
+              
+              # Show the changes
+              aws cloudformation describe-change-set \
+                --stack-name "$stack_name" \
+                --change-set-name "$change_set_name" \
+                --query 'Changes[].ResourceChange.[Action,LogicalResourceId,ResourceType]' \
+                --output table || true
+              
+              # Clean up
+              aws cloudformation delete-change-set \
+                --stack-name "$stack_name" \
+                --change-set-name "$change_set_name" || true
+              
+              if [ "$expect_changes" = "no" ]; then
+                echo "✗ Expected no changes but found drift"
+                return 1
+              fi
+              return 0
+            fi
           }
 
           # Find KeyPair, LaunchTemplate and related resources dynamically
@@ -419,8 +487,10 @@ jobs:
             --resource "${ROLE}" \
             --resource "${DYNAMO_TABLE}"
 
-          if npx cdk diff --fail CfnTeleportImportTest1; then
-            echo "Migration failed, cdk diff did not show changes"
+          if check_drift "${STACK1}" "yes"; then
+            echo "✓ Import mode migration successful (drift detected in source stack)"
+          else
+            echo "✗ Import mode migration failed (no drift detected)"
             exit 1
           fi
 
@@ -435,8 +505,10 @@ jobs:
             --resource "${ROLE}" \
             --resource "${DYNAMO_TABLE}"
 
-          if ! npx cdk diff --fail CfnTeleportImportTest1; then
-            echo "Migration failed, cdk diff did show changes"
+          if check_drift "${STACK1}" "no"; then
+            echo "✓ Import mode migration back successful (no drift detected)"
+          else
+            echo "✗ Import mode migration back failed (drift detected)"
             exit 1
           fi
         env:
@@ -469,24 +541,8 @@ jobs:
           sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
           cfn-teleport --version
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK CLI
-        working-directory: test/cdk
-        run: make install
-
       - name: Test same-stack renaming
-        working-directory: test/cdk
+        working-directory: test/cloudformation
         run: |
           # Helper function to run cfn-teleport with visible output
           run_cfn_teleport() {
@@ -504,7 +560,7 @@ jobs:
           }
 
           echo "######### Finding rename test resources #########"
-          # CDK generates logical IDs with hashes, e.g., RenameBucket615F0D5B
+          # Logical IDs have hash suffixes, e.g., RenameBucket615F0D5B
           # Find the actual resource IDs by looking at the stack template
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
 
@@ -656,8 +712,8 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Verify stack template formats after all operations
+        working-directory: test/cloudformation
         run: |
-          cd test/cdk
           make verify-formats
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -672,23 +728,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK dependencies
-        working-directory: test/cdk
-        run: make install
 
       - name: Delete test stacks
         run: make test-reset

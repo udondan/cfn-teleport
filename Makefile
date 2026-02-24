@@ -14,8 +14,8 @@ test: phony
 	@cargo check
 	@cargo test --all
 	@\
-	cd test/cdk && \
-	$(MAKE) install diff deploy
+	cd test/cloudformation && \
+	$(MAKE) deploy
 
 test-clean-all:
 	@\
@@ -69,7 +69,7 @@ test-clean-all:
 
 test-reset:
 	@\
-	cd test/cdk && \
+	cd test/cloudformation && \
 	$(MAKE) DESTROY
 	@$(MAKE) test-clean-all
 
