@@ -168,22 +168,18 @@ jobs:
           check_drift() {
             local stack_name="$1"
             local expect_changes="$2"  # "yes" or "no"
+            local template_file="$3"   # original template file to compare against
 
-            echo "Checking drift for stack: $stack_name"
+            echo "Checking drift for stack: $stack_name (comparing against $template_file)"
 
-            # Get current template
-            aws cloudformation get-template \
-              --stack-name "$stack_name" \
-              --query 'TemplateBody' \
-              --output json | jq -r '.' > /tmp/current-template-${stack_name}.json
-
-            # Create change set with current template
-            local change_set_name="drift-check-$(date +%s)-$"
+            # Create change set with original template file
+            local change_set_name="drift-check-$(date +%s)-$$"
             local output=$(aws cloudformation create-change-set \
               --stack-name "$stack_name" \
               --change-set-name "$change_set_name" \
-              --template-body file:///tmp/current-template-${stack_name}.json \
+              --template-body "file://$template_file" \
               --capabilities CAPABILITY_NAMED_IAM \
+              --parameter-overrides ParameterTableName=cfn-teleport-param-test \
               2>&1 || true)
 
             # Check if change set was rejected due to no changes
@@ -264,7 +260,7 @@ jobs:
             --resource "${STANDALONE_BUCKET}" \
             --resource "${STANDALONE_TABLE}"
 
-          if check_drift "${STACK1}" "yes"; then
+          if check_drift "${STACK1}" "yes" "CfnTeleportRefactorTest1.json"; then
             echo "✓ Standalone resources moved successfully"
           else
             echo "✗ Standalone resource migration failed"
@@ -277,7 +273,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          if check_drift "${STACK1}" "yes"; then
+          if check_drift "${STACK1}" "yes" "CfnTeleportRefactorTest1.json"; then
             echo "✓ Regular resources moved successfully"
           else
             echo "✗ Regular resource migration failed"
@@ -292,7 +288,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          if check_drift "${STACK1}" "no"; then
+          if check_drift "${STACK1}" "no" "CfnTeleportRefactorTest1.json"; then
             echo "✓ All resources successfully moved back (no drift detected)"
           else
             echo "✗ Failed to move resources back (drift detected)"
@@ -316,7 +312,7 @@ jobs:
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
 
-          if check_drift "${STACK1}" "yes"; then
+          if check_drift "${STACK1}" "yes" "CfnTeleportRefactorTest1.json"; then
             echo "✓ ParameterTable moved successfully (parameter exists in both stacks)"
           else
             echo "✗ ParameterTable migration failed"
@@ -327,7 +323,7 @@ jobs:
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
 
-          if check_drift "${STACK1}" "no"; then
+          if check_drift "${STACK1}" "no" "CfnTeleportRefactorTest1.json"; then
             echo "✓ ParameterTable successfully moved back"
           else
             echo "✗ Failed to move ParameterTable back"
@@ -419,22 +415,18 @@ jobs:
           check_drift() {
             local stack_name="$1"
             local expect_changes="$2"  # "yes" or "no"
+            local template_file="$3"   # original template file to compare against
 
-            echo "Checking drift for stack: $stack_name"
+            echo "Checking drift for stack: $stack_name (comparing against $template_file)"
 
-            # Get current template
-            aws cloudformation get-template \
-              --stack-name "$stack_name" \
-              --query 'TemplateBody' \
-              --output json | jq -r '.' > /tmp/current-template-${stack_name}.json
-
-            # Create change set with current template
-            local change_set_name="drift-check-$(date +%s)-$"
+            # Create change set with original template file
+            local change_set_name="drift-check-$(date +%s)-$$"
             local output=$(aws cloudformation create-change-set \
               --stack-name "$stack_name" \
               --change-set-name "$change_set_name" \
-              --template-body file:///tmp/current-template-${stack_name}.json \
+              --template-body "file://$template_file" \
               --capabilities CAPABILITY_NAMED_IAM \
+              --parameter-overrides ParameterTableName=cfn-teleport-param-test \
               2>&1 || true)
 
             # Check if change set was rejected due to no changes
@@ -519,7 +511,7 @@ jobs:
             --resource "${ROLE}" \
             --resource "${DYNAMO_TABLE}"
 
-          if check_drift "${STACK1}" "yes"; then
+          if check_drift "${STACK1}" "yes" "CfnTeleportImportTest1.json"; then
             echo "✓ Import mode migration successful (drift detected in source stack)"
           else
             echo "✗ Import mode migration failed (no drift detected)"
@@ -537,7 +529,7 @@ jobs:
             --resource "${ROLE}" \
             --resource "${DYNAMO_TABLE}"
 
-          if check_drift "${STACK1}" "no"; then
+          if check_drift "${STACK1}" "no" "CfnTeleportImportTest1.json"; then
             echo "✓ Import mode migration back successful (no drift detected)"
           else
             echo "✗ Import mode migration back failed (drift detected)"
