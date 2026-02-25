@@ -117,7 +117,7 @@ jobs:
           STACK_NAME="${{ matrix.template }}"
           STACK_NAME="${STACK_NAME%.json}"
           STACK_NAME="${STACK_NAME%.yaml}"
-          
+
           aws cloudformation deploy \
             --template-file ${{ matrix.template }} \
             --stack-name "$STACK_NAME" \
@@ -185,7 +185,7 @@ jobs:
             # Compare resource lists
             if diff -q /tmp/original-resources.json /tmp/deployed-resources.json > /dev/null 2>&1; then
               echo "✓ No drift detected (resources match)"
-              
+
               if [ "$expect_changes" = "yes" ]; then
                 echo "✗ Expected changes but found none"
                 echo "DEBUG: Original resources:"
@@ -201,7 +201,7 @@ jobs:
               cat /tmp/original-resources.json
               echo "Resources in deployed stack:"
               cat /tmp/deployed-resources.json
-              
+
               if [ "$expect_changes" = "no" ]; then
                 echo "✗ Expected no changes but found drift"
                 return 1
@@ -404,7 +404,7 @@ jobs:
             # Compare resource lists
             if diff -q /tmp/original-resources.json /tmp/deployed-resources.json > /dev/null 2>&1; then
               echo "✓ No drift detected (resources match)"
-              
+
               if [ "$expect_changes" = "yes" ]; then
                 echo "✗ Expected changes but found none"
                 echo "DEBUG: Original resources:"
@@ -420,7 +420,7 @@ jobs:
               cat /tmp/original-resources.json
               echo "Resources in deployed stack:"
               cat /tmp/deployed-resources.json
-              
+
               if [ "$expect_changes" = "no" ]; then
                 echo "✗ Expected no changes but found drift"
                 return 1
@@ -666,22 +666,16 @@ jobs:
           echo "TEST 5: Rename all resources back to original names"
           echo "=========================================="
           echo "To enable stack reuse between CI runs, we restore all resources to their original state"
-          
+
           run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
-            --resource "RenamedBucket:${RENAME_BUCKET_ID}"
-          
-          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
-            --resource "RenamedTable:${RENAME_TABLE_ID}"
-          
-          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
-            --resource "RenamedQueue:${RENAME_QUEUE_ID}"
-          
-          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "RenamedBucket:${RENAME_BUCKET_ID}" \
+            --resource "RenamedTable:${RENAME_TABLE_ID}" \
+            --resource "RenamedQueue:${RENAME_QUEUE_ID}" \
             --resource "RenamedDependencyBucket:${DEPENDENCY_BUCKET_ID}"
-          
+
           # Verify all resources are back to original names
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
-          
+
           if echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_BUCKET_ID}\"" > /dev/null && \
              echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_TABLE_ID}\"" > /dev/null && \
              echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_QUEUE_ID}\"" > /dev/null && \
@@ -720,30 +714,31 @@ jobs:
           echo "Verifying stack template formats"
           echo "=========================================="
           make verify-formats
-          
+
           echo ""
           echo "=========================================="
           echo "Verifying all stacks match original templates"
           echo "=========================================="
-          
+
           ALL_MATCH=true
-          
+
           # Function to check if stack resources match original template
           check_stack() {
             local stack_name="$1"
             local template_file="$2"
-            
+
             echo "Checking $stack_name..."
-            
+
             # Get deployed template resources
+            # Note: get-template with --output json returns a JSON-encoded string, so we need jq -r to extract it first
             aws cloudformation get-template \
               --stack-name "$stack_name" \
               --query 'TemplateBody' \
-              --output json | jq -r '.Resources | keys | sort' > /tmp/deployed-${stack_name}.json
-            
+              --output text | jq -S '.Resources | keys | sort' > /tmp/deployed-${stack_name}.json
+
             # Get original template resources
             jq -S '.Resources | keys | sort' "$template_file" > /tmp/original-${stack_name}.json
-            
+
             if diff -q /tmp/original-${stack_name}.json /tmp/deployed-${stack_name}.json > /dev/null 2>&1; then
               echo "✅ $stack_name resources match original template"
               return 0
@@ -756,14 +751,14 @@ jobs:
               return 1
             fi
           }
-          
+
           # Check all test stacks
           check_stack "CfnTeleportRefactorTest1" "CfnTeleportRefactorTest1.json" || ALL_MATCH=false
           check_stack "CfnTeleportRefactorTest2" "CfnTeleportRefactorTest2.yaml" || ALL_MATCH=false
           check_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
           check_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
           check_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
-          
+
           if [ "$ALL_MATCH" = "true" ]; then
             echo ""
             echo "=========================================="
@@ -815,7 +810,7 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      
+
       - name: Keep stacks for reuse
         if: steps.decide.outputs.cleanup_needed == 'false'
         run: |
