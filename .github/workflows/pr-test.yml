@@ -730,11 +730,12 @@ jobs:
             echo "Checking $stack_name..."
 
             # Get deployed template resources
-            # Note: get-template with --output json returns a JSON-encoded string, so we need jq -r to extract it first
-            aws cloudformation get-template \
+            # Note: get-template with --output json returns a JSON-encoded string, so we use jq -r to extract it first
+            DEPLOYED_TEMPLATE=$(aws cloudformation get-template \
               --stack-name "$stack_name" \
               --query 'TemplateBody' \
-              --output text | jq -S '.Resources | keys | sort' > /tmp/deployed-${stack_name}.json
+              --output json | jq -r '.')
+            echo "$DEPLOYED_TEMPLATE" | jq -S '.Resources | keys | sort' > /tmp/deployed-${stack_name}.json
 
             # Get original template resources
             jq -S '.Resources | keys | sort' "$template_file" > /tmp/original-${stack_name}.json
