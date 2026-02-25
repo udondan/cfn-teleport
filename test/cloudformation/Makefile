@@ -55,6 +55,9 @@ deploy: phony
 	@echo ""
 	@$(MAKE) verify-formats
 
+check-drift: phony
+	@bash check-drift.sh "$(STACK)" "$(EXPECT)" "$(TEMPLATE)"
+
 verify-formats: phony
 	@echo "=========================================="
 	@echo "Verifying stack formats"
