@@ -663,7 +663,38 @@ jobs:
 
           echo ""
           echo "=========================================="
-          echo "✓ All same-stack rename reference tests passed!"
+          echo "TEST 5: Rename all resources back to original names"
+          echo "=========================================="
+          echo "To enable stack reuse between CI runs, we restore all resources to their original state"
+          
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "RenamedBucket:${RENAME_BUCKET_ID}"
+          
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "RenamedTable:${RENAME_TABLE_ID}"
+          
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "RenamedQueue:${RENAME_QUEUE_ID}"
+          
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "RenamedDependencyBucket:${DEPENDENCY_BUCKET_ID}"
+          
+          # Verify all resources are back to original names
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_BUCKET_ID}\"" > /dev/null && \
+             echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_TABLE_ID}\"" > /dev/null && \
+             echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_QUEUE_ID}\"" > /dev/null && \
+             echo "$TEMPLATE" | jq -e ".Resources.\"${DEPENDENCY_BUCKET_ID}\"" > /dev/null; then
+            echo "✓ All resources restored to original names"
+          else
+            echo "✗ Failed to restore all resources to original names"
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "✓ All same-stack rename tests passed and resources restored!"
           echo "=========================================="
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -671,39 +702,127 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRenameTest1
 
-  # Verify stack template formats
-  verify-formats:
+  # Verify stack template formats and resource state
+  verify-state:
     needs: [prepare-stacks, test-refactor, test-import, test-rename]
     runs-on: ubuntu-latest
+    outputs:
+      state_valid: ${{ steps.check.outputs.state_valid }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Verify stack template formats after all operations
+      - name: Verify stack formats and resources match original templates
+        id: check
         working-directory: test/cloudformation
         run: |
+          echo "=========================================="
+          echo "Verifying stack template formats"
+          echo "=========================================="
           make verify-formats
+          
+          echo ""
+          echo "=========================================="
+          echo "Verifying all stacks match original templates"
+          echo "=========================================="
+          
+          ALL_MATCH=true
+          
+          # Function to check if stack resources match original template
+          check_stack() {
+            local stack_name="$1"
+            local template_file="$2"
+            
+            echo "Checking $stack_name..."
+            
+            # Get deployed template resources
+            aws cloudformation get-template \
+              --stack-name "$stack_name" \
+              --query 'TemplateBody' \
+              --output json | jq -r '.Resources | keys | sort' > /tmp/deployed-${stack_name}.json
+            
+            # Get original template resources
+            jq -S '.Resources | keys | sort' "$template_file" > /tmp/original-${stack_name}.json
+            
+            if diff -q /tmp/original-${stack_name}.json /tmp/deployed-${stack_name}.json > /dev/null 2>&1; then
+              echo "✅ $stack_name resources match original template"
+              return 0
+            else
+              echo "❌ $stack_name resources differ from original template"
+              echo "Expected resources:"
+              cat /tmp/original-${stack_name}.json
+              echo "Actual resources:"
+              cat /tmp/deployed-${stack_name}.json
+              return 1
+            fi
+          }
+          
+          # Check all test stacks
+          check_stack "CfnTeleportRefactorTest1" "CfnTeleportRefactorTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportRefactorTest2" "CfnTeleportRefactorTest2.yaml" || ALL_MATCH=false
+          check_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
+          check_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
+          
+          if [ "$ALL_MATCH" = "true" ]; then
+            echo ""
+            echo "=========================================="
+            echo "✅ All stacks are in original state - will be reused in next run!"
+            echo "=========================================="
+            echo "state_valid=true" >> $GITHUB_OUTPUT
+          else
+            echo ""
+            echo "=========================================="
+            echo "❌ Some stacks are not in original state - will be destroyed and recreated"
+            echo "=========================================="
+            echo "state_valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-  # Cleanup - always runs even if tests or format verification fail
+  # Cleanup - only destroys stacks if verification failed
   cleanup:
     needs:
-      [prepare-stacks, test-refactor, test-import, test-rename, verify-formats]
+      [prepare-stacks, test-refactor, test-import, test-rename, verify-state]
     if: always() && needs.prepare-stacks.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Delete test stacks
-        run: make test-reset
+      - name: Decide cleanup strategy
+        id: decide
+        run: |
+          if [ "${{ needs.verify-state.outputs.state_valid }}" = "true" ]; then
+            echo "✅ Stacks are in valid state - skipping cleanup to reuse in next run"
+            echo "cleanup_needed=false" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Stacks are not in valid state or tests failed - will destroy and recreate"
+            echo "cleanup_needed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Delete test stacks (if needed)
+        if: steps.decide.outputs.cleanup_needed == 'true'
+        run: |
+          echo "=========================================="
+          echo "Destroying test stacks for clean rebuild"
+          echo "=========================================="
+          make test-reset
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      
+      - name: Keep stacks for reuse
+        if: steps.decide.outputs.cleanup_needed == 'false'
+        run: |
+          echo "=========================================="
+          echo "✅ Test stacks preserved for next CI run"
+          echo "=========================================="
+          echo "This saves ~3-4 minutes on next pipeline run!"
 
   report-status:
     name: success
@@ -715,7 +834,7 @@ jobs:
       - test-refactor
       - test-import
       - test-rename
-      - verify-formats
+      - verify-state
       - cleanup
     steps:
       - name: Report success
