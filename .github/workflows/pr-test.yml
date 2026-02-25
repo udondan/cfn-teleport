@@ -118,11 +118,20 @@ jobs:
           STACK_NAME="${STACK_NAME%.json}"
           STACK_NAME="${STACK_NAME%.yaml}"
 
+          # Build parameter overrides
+          PARAMS="ParameterTableName=cfn-teleport-param-test"
+          
+          # Add VpcId parameter for ImportTest1 (needs default VPC)
+          if [ "$STACK_NAME" = "CfnTeleportImportTest1" ]; then
+            DEFAULT_VPC=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
+            PARAMS="$PARAMS VpcId=$DEFAULT_VPC"
+          fi
+
           aws cloudformation deploy \
             --template-file ${{ matrix.template }} \
             --stack-name "$STACK_NAME" \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides ParameterTableName=cfn-teleport-param-test \
+            --parameter-overrides $PARAMS \
             --tags ApplicationName=cfn-teleport-test \
             --no-fail-on-empty-changeset
 

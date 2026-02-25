@@ -4,6 +4,10 @@
       "Type": "String",
       "Default": "cfn-teleport-param-test",
       "Description": "Table name controlled by stack parameter"
+    },
+    "VpcId": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "VPC ID for security group (uses default VPC if not specified)"
     }
   },
   "Resources": {
@@ -16,7 +20,9 @@
     "Bucket182C536A1": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
-        "BucketName": "031700846815-cfn-teleport-import-test-1",
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-import-test-1"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",
@@ -30,7 +36,9 @@
     "Bucket21D68F7E8": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
-        "BucketName": "031700846815-cfn-teleport-import-test-2",
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-import-test-2"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",
@@ -138,7 +146,9 @@
             "Value": "cfn-teleport-test"
           }
         ],
-        "VpcId": "vpc-e615339c"
+        "VpcId": {
+          "Ref": "VpcId"
+        }
       }
     },
     "LaunchTemplate": {
@@ -153,7 +163,9 @@
               ]
             }
           },
-          "ImageId": "ami-06d3b5e1ed9e1d982",
+          "ImageId": {
+            "Fn::Sub": "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2}}"
+          },
           "InstanceType": "t2.micro",
           "KeyName": {
             "Ref": "KeyPair1622897B"

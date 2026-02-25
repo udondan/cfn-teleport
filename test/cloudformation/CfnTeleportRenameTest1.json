@@ -1,16 +1,11 @@
 {
-  "Parameters": {
-    "ParameterTableName": {
-      "Type": "String",
-      "Default": "cfn-teleport-param-test",
-      "Description": "Table name controlled by stack parameter"
-    }
-  },
   "Resources": {
     "RenameBucket615F0D5B": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
-        "BucketName": "031700846815-cfn-teleport-rename-test",
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-rename-test"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",
@@ -68,7 +63,9 @@
     "DependencyBucket7E39B8FB": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
-        "BucketName": "031700846815-cfn-teleport-dependency-test",
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-dependency-test"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",

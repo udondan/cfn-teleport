@@ -10,7 +10,9 @@
     "StandaloneBucket478A1338": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
-        "BucketName": "031700846815-cfn-teleport-standalone",
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-standalone"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",
@@ -54,7 +56,9 @@
     "Bucket182C536A1": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
-        "BucketName": "031700846815-cfn-teleport-refactor-test-1",
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-refactor-test-1"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",
@@ -68,7 +72,9 @@
     "Bucket21D68F7E8": {
       "Type": "AWS::S3::Bucket",
       "Properties": {
-        "BucketName": "031700846815-cfn-teleport-refactor-test-2",
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-refactor-test-2"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",
