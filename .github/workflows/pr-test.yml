@@ -129,9 +129,9 @@ jobs:
             CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
           fi
           
-          # RefactorTest2 uses parameters
+          # RefactorTest2 uses same parameters as RefactorTest1
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest2" ]; then
-            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-param-test"
+            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
           fi
           
           # RenameTest1 requires IAM capability
