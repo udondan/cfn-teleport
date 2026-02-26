@@ -57,7 +57,34 @@ deploy: phony
 	@$(MAKE) verify-formats
 
 check-drift: phony
-	@bash check-drift.sh "$(STACK)" "$(EXPECT)" "$(TEMPLATE)"
+	@echo "Checking drift for stack: $(STACK) (comparing against $(TEMPLATE))"
+	@aws cloudformation get-template \
+		--stack-name "$(STACK)" \
+		--query 'TemplateBody' \
+		--output json | jq -r '.' > /tmp/deployed-$(STACK).json
+	@jq -S '.Resources | keys | sort' "$(TEMPLATE)" > /tmp/original-resources.json
+	@jq -S '.Resources | keys | sort' /tmp/deployed-$(STACK).json > /tmp/deployed-resources.json
+	@if diff -q /tmp/original-resources.json /tmp/deployed-resources.json > /dev/null 2>&1; then \
+		echo "✓ No drift detected (resources match)"; \
+		if [ "$(EXPECT)" = "yes" ]; then \
+			echo "✗ Expected changes but found none"; \
+			echo "DEBUG: Original resources:"; \
+			cat /tmp/original-resources.json; \
+			echo "DEBUG: Deployed resources:"; \
+			cat /tmp/deployed-resources.json; \
+			exit 1; \
+		fi; \
+	else \
+		echo "✓ Drift detected (resources differ)"; \
+		echo "Resources in original template:"; \
+		cat /tmp/original-resources.json; \
+		echo "Resources in deployed stack:"; \
+		cat /tmp/deployed-resources.json; \
+		if [ "$(EXPECT)" = "no" ]; then \
+			echo "✗ Expected no changes but found drift"; \
+			exit 1; \
+		fi; \
+	fi
 
 verify-formats: phony
 	@echo "=========================================="

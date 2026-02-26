@@ -178,8 +178,17 @@ jobs:
             return $exit_code
           }
 
-          # Source shared drift check function
-          source test/cloudformation/check-drift.sh
+          # Helper function to check drift using Makefile target
+          check_drift() {
+            local stack="$1"
+            local expect="$2"
+            local template="$3"
+            cd test/cloudformation
+            make check-drift STACK="$stack" EXPECT="$expect" TEMPLATE="$template"
+            local result=$?
+            cd ../..
+            return $result
+          }
 
           echo "######### TEST 1: Refactor mode with standalone resources #########"
 
@@ -354,8 +363,17 @@ jobs:
             return $exit_code
           }
 
-          # Source shared drift check function
-          source test/cloudformation/check-drift.sh
+          # Helper function to check drift using Makefile target
+          check_drift() {
+            local stack="$1"
+            local expect="$2"
+            local template="$3"
+            cd test/cloudformation
+            make check-drift STACK="$stack" EXPECT="$expect" TEMPLATE="$template"
+            local result=$?
+            cd ../..
+            return $result
+          }
 
           # Find KeyPair, LaunchTemplate and related resources dynamically
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
