@@ -119,25 +119,33 @@ jobs:
           STACK_NAME="${STACK_NAME%.json}"
           STACK_NAME="${STACK_NAME%.yaml}"
 
-          # Build parameter overrides
-          PARAMS="ParameterTableName=cfn-teleport-param-test"
+          # Build parameter overrides based on stack
+          PARAMS=""
+          CAPABILITIES=""
           
-          # RefactorTest1 uses different parameter value to avoid conflicts with ImportTest1
+          # RefactorTest1 uses parameters and requires IAM capability
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest1" ]; then
-            PARAMS="ParameterTableName=cfn-teleport-refactor-param-test"
+            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
+            CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
           fi
           
-          # Add VpcId parameter for ImportTest1 (needs default VPC)
-          if [ "$STACK_NAME" = "CfnTeleportImportTest1" ]; then
-            DEFAULT_VPC=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)
-            PARAMS="$PARAMS VpcId=$DEFAULT_VPC"
+          # RefactorTest2 uses parameters
+          if [ "$STACK_NAME" = "CfnTeleportRefactorTest2" ]; then
+            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-param-test"
           fi
+          
+          # RenameTest1 requires IAM capability
+          if [ "$STACK_NAME" = "CfnTeleportRenameTest1" ]; then
+            CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
+          fi
+          
+          # ImportTest1 and ImportTest2 have no parameters (import mode compatible)
 
           aws cloudformation deploy \
             --template-file ${{ matrix.template }} \
             --stack-name "$STACK_NAME" \
-            --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides $PARAMS \
+            $CAPABILITIES \
+            $PARAMS \
             --tags ApplicationName=cfn-teleport-test \
             --no-fail-on-empty-changeset
 
@@ -346,7 +354,7 @@ jobs:
           sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
           cfn-teleport --version
 
-      - name: Test import mode with LaunchTemplate and KeyPair
+      - name: Test import mode with simple resources
         working-directory: test/cloudformation
         run: |
           # Helper function to run cfn-teleport with visible output
@@ -376,31 +384,28 @@ jobs:
             return $result
           }
 
-          # Find KeyPair, LaunchTemplate and related resources dynamically
+          # Find simple resources (no parameter dependencies - import mode compatible)
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          STANDALONE_BUCKET=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneBucket"))')
+          STANDALONE_TABLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneTable"))')
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
-          LAUNCH_TEMPLATE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("LaunchTemplate"))')
-          SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
-          INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
-          ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
 
           echo "Found resources for import mode test:"
+          echo "  STANDALONE_BUCKET: $STANDALONE_BUCKET"
+          echo "  STANDALONE_TABLE: $STANDALONE_TABLE"
+          echo "  BUCKET1: $BUCKET1"
+          echo "  BUCKET2: $BUCKET2"
+          echo "  DYNAMO_TABLE: $DYNAMO_TABLE"
           echo "  KEY_PAIR: $KEY_PAIR"
-          echo "  LAUNCH_TEMPLATE: $LAUNCH_TEMPLATE"
-          echo "  SECURITY_GROUP: $SECURITY_GROUP"
-          echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
-          echo "  ROLE: $ROLE"
 
           echo "######### Testing IMPORT mode migration from ${STACK1} to ${STACK2} #########"
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
+            --resource "${STANDALONE_BUCKET}" \
+            --resource "${STANDALONE_TABLE}" \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
-            --resource "${LAUNCH_TEMPLATE}" \
-            --resource "${SECURITY_GROUP}" \
-            --resource "${KEY_PAIR}" \
-            --resource "${INSTANCE_PROFILE}" \
-            --resource "${ROLE}" \
-            --resource "${DYNAMO_TABLE}"
+            --resource "${DYNAMO_TABLE}" \
+            --resource "${KEY_PAIR}"
 
           if check_drift "${STACK1}" "yes" "CfnTeleportImportTest1.json"; then
             echo "✓ Import mode migration successful (drift detected in source stack)"
@@ -411,14 +416,12 @@ jobs:
 
           echo "######### Testing IMPORT mode migration from ${STACK2} back to ${STACK1} #########"
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode import \
+            --resource "${STANDALONE_BUCKET}" \
+            --resource "${STANDALONE_TABLE}" \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
-            --resource "${LAUNCH_TEMPLATE}" \
-            --resource "${SECURITY_GROUP}" \
-            --resource "${KEY_PAIR}" \
-            --resource "${INSTANCE_PROFILE}" \
-            --resource "${ROLE}" \
-            --resource "${DYNAMO_TABLE}"
+            --resource "${DYNAMO_TABLE}" \
+            --resource "${KEY_PAIR}"
 
           if check_drift "${STACK1}" "no" "CfnTeleportImportTest1.json"; then
             echo "✓ Import mode migration back successful (no drift detected)"
