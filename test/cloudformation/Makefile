@@ -10,7 +10,7 @@ deploy: phony
 		--template-file CfnTeleportRefactorTest1.json \
 		--stack-name CfnTeleportRefactorTest1 \
 		--capabilities CAPABILITY_NAMED_IAM \
-		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
+		--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
 	@echo ""

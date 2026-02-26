@@ -121,6 +121,11 @@ jobs:
           # Build parameter overrides
           PARAMS="ParameterTableName=cfn-teleport-param-test"
           
+          # RefactorTest1 uses different parameter value to avoid conflicts with ImportTest1
+          if [ "$STACK_NAME" = "CfnTeleportRefactorTest1" ]; then
+            PARAMS="ParameterTableName=cfn-teleport-refactor-param-test"
+          fi
+          
           # Add VpcId parameter for ImportTest1 (needs default VPC)
           if [ "$STACK_NAME" = "CfnTeleportImportTest1" ]; then
             DEFAULT_VPC=$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text)

@@ -2,7 +2,7 @@
   "Parameters": {
     "ParameterTableName": {
       "Type": "String",
-      "Default": "cfn-teleport-param-test",
+      "Default": "cfn-teleport-refactor-param-test",
       "Description": "Table name controlled by stack parameter"
     }
   },
@@ -11,7 +11,7 @@
       "Type": "AWS::S3::Bucket",
       "Properties": {
         "BucketName": {
-          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-standalone"
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-refactor-standalone"
         },
         "Tags": [
           {
@@ -42,7 +42,7 @@
           "ReadCapacityUnits": 5,
           "WriteCapacityUnits": 5
         },
-        "TableName": "cfn-teleport-standalone",
+        "TableName": "cfn-teleport-refactor-standalone",
         "Tags": [
           {
             "Key": "ApplicationName",
