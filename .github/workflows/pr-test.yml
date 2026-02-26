@@ -31,6 +31,7 @@ jobs:
               - test/**
               - Cargo.toml
               - Cargo.lock
+              - .github/workflows/pr-test.yml
 
   # Build Rust binary (lint, test, build)
   build:
