@@ -706,7 +706,7 @@ jobs:
   cleanup:
     needs:
       [prepare-stacks, test-refactor, test-import, test-rename, verify-state]
-    if: always() && needs.prepare-stacks.result != 'skipped'
+    if: false # TEMPORARILY DISABLED FOR DEBUGGING
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
