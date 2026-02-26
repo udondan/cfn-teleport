@@ -26,12 +26,9 @@ deploy: phony
 	@echo "Deploying Import Test Stacks"
 	@echo "=========================================="
 	@echo "Deploying CfnTeleportImportTest1 (JSON)..."
-	@DEFAULT_VPC=$$(aws ec2 describe-vpcs --filters "Name=isDefault,Values=true" --query "Vpcs[0].VpcId" --output text); \
-	aws cloudformation deploy \
+	@aws cloudformation deploy \
 		--template-file CfnTeleportImportTest1.json \
 		--stack-name CfnTeleportImportTest1 \
-		--capabilities CAPABILITY_NAMED_IAM \
-		--parameter-overrides ParameterTableName=cfn-teleport-param-test VpcId=$$DEFAULT_VPC \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
 	@echo ""
@@ -39,7 +36,6 @@ deploy: phony
 	@aws cloudformation deploy \
 		--template-file CfnTeleportImportTest2.yaml \
 		--stack-name CfnTeleportImportTest2 \
-		--parameter-overrides ParameterTableName=cfn-teleport-param-test \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
 	@echo ""
