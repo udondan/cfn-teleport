@@ -2,6 +2,7 @@ use aws_config::BehaviorVersion;
 use aws_sdk_cloudformation as cloudformation;
 use aws_sdk_cloudformation::error::ProvideErrorMetadata;
 use clap::{Parser, ValueEnum};
+use console::style;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::collections::HashMap;
 use std::error::Error;
@@ -750,7 +751,13 @@ async fn select_resources<'a>(
     // Format resources with dependency markers
     let items = format_resources(resources, None, Some(&dependency_info)).await?;
 
-    let selection = MultiSelect::with_theme(&ColorfulTheme::default())
+    // Create custom theme with grey checkmark for unchecked items
+    let theme = ColorfulTheme {
+        unchecked_item_prefix: style("✔".to_string()).for_stderr().dim(),
+        ..ColorfulTheme::default()
+    };
+
+    let selection = MultiSelect::with_theme(&theme)
         .with_prompt(prompt)
         .report(false)
         .items(&items)
