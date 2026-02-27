@@ -2,6 +2,8 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended", ":semanticCommitTypeAll(chore)"],
   "dependencyDashboard": false,
+  "prConcurrentLimit": 1,
+  "prHourlyLimit": 1,
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**",
@@ -20,5 +22,5 @@
       "rangeStrategy": "bump"
     }
   ],
-  "rebaseWhen": "auto"
+  "rebaseWhen": "conflicted"
 }
