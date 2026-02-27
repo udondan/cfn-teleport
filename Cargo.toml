@@ -29,7 +29,7 @@ unsafe-libyaml = "0.2.10"
 proc-macro2 = "1.0.106"                               # override indirect dependency
 
 [dependencies.uuid]
-version = "1.8.0"
+version = "1.21.0"
 features = [
     "v4",       # Lets you generate random UUIDs
     "fast-rng", # Use a faster (but still sufficiently random) RNG
