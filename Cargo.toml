@@ -19,7 +19,7 @@ aws-sdk-cloudformation = "1.27.0"
 clap = { version = "4.5.4", features = ["derive"] }
 console = "0.16.0"
 dialoguer = "0.12.0"
-indexmap = { version = "1.9.3", features = ["serde-1"] }
+indexmap = { version = "2.13.0", features = ["serde"] }
 lazy_static = "1.4.0"
 serde_json = "1.0.116"
 serde_yml = "0.0.12"
