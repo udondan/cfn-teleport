@@ -26,7 +26,7 @@ serde_yml = "0.0.12"
 spinach = "3.0.0"
 tokio = { version = "1.49.0", features = ["full"] }
 unsafe-libyaml = "0.2.10"
-proc-macro2 = "1.0.81"                               # override indirect dependency
+proc-macro2 = "1.0.106"                               # override indirect dependency
 
 [dependencies.uuid]
 version = "1.8.0"
