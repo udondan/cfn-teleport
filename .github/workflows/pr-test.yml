@@ -134,9 +134,10 @@ jobs:
             PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
           fi
           
-          # RenameTest1 requires IAM capability
+          # RenameTest1 requires IAM capability and QueueName parameter
           if [ "$STACK_NAME" = "CfnTeleportRenameTest1" ]; then
             CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
+            PARAMS="--parameter-overrides QueueName=cfn-teleport-rename-test-queue"
           fi
           
           # ImportTest1 and ImportTest2 have no parameters (import mode compatible)

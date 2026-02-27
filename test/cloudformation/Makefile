@@ -47,6 +47,7 @@ deploy: phony
 		--template-file CfnTeleportRenameTest1.json \
 		--stack-name CfnTeleportRenameTest1 \
 		--capabilities CAPABILITY_NAMED_IAM \
+		--parameter-overrides QueueName=cfn-teleport-rename-test-queue \
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
 	@echo ""

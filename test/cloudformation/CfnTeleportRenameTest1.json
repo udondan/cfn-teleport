@@ -1,4 +1,11 @@
 {
+  "Parameters": {
+    "QueueName": {
+      "Type": "String",
+      "Default": "cfn-teleport-rename-test-queue",
+      "Description": "Queue name controlled by stack parameter for rename testing"
+    }
+  },
   "Resources": {
     "RenameBucket615F0D5B": {
       "Type": "AWS::S3::Bucket",
@@ -49,7 +56,9 @@
     "RenameQueue572D3C6A": {
       "Type": "AWS::SQS::Queue",
       "Properties": {
-        "QueueName": "cfn-teleport-rename-test-queue",
+        "QueueName": {
+          "Ref": "QueueName"
+        },
         "Tags": [
           {
             "Key": "ApplicationName",
