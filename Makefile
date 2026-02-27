@@ -14,8 +14,8 @@ test: phony
 	@cargo check
 	@cargo test --all
 	@\
-	cd test/cdk && \
-	$(MAKE) install diff deploy
+	cd test/cloudformation && \
+	$(MAKE) deploy
 
 test-clean-all:
 	@\
@@ -52,24 +52,24 @@ test-clean-all:
 		echo "Deleting security-group "$$arn"..."; \
 		aws ec2 delete-security-group --group-id "$${arn##*/}" --output text > /dev/null; \
 	done; \
-	aws ec2 delete-key-pair --key-name "cfn-teleport-test" ; \
+	aws ec2 delete-key-pair --key-name "cfn-teleport-test" 2>/dev/null || true ; \
 	aws iam list-roles \
 			--query 'Roles[?RoleName==`cfn-teleport-test`].[RoleName]' \
-			--output text | while read -r role; do \
+			--output text 2>/dev/null | while read -r role; do \
 		aws iam list-instance-profiles \
 				--query 'InstanceProfiles[?Roles[?RoleName==`cfn-teleport-test`]].[InstanceProfileName]' \
-				--output text | while read -r profile; do \
+				--output text 2>/dev/null | while read -r profile; do \
 			echo "Deleting instance-profile "$$profile"..."; \
-			aws iam remove-role-from-instance-profile --instance-profile-name "$$profile" --role-name "$$role"; \
-			aws iam delete-instance-profile --instance-profile-name "$$profile"; \
+			aws iam remove-role-from-instance-profile --instance-profile-name "$$profile" --role-name "$$role" 2>/dev/null || true; \
+			aws iam delete-instance-profile --instance-profile-name "$$profile" 2>/dev/null || true; \
 		done; \
-		aws iam delete-role --role-name "$$role" ; \
+		aws iam delete-role --role-name "$$role" 2>/dev/null || true ; \
 		echo "Deleting role "$$role"..."; \
-	done
+	done || true
 
 test-reset:
 	@\
-	cd test/cdk && \
+	cd test/cloudformation && \
 	$(MAKE) DESTROY
 	@$(MAKE) test-clean-all
 

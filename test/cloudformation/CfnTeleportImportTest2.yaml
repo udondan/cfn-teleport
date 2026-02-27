@@ -1,12 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: CfnTeleportImportTest2 - YAML target stack for import mode tests
 
-Parameters:
-  ParameterTableName:
-    Type: String
-    Default: cfn-teleport-param-test
-    Description: Table name controlled by stack parameter (must match ImportTest1 parameter name)
-
 Resources:
   # CloudFormation requires at least one resource - this is a minimal placeholder
   # Real test resources will be moved here from ImportTest1 during integration tests
@@ -17,7 +11,3 @@ Outputs:
   StackFormat:
     Description: Format of this stack template
     Value: YAML
-
-  ParameterName:
-    Description: Name of the parameter (for verification)
-    Value: !Ref ParameterTableName

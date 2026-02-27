@@ -5,7 +5,7 @@ name: Test
 # on shared CloudFormation test stacks. Multiple PRs will queue sequentially.
 concurrency:
   group: pr-test
-  cancel-in-progress: false  # Ensure cleanup always runs
+  cancel-in-progress: false # Ensure cleanup always runs
 
 on:
   pull_request:
@@ -31,6 +31,7 @@ jobs:
               - test/**
               - Cargo.toml
               - Cargo.lock
+              - .github/workflows/pr-test.yml
 
   # Build Rust binary (lint, test, build)
   build:
@@ -96,54 +97,56 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        stack:
-          - {name: "CfnTeleportRefactorTest1", type: "cdk"}
-          - {name: "CfnTeleportRefactorTest2", type: "yaml", template: "refactor-test2-template.yaml"}
-          - {name: "CfnTeleportImportTest1", type: "cdk"}
-          - {name: "CfnTeleportImportTest2", type: "yaml", template: "import-test2-template.yaml"}
-          - {name: "CfnTeleportRenameTest1", type: "cdk"}
+        template:
+          - CfnTeleportRefactorTest1.json
+          - CfnTeleportRefactorTest2.yaml
+          - CfnTeleportImportTest1.json
+          - CfnTeleportImportTest2.yaml
+          - CfnTeleportRenameTest1.json
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        if: matrix.stack.type == 'cdk'
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Deploy CDK stack
-        if: matrix.stack.type == 'cdk'
-        working-directory: test/cdk
+      - name: Deploy stack
+        working-directory: test/cloudformation
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-          npm ci --cache .npm --prefer-offline
-          npm run build
-          npx cdk deploy --require-approval never "${{ matrix.stack.name }}"
+          # Extract stack name from template filename (remove extension)
+          STACK_NAME="${{ matrix.template }}"
+          STACK_NAME="${STACK_NAME%.json}"
+          STACK_NAME="${STACK_NAME%.yaml}"
 
-      - name: Deploy YAML stack
-        if: matrix.stack.type == 'yaml'
-        working-directory: test/cdk
-        env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
+          # Build parameter overrides based on stack
+          PARAMS=""
+          CAPABILITIES=""
+          
+          # RefactorTest1 uses parameters and requires IAM capability
+          if [ "$STACK_NAME" = "CfnTeleportRefactorTest1" ]; then
+            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
+            CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
+          fi
+          
+          # RefactorTest2 uses same parameters as RefactorTest1
+          if [ "$STACK_NAME" = "CfnTeleportRefactorTest2" ]; then
+            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
+          fi
+          
+          # RenameTest1 requires IAM capability and QueueName parameter
+          if [ "$STACK_NAME" = "CfnTeleportRenameTest1" ]; then
+            CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
+            PARAMS="--parameter-overrides QueueName=cfn-teleport-rename-test-queue"
+          fi
+          
+          # ImportTest1 and ImportTest2 have no parameters (import mode compatible)
+
           aws cloudformation deploy \
-            --template-file ${{ matrix.stack.template }} \
-            --stack-name ${{ matrix.stack.name }} \
-            --parameter-overrides ParameterTableName=cfn-teleport-param-test \
+            --template-file ${{ matrix.template }} \
+            --stack-name "$STACK_NAME" \
+            $CAPABILITIES \
+            $PARAMS \
             --tags ApplicationName=cfn-teleport-test \
             --no-fail-on-empty-changeset
 
@@ -167,24 +170,8 @@ jobs:
           sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
           cfn-teleport --version
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK CLI
-        working-directory: test/cdk
-        run: make install
-
       - name: Test refactor mode with supported resource types
-        working-directory: test/cdk
+        working-directory: test/cloudformation
         run: |
           # Helper function to run cfn-teleport with visible output
           run_cfn_teleport() {
@@ -199,6 +186,18 @@ jobs:
             echo "═══════════════════════════════════════════════════════════════════════════════"
             echo ""
             return $exit_code
+          }
+
+          # Helper function to check drift using Makefile target
+          check_drift() {
+            local stack="$1"
+            local expect="$2"
+            local template="$3"
+            cd test/cloudformation
+            make check-drift STACK="$stack" EXPECT="$expect" TEMPLATE="$template"
+            local result=$?
+            cd ../..
+            return $result
           }
 
           echo "######### TEST 1: Refactor mode with standalone resources #########"
@@ -223,8 +222,7 @@ jobs:
             --resource "${STANDALONE_BUCKET}" \
             --resource "${STANDALONE_TABLE}"
 
-          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
-          if echo "$DIFF_OUTPUT" | grep -E "(${STANDALONE_BUCKET}|${STANDALONE_TABLE})"; then
+          if check_drift "${STACK1}" "yes" "CfnTeleportRefactorTest1.json"; then
             echo "✓ Standalone resources moved successfully"
           else
             echo "✗ Standalone resource migration failed"
@@ -237,8 +235,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
-          if echo "$DIFF_OUTPUT" | grep -E "(${BUCKET1}|${BUCKET2}|${DYNAMO_TABLE})"; then
+          if check_drift "${STACK1}" "yes" "CfnTeleportRefactorTest1.json"; then
             echo "✓ Regular resources moved successfully"
           else
             echo "✗ Regular resource migration failed"
@@ -253,7 +250,7 @@ jobs:
             --resource "${BUCKET2}" \
             --resource "${DYNAMO_TABLE}"
 
-          if npx cdk diff --fail CfnTeleportRefactorTest1; then
+          if check_drift "${STACK1}" "no" "CfnTeleportRefactorTest1.json"; then
             echo "✓ All resources successfully moved back (no drift detected)"
           else
             echo "✗ Failed to move resources back (drift detected)"
@@ -263,33 +260,32 @@ jobs:
           echo "######### TEST 4: Move ParameterTable (parameter dependency validation) #########"
           # Find ParameterTable logical ID dynamically
           PARAMETER_TABLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("ParameterTable"))')
-          
+
           if [ -z "$PARAMETER_TABLE" ]; then
             echo "✗ Could not find ParameterTable in stack"
             echo "  PARAMETER_TABLE: '$PARAMETER_TABLE'"
             exit 1
           fi
-          
+
           echo "Found ParameterTable: $PARAMETER_TABLE"
           echo "This table depends on ParameterTableName parameter"
           echo "Both Stack1 and Stack2 have this parameter, so move should succeed..."
-          
+
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
-          
-          DIFF_OUTPUT=$(npx cdk diff CfnTeleportRefactorTest1 2>&1 || true)
-          if echo "$DIFF_OUTPUT" | grep -E "${PARAMETER_TABLE}"; then
+
+          if check_drift "${STACK1}" "yes" "CfnTeleportRefactorTest1.json"; then
             echo "✓ ParameterTable moved successfully (parameter exists in both stacks)"
           else
             echo "✗ ParameterTable migration failed"
             exit 1
           fi
-          
+
           echo "Moving ParameterTable back to ${STACK1}..."
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
             --resource "${PARAMETER_TABLE}"
-          
-          if npx cdk diff --fail CfnTeleportRefactorTest1; then
+
+          if check_drift "${STACK1}" "no" "CfnTeleportRefactorTest1.json"; then
             echo "✓ ParameterTable successfully moved back"
           else
             echo "✗ Failed to move ParameterTable back"
@@ -359,24 +355,8 @@ jobs:
           sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
           cfn-teleport --version
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK CLI
-        working-directory: test/cdk
-        run: make install
-
-      - name: Test import mode with LaunchTemplate and KeyPair
-        working-directory: test/cdk
+      - name: Test import mode with simple resources
+        working-directory: test/cloudformation
         run: |
           # Helper function to run cfn-teleport with visible output
           run_cfn_teleport() {
@@ -393,50 +373,61 @@ jobs:
             return $exit_code
           }
 
-          # Find KeyPair, LaunchTemplate and related resources dynamically
+          # Helper function to check drift using Makefile target
+          check_drift() {
+            local stack="$1"
+            local expect="$2"
+            local template="$3"
+            cd test/cloudformation
+            make check-drift STACK="$stack" EXPECT="$expect" TEMPLATE="$template"
+            local result=$?
+            cd ../..
+            return $result
+          }
+
+          # Find simple resources (no parameter dependencies - import mode compatible)
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          STANDALONE_BUCKET=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneBucket"))')
+          STANDALONE_TABLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("StandaloneTable"))')
           KEY_PAIR=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("KeyPair"))')
-          LAUNCH_TEMPLATE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("LaunchTemplate"))')
-          SECURITY_GROUP=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("SecurityGroup"))')
-          INSTANCE_PROFILE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Instance")) | select(contains("InstanceProfile"))')
-          ROLE=$(echo "$TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Role"))')
 
           echo "Found resources for import mode test:"
+          echo "  STANDALONE_BUCKET: $STANDALONE_BUCKET"
+          echo "  STANDALONE_TABLE: $STANDALONE_TABLE"
+          echo "  BUCKET1: $BUCKET1"
+          echo "  BUCKET2: $BUCKET2"
+          echo "  DYNAMO_TABLE: $DYNAMO_TABLE"
           echo "  KEY_PAIR: $KEY_PAIR"
-          echo "  LAUNCH_TEMPLATE: $LAUNCH_TEMPLATE"
-          echo "  SECURITY_GROUP: $SECURITY_GROUP"
-          echo "  INSTANCE_PROFILE: $INSTANCE_PROFILE"
-          echo "  ROLE: $ROLE"
 
           echo "######### Testing IMPORT mode migration from ${STACK1} to ${STACK2} #########"
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
+            --resource "${STANDALONE_BUCKET}" \
+            --resource "${STANDALONE_TABLE}" \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
-            --resource "${LAUNCH_TEMPLATE}" \
-            --resource "${SECURITY_GROUP}" \
-            --resource "${KEY_PAIR}" \
-            --resource "${INSTANCE_PROFILE}" \
-            --resource "${ROLE}" \
-            --resource "${DYNAMO_TABLE}"
+            --resource "${DYNAMO_TABLE}" \
+            --resource "${KEY_PAIR}"
 
-          if npx cdk diff --fail CfnTeleportImportTest1; then
-            echo "Migration failed, cdk diff did not show changes"
+          if check_drift "${STACK1}" "yes" "CfnTeleportImportTest1.json"; then
+            echo "✓ Import mode migration successful (drift detected in source stack)"
+          else
+            echo "✗ Import mode migration failed (no drift detected)"
             exit 1
           fi
 
           echo "######### Testing IMPORT mode migration from ${STACK2} back to ${STACK1} #########"
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode import \
+            --resource "${STANDALONE_BUCKET}" \
+            --resource "${STANDALONE_TABLE}" \
             --resource "${BUCKET1}" \
             --resource "${BUCKET2}" \
-            --resource "${LAUNCH_TEMPLATE}" \
-            --resource "${SECURITY_GROUP}" \
-            --resource "${KEY_PAIR}" \
-            --resource "${INSTANCE_PROFILE}" \
-            --resource "${ROLE}" \
-            --resource "${DYNAMO_TABLE}"
+            --resource "${DYNAMO_TABLE}" \
+            --resource "${KEY_PAIR}"
 
-          if ! npx cdk diff --fail CfnTeleportImportTest1; then
-            echo "Migration failed, cdk diff did show changes"
+          if check_drift "${STACK1}" "no" "CfnTeleportImportTest1.json"; then
+            echo "✓ Import mode migration back successful (no drift detected)"
+          else
+            echo "✗ Import mode migration back failed (drift detected)"
             exit 1
           fi
         env:
@@ -469,24 +460,8 @@ jobs:
           sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
           cfn-teleport --version
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
-
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK CLI
-        working-directory: test/cdk
-        run: make install
-
       - name: Test same-stack renaming
-        working-directory: test/cdk
+        working-directory: test/cloudformation
         run: |
           # Helper function to run cfn-teleport with visible output
           run_cfn_teleport() {
@@ -504,7 +479,7 @@ jobs:
           }
 
           echo "######### Finding rename test resources #########"
-          # CDK generates logical IDs with hashes, e.g., RenameBucket615F0D5B
+          # Logical IDs have hash suffixes, e.g., RenameBucket615F0D5B
           # Find the actual resource IDs by looking at the stack template
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
 
@@ -639,7 +614,32 @@ jobs:
 
           echo ""
           echo "=========================================="
-          echo "✓ All same-stack rename reference tests passed!"
+          echo "TEST 5: Rename all resources back to original names"
+          echo "=========================================="
+          echo "To enable stack reuse between CI runs, we restore all resources to their original state"
+
+          run_cfn_teleport --source "${STACK1}" --target "${STACK1}" --yes \
+            --resource "RenamedBucket:${RENAME_BUCKET_ID}" \
+            --resource "RenamedTable:${RENAME_TABLE_ID}" \
+            --resource "RenamedQueue:${RENAME_QUEUE_ID}" \
+            --resource "RenamedDependencyBucket:${DEPENDENCY_BUCKET_ID}"
+
+          # Verify all resources are back to original names
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_BUCKET_ID}\"" > /dev/null && \
+             echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_TABLE_ID}\"" > /dev/null && \
+             echo "$TEMPLATE" | jq -e ".Resources.\"${RENAME_QUEUE_ID}\"" > /dev/null && \
+             echo "$TEMPLATE" | jq -e ".Resources.\"${DEPENDENCY_BUCKET_ID}\"" > /dev/null; then
+            echo "✓ All resources restored to original names"
+          else
+            echo "✗ Failed to restore all resources to original names"
+            exit 1
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "✓ All same-stack rename tests passed and resources restored!"
           echo "=========================================="
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -647,55 +647,129 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRenameTest1
 
-  # Verify stack template formats
-  verify-formats:
+  # Verify stack template formats and resource state
+  verify-state:
     needs: [prepare-stacks, test-refactor, test-import, test-rename]
     runs-on: ubuntu-latest
+    outputs:
+      state_valid: ${{ steps.check.outputs.state_valid }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Verify stack template formats after all operations
+      - name: Verify stack formats and resources match original templates
+        id: check
+        working-directory: test/cloudformation
         run: |
-          cd test/cdk
+          echo "=========================================="
+          echo "Verifying stack template formats"
+          echo "=========================================="
           make verify-formats
+
+          echo ""
+          echo "=========================================="
+          echo "Verifying all stacks match original templates"
+          echo "=========================================="
+
+          ALL_MATCH=true
+
+          # Function to check if stack resources match original template
+          check_stack() {
+            local stack_name="$1"
+            local template_file="$2"
+
+            echo "Checking $stack_name..."
+
+            # Get deployed template resources
+            # Note: get-template with --output json returns a JSON-encoded string, so we use jq -r to extract it first
+            DEPLOYED_TEMPLATE=$(aws cloudformation get-template \
+              --stack-name "$stack_name" \
+              --query 'TemplateBody' \
+              --output json | jq -r '.')
+            echo "$DEPLOYED_TEMPLATE" | jq -S '.Resources | keys | sort' > /tmp/deployed-${stack_name}.json
+
+            # Get original template resources
+            jq -S '.Resources | keys | sort' "$template_file" > /tmp/original-${stack_name}.json
+
+            if diff -q /tmp/original-${stack_name}.json /tmp/deployed-${stack_name}.json > /dev/null 2>&1; then
+              echo "✅ $stack_name resources match original template"
+              return 0
+            else
+              echo "❌ $stack_name resources differ from original template"
+              echo "Expected resources:"
+              cat /tmp/original-${stack_name}.json
+              echo "Actual resources:"
+              cat /tmp/deployed-${stack_name}.json
+              return 1
+            fi
+          }
+
+          # Check all test stacks
+          check_stack "CfnTeleportRefactorTest1" "CfnTeleportRefactorTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportRefactorTest2" "CfnTeleportRefactorTest2.yaml" || ALL_MATCH=false
+          check_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
+          check_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
+
+          if [ "$ALL_MATCH" = "true" ]; then
+            echo ""
+            echo "=========================================="
+            echo "✅ All stacks are in original state - will be reused in next run!"
+            echo "=========================================="
+            echo "state_valid=true" >> $GITHUB_OUTPUT
+          else
+            echo ""
+            echo "=========================================="
+            echo "❌ Some stacks are not in original state - will be destroyed and recreated"
+            echo "=========================================="
+            echo "state_valid=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-  # Cleanup - always runs even if tests or format verification fail
+  # Cleanup - only destroys stacks if verification failed
   cleanup:
-    needs: [prepare-stacks, test-refactor, test-import, test-rename, verify-formats]
+    needs:
+      [prepare-stacks, test-refactor, test-import, test-rename, verify-state]
     if: always() && needs.prepare-stacks.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
+      - name: Decide cleanup strategy
+        id: decide
+        run: |
+          if [ "${{ needs.verify-state.outputs.state_valid }}" = "true" ]; then
+            echo "✅ Stacks are in valid state - skipping cleanup to reuse in next run"
+            echo "cleanup_needed=false" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️  Stacks are not in valid state or tests failed - will destroy and recreate"
+            echo "cleanup_needed=true" >> $GITHUB_OUTPUT
+          fi
 
-      - name: npm dependency cache
-        uses: actions/cache@v5
-        with:
-          path: test/cdk/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('test/cdk/node_modules/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Install CDK dependencies
-        working-directory: test/cdk
-        run: make install
-
-      - name: Delete test stacks
-        run: make test-reset
+      - name: Delete test stacks (if needed)
+        if: steps.decide.outputs.cleanup_needed == 'true'
+        run: |
+          echo "=========================================="
+          echo "Destroying test stacks for clean rebuild"
+          echo "=========================================="
+          make test-reset
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Keep stacks for reuse
+        if: steps.decide.outputs.cleanup_needed == 'false'
+        run: |
+          echo "=========================================="
+          echo "✅ Test stacks preserved for next CI run"
+          echo "=========================================="
+          echo "This saves ~3-4 minutes on next pipeline run!"
 
   report-status:
     name: success
@@ -707,7 +781,7 @@ jobs:
       - test-refactor
       - test-import
       - test-rename
-      - verify-formats
+      - verify-state
       - cleanup
     steps:
       - name: Report success

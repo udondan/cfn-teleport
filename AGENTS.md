@@ -4,7 +4,7 @@ Quick reference for AI coding agents working on cfn-teleport.
 
 ## Project Overview
 
-**cfn-teleport** is a Rust CLI tool that moves CloudFormation resources between stacks using AWS SDK for Rust. It features interactive prompts (dialoguer), async AWS operations (tokio), and integrates with CDK-based integration tests.
+**cfn-teleport** is a Rust CLI tool that moves CloudFormation resources between stacks using AWS SDK for Rust. It features interactive prompts (dialoguer), async AWS operations (tokio), and integrates with CloudFormation-based integration tests.
 
 ## Build/Test/Lint Commands
 
@@ -23,7 +23,7 @@ Quick reference for AI coding agents working on cfn-teleport.
 - `make test` - Full test suite:
   - Runs `cargo check`
   - Runs `cargo test --all`
-  - Deploys CDK test stacks (requires AWS credentials)
+  - Deploys CloudFormation test stacks (requires AWS credentials)
   - Runs integration tests with actual AWS resources
 
 ### Linting & Formatting
@@ -41,12 +41,11 @@ Quick reference for AI coding agents working on cfn-teleport.
 - `cargo run -- --source Stack1 --target Stack2` - Run with specific options
 - `make run` - Same as `cargo run`
 
-### CDK Integration Tests
+### CloudFormation Integration Tests
 
-- `cd test/cdk && make install` - Install Node dependencies for test stacks
-- `cd test/cdk && make diff` - Check CDK stack changes
-- `cd test/cdk && make deploy` - Deploy test stacks to AWS
-- `cd test/cdk && make DESTROY` - Destroy all test stacks
+- `cd test/cloudformation && make deploy` - Deploy all test stacks to AWS
+- `cd test/cloudformation && make verify-formats` - Verify stack template formats (JSON vs YAML)
+- `cd test/cloudformation && make DESTROY` - Destroy all test stacks
 - `make test-clean-all` - Clean up all test resources by tags (S3, DynamoDB, EC2, etc.)
 - `make test-reset` - Full reset: destroy stacks + clean all tagged resources
 
@@ -183,11 +182,12 @@ async fn get_stacks(
 
 ### Integration Tests
 
-- Uses AWS CDK to deploy real CloudFormation stacks (`test/cdk/`)
-- Tests actual resource migration between `CfnTeleportTest1` and `CfnTeleportTest2` stacks
-- Validates resources: S3 buckets, DynamoDB tables, EC2 instances, security groups, IAM roles
+- Uses native CloudFormation templates (JSON and YAML) deployed via AWS CLI (`test/cloudformation/`)
+- Tests actual resource migration between test stacks (e.g., `CfnTeleportRefactorTest1` and `CfnTeleportRefactorTest2`)
+- Validates resources: S3 buckets, DynamoDB tables, EC2 instances, security groups, IAM roles, launch templates, key pairs
 - **Requires**: AWS credentials in CI secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
 - **Region**: Tests run in `us-east-1`
+- **Format validation**: Ensures JSON stacks remain JSON and YAML stacks remain YAML after operations
 
 ### CI Pipeline
 
