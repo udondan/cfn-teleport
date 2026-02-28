@@ -90,6 +90,188 @@ jobs:
           path: ~/.cargo/bin/cfn-teleport
           retention-days: 1
 
+  # Build Windows binary and validate embedded metadata
+  build-windows:
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Update local toolchain
+        run: rustup update
+
+      - name: Install stable toolchain
+        run: |
+          rustup install stable
+          rustup default stable
+
+      - name: Toolchain info
+        run: |
+          cargo --version --verbose
+          rustc --version
+
+      - name: Rust dependency cache
+        uses: actions/cache@v5
+        with:
+          path: target
+          key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-stable-target-
+
+      - name: Build Windows binary
+        run: cargo build --release
+
+      - name: Validate Windows executable metadata
+        shell: pwsh
+        run: |
+          Write-Host "=========================================="
+          Write-Host "Validating Windows Executable Metadata"
+          Write-Host "=========================================="
+          Write-Host ""
+
+          # Parse expected version from Cargo.toml
+          $cargoToml = Get-Content "Cargo.toml" -Raw
+          if ($cargoToml -match 'version\s*=\s*"([^"]+)"') {
+              $expectedVersion = $matches[1]
+              Write-Host "Expected version from Cargo.toml: $expectedVersion"
+          } else {
+              Write-Host "ERROR: Could not parse version from Cargo.toml"
+              exit 1
+          }
+
+          # Parse expected description from Cargo.toml
+          if ($cargoToml -match 'description\s*=\s*"([^"]+)"') {
+              $expectedDescription = $matches[1]
+              Write-Host "Expected description from Cargo.toml: $expectedDescription"
+          } else {
+              Write-Host "ERROR: Could not parse description from Cargo.toml"
+              exit 1
+          }
+
+          # Parse expected authors from Cargo.toml
+          if ($cargoToml -match 'authors\s*=\s*\[([^\]]+)\]') {
+              $authorsMatch = $matches[1]
+              # Extract first author (remove quotes and whitespace)
+              if ($authorsMatch -match '"([^"]+)"') {
+                  $expectedCompany = $matches[1]
+                  Write-Host "Expected company name from Cargo.toml: $expectedCompany"
+              } else {
+                  Write-Host "ERROR: Could not parse authors from Cargo.toml"
+                  exit 1
+              }
+          } else {
+              Write-Host "ERROR: Could not find authors in Cargo.toml"
+              exit 1
+          }
+
+          # Parse expected license from Cargo.toml
+          if ($cargoToml -match 'license\s*=\s*"([^"]+)"') {
+              $expectedLicense = $matches[1]
+              Write-Host "Expected license from Cargo.toml: $expectedLicense"
+          } else {
+              Write-Host "ERROR: Could not parse license from Cargo.toml"
+              exit 1
+          }
+
+          # Construct expected copyright string
+          $expectedCopyright = "Copyright © $expectedCompany. Licensed under $expectedLicense"
+          Write-Host "Expected copyright: $expectedCopyright"
+          Write-Host ""
+
+          # Read metadata from the compiled .exe
+          $exePath = "target\release\cfn-teleport.exe"
+          if (-not (Test-Path $exePath)) {
+              Write-Host "ERROR: Binary not found at $exePath"
+              exit 1
+          }
+
+          Write-Host "Reading metadata from: $exePath"
+          $versionInfo = (Get-Item $exePath).VersionInfo
+
+          # Validate all metadata fields
+          $allValid = $true
+
+          # 1. FileVersion
+          if ($versionInfo.FileVersion -ne $expectedVersion) {
+              Write-Host "❌ FileVersion mismatch: expected '$expectedVersion', got '$($versionInfo.FileVersion)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ FileVersion: $($versionInfo.FileVersion)"
+          }
+
+          # 2. ProductVersion
+          if ($versionInfo.ProductVersion -ne $expectedVersion) {
+              Write-Host "❌ ProductVersion mismatch: expected '$expectedVersion', got '$($versionInfo.ProductVersion)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ ProductVersion: $($versionInfo.ProductVersion)"
+          }
+
+          # 3. FileDescription
+          if ($versionInfo.FileDescription -ne $expectedDescription) {
+              Write-Host "❌ FileDescription mismatch: expected '$expectedDescription', got '$($versionInfo.FileDescription)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ FileDescription: $($versionInfo.FileDescription)"
+          }
+
+          # 4. ProductName
+          if ($versionInfo.ProductName -ne "cfn-teleport") {
+              Write-Host "❌ ProductName mismatch: expected 'cfn-teleport', got '$($versionInfo.ProductName)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ ProductName: $($versionInfo.ProductName)"
+          }
+
+          # 5. CompanyName
+          if ($versionInfo.CompanyName -ne $expectedCompany) {
+              Write-Host "❌ CompanyName mismatch: expected '$expectedCompany', got '$($versionInfo.CompanyName)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ CompanyName: $($versionInfo.CompanyName)"
+          }
+
+          # 6. LegalCopyright
+          if ($versionInfo.LegalCopyright -ne $expectedCopyright) {
+              Write-Host "❌ LegalCopyright mismatch: expected '$expectedCopyright', got '$($versionInfo.LegalCopyright)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ LegalCopyright: $($versionInfo.LegalCopyright)"
+          }
+
+          # 7. OriginalFilename
+          if ($versionInfo.OriginalFilename -ne "cfn-teleport.exe") {
+              Write-Host "❌ OriginalFilename mismatch: expected 'cfn-teleport.exe', got '$($versionInfo.OriginalFilename)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ OriginalFilename: $($versionInfo.OriginalFilename)"
+          }
+
+          Write-Host ""
+          if ($allValid) {
+              Write-Host "=========================================="
+              Write-Host "✅ All metadata fields validated successfully!"
+              Write-Host "=========================================="
+              exit 0
+          } else {
+              Write-Host "=========================================="
+              Write-Host "❌ Metadata validation failed!"
+              Write-Host "=========================================="
+              exit 1
+          }
+
+      - name: Upload Windows binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cfn-teleport-windows-binary
+          path: target/release/cfn-teleport.exe
+          retention-days: 1
+
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
     needs: changes
@@ -103,6 +285,8 @@ jobs:
           - CfnTeleportImportTest1.json
           - CfnTeleportImportTest2.yaml
           - CfnTeleportRenameTest1.json
+          - CfnTeleportWindowsTest1.json
+          - CfnTeleportWindowsTest2.yaml
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -122,24 +306,24 @@ jobs:
           # Build parameter overrides based on stack
           PARAMS=""
           CAPABILITIES=""
-          
+
           # RefactorTest1 uses parameters and requires IAM capability
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest1" ]; then
             PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
             CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
           fi
-          
+
           # RefactorTest2 uses same parameters as RefactorTest1
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest2" ]; then
             PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
           fi
-          
+
           # RenameTest1 requires IAM capability and QueueName parameter
           if [ "$STACK_NAME" = "CfnTeleportRenameTest1" ]; then
             CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
             PARAMS="--parameter-overrides QueueName=cfn-teleport-rename-test-queue"
           fi
-          
+
           # ImportTest1 and ImportTest2 have no parameters (import mode compatible)
 
           aws cloudformation deploy \
@@ -152,7 +336,9 @@ jobs:
 
   # Refactor mode tests (runs in parallel with import and rename tests)
   test-refactor:
-    needs: [build, prepare-stacks]
+    needs:
+      - build
+      - prepare-stacks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -337,7 +523,9 @@ jobs:
 
   # Import mode tests (runs in parallel with refactor and rename tests)
   test-import:
-    needs: [build, prepare-stacks]
+    needs:
+      - build
+      - prepare-stacks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -442,7 +630,9 @@ jobs:
 
   # Same-stack rename tests (runs in parallel with refactor and import tests)
   test-rename:
-    needs: [build, prepare-stacks]
+    needs:
+      - build
+      - prepare-stacks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -647,9 +837,97 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRenameTest1
 
+  # Windows binary test (runs in parallel with other tests)
+  test-windows:
+    needs:
+      - build-windows
+      - prepare-stacks
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download Windows binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: cfn-teleport-windows-binary
+          path: C:\cfn-teleport-bin
+
+      - name: Test Windows binary with real AWS resources
+        shell: pwsh
+        run: |
+          # Add binary to PATH
+          $env:Path = "C:\cfn-teleport-bin;$env:Path"
+
+          Write-Host "=========================================="
+          Write-Host "Testing Windows Binary"
+          Write-Host "=========================================="
+          Write-Host ""
+
+          # Verify binary works
+          cfn-teleport --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to run cfn-teleport --version"
+            exit 1
+          }
+
+          # Find the actual bucket logical ID from the deployed stack
+          Write-Host ""
+          Write-Host "====== Finding bucket resource in WindowsTest1 ======"
+          $template = aws cloudformation get-template --stack-name CfnTeleportWindowsTest1 --query 'TemplateBody' --output json | ConvertFrom-Json
+          $bucketId = $template.Resources.PSObject.Properties.Name | Where-Object { $_ -like "WindowsTestBucket*" }
+
+          if (-not $bucketId) {
+            Write-Error "Could not find WindowsTestBucket resource in stack"
+            aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus]' --output table
+            exit 1
+          }
+
+          Write-Host "Found bucket resource: $bucketId"
+
+          Write-Host ""
+          Write-Host "====== Verifying bucket exists in AWS ======"
+          aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus,PhysicalResourceId]' --output table
+
+          Write-Host ""
+          Write-Host "====== TEST: Move bucket from WindowsTest1 to WindowsTest2 ======"
+          cfn-teleport --source CfnTeleportWindowsTest1 --target CfnTeleportWindowsTest2 --yes --mode refactor --resource $bucketId
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to move bucket to WindowsTest2"
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "✅ Bucket moved successfully to WindowsTest2"
+
+          Write-Host ""
+          Write-Host "====== TEST: Move bucket back to WindowsTest1 ======"
+          cfn-teleport --source CfnTeleportWindowsTest2 --target CfnTeleportWindowsTest1 --yes --mode refactor --resource $bucketId
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to move bucket back to WindowsTest1"
+            exit 1
+          }
+
+          Write-Host ""
+          Write-Host "✅ Bucket moved back successfully to WindowsTest1"
+
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "✅ All Windows binary tests passed!"
+          Write-Host "=========================================="
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
   # Verify stack template formats and resource state
   verify-state:
-    needs: [prepare-stacks, test-refactor, test-import, test-rename]
+    needs:
+      - test-windows
+      - test-refactor
+      - test-import
+      - test-rename
+    if: always()
     runs-on: ubuntu-latest
     outputs:
       state_valid: ${{ steps.check.outputs.state_valid }}
@@ -710,6 +988,8 @@ jobs:
           check_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
           check_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
           check_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportWindowsTest1" "CfnTeleportWindowsTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportWindowsTest2" "CfnTeleportWindowsTest2.yaml" || ALL_MATCH=false
 
           if [ "$ALL_MATCH" = "true" ]; then
             echo ""
@@ -730,59 +1010,77 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-  # Cleanup - only destroys stacks if verification failed
-  cleanup:
+  # Delete stacks in parallel (only if verification failed)
+  delete-stacks:
     needs:
-      [prepare-stacks, test-refactor, test-import, test-rename, verify-state]
-    if: always() && needs.prepare-stacks.result != 'skipped'
+      - verify-state
+    if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - CfnTeleportRefactorTest1
+          - CfnTeleportRefactorTest2
+          - CfnTeleportImportTest1
+          - CfnTeleportImportTest2
+          - CfnTeleportRenameTest1
+          - CfnTeleportWindowsTest1
+          - CfnTeleportWindowsTest2
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Decide cleanup strategy
-        id: decide
+      - name: Delete stack ${{ matrix.stack }}
         run: |
-          if [ "${{ needs.verify-state.outputs.state_valid }}" = "true" ]; then
-            echo "✅ Stacks are in valid state - skipping cleanup to reuse in next run"
-            echo "cleanup_needed=false" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️  Stacks are not in valid state or tests failed - will destroy and recreate"
-            echo "cleanup_needed=true" >> $GITHUB_OUTPUT
-          fi
+          echo "Deleting stack: ${{ matrix.stack }}"
+          aws cloudformation delete-stack --stack-name ${{ matrix.stack }} || true
 
-      - name: Delete test stacks (if needed)
-        if: steps.decide.outputs.cleanup_needed == 'true'
-        run: |
-          echo "=========================================="
-          echo "Destroying test stacks for clean rebuild"
-          echo "=========================================="
-          make test-reset
+          echo "Waiting for deletion to complete..."
+          aws cloudformation wait stack-delete-complete --stack-name ${{ matrix.stack }} || true
+
+          echo "✅ Stack ${{ matrix.stack }} deleted"
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-      - name: Keep stacks for reuse
-        if: steps.decide.outputs.cleanup_needed == 'false'
+  # Cleanup remaining resources (runs after parallel stack deletion)
+  cleanup-resources:
+    needs:
+      - delete-stacks
+    if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Clean up any remaining tagged resources
         run: |
           echo "=========================================="
-          echo "✅ Test stacks preserved for next CI run"
+          echo "Cleaning up any remaining test resources"
           echo "=========================================="
-          echo "This saves ~3-4 minutes on next pipeline run!"
+          make test-clean-all
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   report-status:
     name: success
-    if: ${{ ! failure() }}
+    if: always()
     runs-on: ubuntu-latest
     needs:
-      - build
-      - prepare-stacks
       - test-refactor
       - test-import
       - test-rename
+      - test-windows
       - verify-state
-      - cleanup
     steps:
-      - name: Report success
-        run: echo 'Success'
+      - name: Check test results
+        run: |
+          if [ "${{ needs.test-refactor.result }}" != "success" ] || \
+             [ "${{ needs.test-import.result }}" != "success" ] || \
+             [ "${{ needs.test-rename.result }}" != "success" ] || \
+             [ "${{ needs.test-windows.result }}" != "success" ]; then
+            echo "One or more tests failed"
+            exit 1
+          fi
+          echo 'Success'
