@@ -1065,11 +1065,21 @@ jobs:
 
   report-status:
     name: success
-    if: ${{ ! failure() }}
+    if: always()
     runs-on: ubuntu-latest
     needs:
-      - cleanup-resources
-      - verify-state
+      - test-refactor
+      - test-import
+      - test-rename
+      - test-windows
     steps:
-      - name: Report success
-        run: echo 'Success'
+      - name: Check test results
+        run: |
+          if [ "${{ needs.test-refactor.result }}" != "success" ] || \
+             [ "${{ needs.test-import.result }}" != "success" ] || \
+             [ "${{ needs.test-rename.result }}" != "success" ] || \
+             [ "${{ needs.test-windows.result }}" != "success" ]; then
+            echo "One or more tests failed"
+            exit 1
+          fi
+          echo 'Success'
