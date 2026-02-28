@@ -35,5 +35,5 @@ features = [
     "fast-rng", # Use a faster (but still sufficiently random) RNG
 ]
 
-[build-dependencies.winres]
-version = "0.1"
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1"
