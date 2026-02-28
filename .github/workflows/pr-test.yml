@@ -895,7 +895,7 @@ jobs:
           echo "Exporting refactor template..."
           
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" \
-            --mode refactor --export --out-dir /tmp/cfn-test-export \
+            --mode refactor --export --out-dir /tmp/cfn-test-export --yes \
             --resource "${BUCKET1}"
 
           # Verify template files were created
@@ -940,7 +940,7 @@ jobs:
           echo "Exporting import templates (should create 4 files)..."
           
           run_cfn_teleport --source "${IMPORT_STACK1}" --target "${IMPORT_STACK2}" \
-            --mode import --export --out-dir /tmp/cfn-test-import \
+            --mode import --export --out-dir /tmp/cfn-test-import --yes \
             --resource "${IMPORT_BUCKET}"
 
           # Verify 4 template files were created (retain, remove, target+retention, target final)
@@ -975,7 +975,7 @@ jobs:
           echo "Exporting again to same directory (should create .1 suffix)..."
           
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" \
-            --mode refactor --export --out-dir /tmp/cfn-test-export \
+            --mode refactor --export --out-dir /tmp/cfn-test-export --yes \
             --resource "${BUCKET1}"
 
           # Check for .1 suffix files
@@ -1021,7 +1021,7 @@ jobs:
           # Export with migration spec (renames resource in exported template)
           run_cfn_teleport --source "${STACK1}" --target "${STACK1}" \
             --migration-spec /tmp/test-migration-spec.json \
-            --export --out-dir /tmp/cfn-test-spec
+            --export --out-dir /tmp/cfn-test-spec --yes
 
           # Verify the exported template has the renamed resource
           SPEC_TEMPLATE=$(ls /tmp/cfn-test-spec/*.json | head -1)
@@ -1039,7 +1039,7 @@ jobs:
           mkdir -p /tmp/cfn-nested/subdir
           
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" \
-            --mode refactor --export --out-dir /tmp/cfn-nested/subdir \
+            --mode refactor --export --out-dir /tmp/cfn-nested/subdir --yes \
             --resource "${BUCKET1}"
 
           if ls /tmp/cfn-nested/subdir/*.json > /dev/null 2>&1; then
@@ -1063,7 +1063,7 @@ jobs:
 
           echo "Exporting from YAML stack (RefactorTest2)..."
           run_cfn_teleport --source "${STACK2}" --target "${STACK1}" \
-            --mode refactor --export --out-dir /tmp/cfn-test-yaml \
+            --mode refactor --export --out-dir /tmp/cfn-test-yaml --yes \
             --resource "${YAML_BUCKET}"
 
           # Verify YAML file was created (not JSON)
