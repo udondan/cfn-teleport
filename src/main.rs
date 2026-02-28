@@ -108,6 +108,10 @@ struct Args {
     /// Path to a file containing the target stack template (instead of fetching from AWS)
     #[arg(long = "target-template", value_name = "FILE")]
     target_template_file: Option<String>,
+
+    /// Path to a file containing the resources-to-import spec JSON (import mode only)
+    #[arg(long = "import-spec", value_name = "FILE")]
+    import_spec_file: Option<String>,
 }
 
 #[tokio::main]
@@ -569,11 +573,32 @@ async fn run() -> Result<(), Box<dyn Error>> {
         ),
     ];
 
+    // Compute or load the resources-to-import spec.
+    let import_spec = match &args.import_spec_file {
+        Some(path) => load_import_spec_from_file(path)?,
+        None => {
+            compute_import_spec(
+                &client,
+                &Template::new(
+                    template_target_with_deletion_policy.clone(),
+                    target_template_actual.format,
+                ),
+                &selected_resources,
+                &new_logical_ids_map,
+            )
+            .await?
+        }
+    };
+    let import_spec_name = format!("{}-import-spec", target_stack);
+
     if args.dry_run {
         println!("Dry run – writing templates to disk:");
         write_templates(&template_dir_path, &templates_to_save);
+        write_json_file_warn(&template_dir_path, &import_spec_name, &import_spec);
         return Ok(());
     }
+
+    let cfn_resources = import_spec_to_cfn_resources(&import_spec)?;
 
     let spinner = spinner::Spin::new(
         format!(
@@ -616,8 +641,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
             &target_stack,
             template_target_with_deletion_policy,
             target_template_actual.format,
-            selected_resources,
-            new_logical_ids_map,
+            cfn_resources,
         )
         .await?;
 
@@ -641,6 +665,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     if exec_result.is_err() {
         eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
         write_templates(&template_dir_path, &templates_to_save);
+        write_json_file_warn(&template_dir_path, &import_spec_name, &import_spec);
     }
 
     exec_result
@@ -1190,6 +1215,127 @@ fn write_templates(dir: &Path, templates: &[(String, Template)]) {
     }
 }
 
+/// Write a JSON value to disk with collision detection, printing a warning on failure.
+fn write_json_file_warn(dir: &Path, name: &str, content: &serde_json::Value) {
+    if let Err(e) = write_json_file(dir, name, content) {
+        eprintln!("  Warning: Failed to write '{}': {}", name, e);
+    }
+}
+
+/// Write a JSON value to disk with collision detection and print the resulting path.
+fn write_json_file(
+    dir: &Path,
+    name: &str,
+    content: &serde_json::Value,
+) -> Result<PathBuf, Box<dyn Error>> {
+    let path = safe_file_path(dir, name, "json");
+    let content_str = serde_json::to_string_pretty(content)?;
+    std::fs::write(&path, content_str)
+        .map_err(|e| format!("Failed to write '{}': {}", path.display(), e))?;
+    println!("  Written: {}", path.display());
+    Ok(path)
+}
+
+/// Build a JSON representation of the resource mappings for a refactor operation.
+fn build_resource_mappings_json(
+    source_stack: &str,
+    target_stack: &str,
+    id_mapping: &HashMap<String, String>,
+) -> serde_json::Value {
+    let entries: Vec<serde_json::Value> = id_mapping
+        .iter()
+        .map(|(old_id, new_id)| {
+            serde_json::json!({
+                "Source": {"StackName": source_stack, "LogicalResourceId": old_id},
+                "Destination": {"StackName": target_stack, "LogicalResourceId": new_id}
+            })
+        })
+        .collect();
+    serde_json::Value::Array(entries)
+}
+
+/// Compute the resources-to-import spec as a serialisable JSON value.
+async fn compute_import_spec(
+    client: &cloudformation::Client,
+    import_template: &Template,
+    selected_resources: &[&cloudformation::types::StackResourceSummary],
+    new_logical_ids_map: &HashMap<String, String>,
+) -> Result<serde_json::Value, Box<dyn Error>> {
+    let template_string = import_template.to_string()?;
+    let resource_identifiers = get_resource_identifier_mapping(client, &template_string).await?;
+    let entries: Vec<serde_json::Value> = selected_resources
+        .iter()
+        .map(|resource| {
+            let resource_type = resource.resource_type().unwrap_or_default();
+            let logical_id = resource.logical_resource_id().unwrap_or_default();
+            let logical_id_new = new_logical_ids_map
+                .get(logical_id)
+                .map(|s| s.as_str())
+                .unwrap_or(logical_id);
+            let physical_id = resource.physical_resource_id().unwrap_or_default();
+            let identifier_key = resource_identifiers
+                .get(logical_id_new)
+                .map(|s| s.as_str())
+                .unwrap_or_default();
+            serde_json::json!({
+                "ResourceType": resource_type,
+                "LogicalResourceId": logical_id_new,
+                "ResourceIdentifier": { identifier_key: physical_id }
+            })
+        })
+        .collect();
+    Ok(serde_json::Value::Array(entries))
+}
+
+/// Load a resources-to-import spec from a JSON file on disk.
+fn load_import_spec_from_file(path: &str) -> Result<serde_json::Value, Box<dyn Error>> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read import spec file '{}': {}", path, e))?;
+    let spec: serde_json::Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse import spec file '{}': {}", path, e))?;
+    if !spec.is_array() {
+        return Err(format!("Import spec '{}' must be a JSON array", path).into());
+    }
+    Ok(spec)
+}
+
+/// Convert a JSON import spec into CloudFormation `ResourceToImport` values.
+fn import_spec_to_cfn_resources(
+    spec: &serde_json::Value,
+) -> Result<Vec<cloudformation::types::ResourceToImport>, Box<dyn Error>> {
+    let arr = spec.as_array().ok_or("Import spec must be a JSON array")?;
+    arr.iter()
+        .map(|entry| {
+            let resource_type = entry["ResourceType"]
+                .as_str()
+                .ok_or_else(|| format!("Missing ResourceType in: {}", entry))?;
+            let logical_resource_id = entry["LogicalResourceId"]
+                .as_str()
+                .ok_or_else(|| format!("Missing LogicalResourceId in: {}", entry))?;
+            let resource_identifier: HashMap<String, String> = entry["ResourceIdentifier"]
+                .as_object()
+                .ok_or_else(|| format!("Missing ResourceIdentifier in: {}", entry))?
+                .iter()
+                .map(|(k, v)| {
+                    Ok((
+                        k.clone(),
+                        v.as_str()
+                            .ok_or_else(|| {
+                                format!("Non-string value in ResourceIdentifier: {}", v)
+                            })?
+                            .to_string(),
+                    ))
+                })
+                .collect::<Result<HashMap<String, String>, Box<dyn Error>>>()?;
+            Ok(cloudformation::types::ResourceToImport::builder()
+                .resource_type(resource_type)
+                .logical_resource_id(logical_resource_id)
+                .set_resource_identifier(Some(resource_identifier))
+                .build())
+        })
+        .collect()
+}
+
 /// Computes dependency markers for resources based on template analysis.
 ///
 /// Analyzes the template to identify which resources:
@@ -1679,6 +1825,8 @@ async fn refactor_stack_resources(
         reference_updater::update_template_references(updated_template, &id_mapping);
 
     let updated_template_obj = Template::new(updated_template.clone(), template.format);
+    let mappings_json = build_resource_mappings_json(stack_name, stack_name, &id_mapping);
+    let mappings_name = format!("{}-mappings", stack_name);
 
     if dry_run {
         println!("Dry run – writing templates to disk:");
@@ -1687,6 +1835,7 @@ async fn refactor_stack_resources(
             &format!("{}-final", stack_name),
             &updated_template_obj,
         )?;
+        write_json_file_warn(template_dir, &mappings_name, &mappings_json);
         return Ok(());
     }
 
@@ -1701,6 +1850,7 @@ async fn refactor_stack_resources(
             &format!("{}-final", stack_name),
             &updated_template_obj,
         );
+        write_json_file_warn(template_dir, &mappings_name, &mappings_json);
         return Err(e.into());
     }
 
@@ -1833,6 +1983,7 @@ async fn refactor_stack_resources(
             &format!("{}-final", stack_name),
             &updated_template_obj,
         );
+        write_json_file_warn(template_dir, &mappings_name, &mappings_json);
     }
 
     exec_result
@@ -1907,10 +2058,14 @@ async fn refactor_stack_resources_cross_stack(
             target_template_obj.clone(),
         ),
     ];
+    let mappings_json =
+        build_resource_mappings_json(source_stack_name, target_stack_name, &id_mapping);
+    let mappings_name = format!("{}-to-{}-mappings", source_stack_name, target_stack_name);
 
     if dry_run {
         println!("Dry run – writing templates to disk:");
         write_templates(template_dir, &templates_to_save);
+        write_json_file_warn(template_dir, &mappings_name, &mappings_json);
         return Ok(());
     }
 
@@ -1928,6 +2083,7 @@ async fn refactor_stack_resources_cross_stack(
     if validate_result.is_err() {
         eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
         write_templates(template_dir, &templates_to_save);
+        write_json_file_warn(template_dir, &mappings_name, &mappings_json);
         return validate_result;
     }
 
@@ -2064,6 +2220,7 @@ async fn refactor_stack_resources_cross_stack(
     if exec_result.is_err() {
         eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
         write_templates(template_dir, &templates_to_save);
+        write_json_file_warn(template_dir, &mappings_name, &mappings_json);
     }
 
     exec_result
@@ -2178,36 +2335,9 @@ async fn create_changeset(
     stack_name: &str,
     template: serde_json::Value,
     format: TemplateFormat,
-    resources_to_import: Vec<&cloudformation::types::StackResourceSummary>,
-    new_logical_ids_map: HashMap<String, String>,
+    resources_to_import: Vec<cloudformation::types::ResourceToImport>,
 ) -> Result<std::string::String, Box<dyn Error>> {
     let template_string = Template::new(template.clone(), format).to_string()?;
-    let resource_identifiers = get_resource_identifier_mapping(client, &template_string).await?;
-    let resources = resources_to_import
-        .iter()
-        .map(|resource| {
-            let resource_type = resource.resource_type().unwrap_or_default();
-            let logical_id = resource.logical_resource_id().unwrap_or_default();
-            let logical_id_new = match new_logical_ids_map.get(logical_id) {
-                Some(key) => key,
-                None => logical_id,
-            };
-
-            let physical_id = resource.physical_resource_id().unwrap_or_default();
-
-            let resouce_identifier = resource_identifiers.get(logical_id_new).unwrap();
-
-            cloudformation::types::ResourceToImport::builder()
-                .resource_type(resource_type.to_string())
-                .logical_resource_id(logical_id_new.to_string())
-                .set_resource_identifier(Some(
-                    vec![(resouce_identifier.to_string(), physical_id.to_string())]
-                        .into_iter()
-                        .collect(),
-                ))
-                .build()
-        })
-        .collect::<Vec<_>>();
 
     let change_set_name = format!("{}-{}", stack_name, Uuid::new_v4());
 
@@ -2217,7 +2347,7 @@ async fn create_changeset(
         .change_set_name(change_set_name.clone())
         .template_body(template_string)
         .change_set_type(cloudformation::types::ChangeSetType::Import)
-        .set_resources_to_import(resources.into())
+        .set_resources_to_import(Some(resources_to_import))
         // @TODO: we can detect the required capabilities from the output of validate_template()
         .capabilities(cloudformation::types::Capability::CapabilityIam)
         .capabilities(cloudformation::types::Capability::CapabilityNamedIam)
@@ -2823,5 +2953,97 @@ Resources:
         let yaml_str = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n";
         let template = parse_template_str(yaml_str).unwrap();
         assert!(matches!(template.format, TemplateFormat::Yaml));
+    }
+
+    #[test]
+    fn test_write_json_file_creates_file() {
+        let dir = std::env::temp_dir();
+        let name = format!("cfn_teleport_test_{}", uuid::Uuid::new_v4());
+        let content = serde_json::json!([{"ResourceType": "AWS::S3::Bucket"}]);
+        let path = write_json_file(&dir, &name, &content).unwrap();
+        assert!(path.exists());
+        let written = std::fs::read_to_string(&path).unwrap();
+        let reparsed: serde_json::Value = serde_json::from_str(&written).unwrap();
+        assert_eq!(reparsed, content);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_build_resource_mappings_json() {
+        let mut id_mapping = HashMap::new();
+        id_mapping.insert("OldBucket".to_string(), "NewBucket".to_string());
+        let json = build_resource_mappings_json("SourceStack", "TargetStack", &id_mapping);
+        let arr = json.as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["Source"]["StackName"].as_str(), Some("SourceStack"));
+        assert_eq!(
+            arr[0]["Source"]["LogicalResourceId"].as_str(),
+            Some("OldBucket")
+        );
+        assert_eq!(
+            arr[0]["Destination"]["StackName"].as_str(),
+            Some("TargetStack")
+        );
+        assert_eq!(
+            arr[0]["Destination"]["LogicalResourceId"].as_str(),
+            Some("NewBucket")
+        );
+    }
+
+    #[test]
+    fn test_import_spec_round_trip() {
+        // Build a spec, convert to CFN resources, verify round-trip
+        let spec = serde_json::json!([
+            {
+                "ResourceType": "AWS::S3::Bucket",
+                "LogicalResourceId": "MyBucket",
+                "ResourceIdentifier": {"BucketName": "my-actual-bucket"}
+            }
+        ]);
+        let resources = import_spec_to_cfn_resources(&spec).unwrap();
+        assert_eq!(resources.len(), 1);
+    }
+
+    #[test]
+    fn test_import_spec_to_cfn_resources_invalid() {
+        // Not an array
+        let spec = serde_json::json!({"not": "an array"});
+        assert!(import_spec_to_cfn_resources(&spec).is_err());
+    }
+
+    #[test]
+    fn test_load_import_spec_from_file() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("cfn_teleport_test_{}.json", uuid::Uuid::new_v4()));
+        let content = r#"[{"ResourceType":"AWS::S3::Bucket","LogicalResourceId":"B","ResourceIdentifier":{"BucketName":"x"}}]"#;
+        std::fs::write(&path, content).unwrap();
+        let spec = load_import_spec_from_file(path.to_str().unwrap()).unwrap();
+        assert!(spec.is_array());
+        assert_eq!(spec.as_array().unwrap().len(), 1);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_load_import_spec_from_file_not_found() {
+        let result = load_import_spec_from_file("/nonexistent/import-spec.json");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to read import spec file"));
+    }
+
+    #[test]
+    fn test_load_import_spec_from_file_not_array() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("cfn_teleport_test_{}.json", uuid::Uuid::new_v4()));
+        std::fs::write(&path, r#"{"not":"array"}"#).unwrap();
+        let result = load_import_spec_from_file(path.to_str().unwrap());
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be a JSON array"));
+        std::fs::remove_file(path).unwrap();
     }
 }
