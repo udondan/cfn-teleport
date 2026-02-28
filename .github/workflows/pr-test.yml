@@ -1009,53 +1009,91 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-  # Cleanup - only destroys stacks if verification failed
-  cleanup:
-    needs:
-      - verify-state
-    if: always() && needs.prepare-stacks.result != 'skipped'
+  # Delete stacks in parallel (only if verification failed)
+  delete-stacks:
+    needs: [prepare-stacks, verify-state]
+    if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack:
+          - CfnTeleportRefactorTest1
+          - CfnTeleportRefactorTest2
+          - CfnTeleportImportTest1
+          - CfnTeleportImportTest2
+          - CfnTeleportRenameTest1
+          - CfnTeleportWindowsTest1
+          - CfnTeleportWindowsTest2
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Decide cleanup strategy
-        id: decide
+      - name: Delete stack ${{ matrix.stack }}
         run: |
-          if [ "${{ needs.verify-state.outputs.state_valid }}" = "true" ]; then
-            echo "✅ Stacks are in valid state - skipping cleanup to reuse in next run"
-            echo "cleanup_needed=false" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️  Stacks are not in valid state or tests failed - will destroy and recreate"
-            echo "cleanup_needed=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Delete test stacks (if needed)
-        if: steps.decide.outputs.cleanup_needed == 'true'
-        run: |
-          echo "=========================================="
-          echo "Destroying test stacks for clean rebuild"
-          echo "=========================================="
-          make test-reset
+          echo "Deleting stack: ${{ matrix.stack }}"
+          aws cloudformation delete-stack --stack-name ${{ matrix.stack }} || true
+          
+          echo "Waiting for deletion to complete..."
+          aws cloudformation wait stack-delete-complete --stack-name ${{ matrix.stack }} || true
+          
+          echo "✅ Stack ${{ matrix.stack }} deleted"
         env:
           AWS_DEFAULT_REGION: us-east-1
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-      - name: Keep stacks for reuse
-        if: steps.decide.outputs.cleanup_needed == 'false'
+  # Cleanup remaining resources (runs after parallel stack deletion)
+  cleanup-resources:
+    needs: [prepare-stacks, verify-state, delete-stacks]
+    if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Clean up any remaining tagged resources
         run: |
           echo "=========================================="
-          echo "✅ Test stacks preserved for next CI run"
+          echo "Cleaning up any remaining test resources"
           echo "=========================================="
-          echo "This saves ~3-4 minutes on next pipeline run!"
+          make test-clean-all
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  # Summary job for stack preservation
+  cleanup-summary:
+    needs: [prepare-stacks, verify-state]
+    if: always() && needs.prepare-stacks.result != 'skipped'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report cleanup status
+        run: |
+          if [ "${{ needs.verify-state.outputs.state_valid }}" = "true" ]; then
+            echo "=========================================="
+            echo "✅ Test stacks preserved for next CI run"
+            echo "=========================================="
+            echo "This saves ~3-4 minutes on next pipeline run!"
+          else
+            echo "=========================================="
+            echo "⚠️  Stacks destroyed and resources cleaned up"
+            echo "=========================================="
+            echo "Next run will recreate stacks from scratch"
+          fi
 
   report-status:
     name: success
     if: ${{ ! failure() }}
     runs-on: ubuntu-latest
     needs:
-      - cleanup
+      - build
+      - build-windows
+      - prepare-stacks
+      - test-refactor
+      - test-import
+      - test-rename
+      - test-windows
+      - verify-state
+      - cleanup-summary
     steps:
       - name: Report success
         run: echo 'Success'
