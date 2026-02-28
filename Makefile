@@ -76,3 +76,6 @@ test-reset:
 lint:
 	@cargo fmt -- --check
 	@cargo clippy -- -D warnings
+
+demo: build
+	@./demo
