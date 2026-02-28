@@ -306,24 +306,24 @@ jobs:
           # Build parameter overrides based on stack
           PARAMS=""
           CAPABILITIES=""
-          
+
           # RefactorTest1 uses parameters and requires IAM capability
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest1" ]; then
             PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
             CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
           fi
-          
+
           # RefactorTest2 uses same parameters as RefactorTest1
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest2" ]; then
             PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
           fi
-          
+
           # RenameTest1 requires IAM capability and QueueName parameter
           if [ "$STACK_NAME" = "CfnTeleportRenameTest1" ]; then
             CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
             PARAMS="--parameter-overrides QueueName=cfn-teleport-rename-test-queue"
           fi
-          
+
           # ImportTest1 and ImportTest2 have no parameters (import mode compatible)
 
           aws cloudformation deploy \
@@ -336,7 +336,9 @@ jobs:
 
   # Refactor mode tests (runs in parallel with import and rename tests)
   test-refactor:
-    needs: [build, prepare-stacks]
+    needs:
+      - build
+      - prepare-stacks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -521,7 +523,9 @@ jobs:
 
   # Import mode tests (runs in parallel with refactor and rename tests)
   test-import:
-    needs: [build, prepare-stacks]
+    needs:
+      - build
+      - prepare-stacks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -626,7 +630,9 @@ jobs:
 
   # Same-stack rename tests (runs in parallel with refactor and import tests)
   test-rename:
-    needs: [build, prepare-stacks]
+    needs:
+      - build
+      - prepare-stacks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -833,7 +839,9 @@ jobs:
 
   # Windows binary test (runs in parallel with other tests)
   test-windows:
-    needs: [build-windows, prepare-stacks]
+    needs:
+      - build-windows
+      - prepare-stacks
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -850,19 +858,19 @@ jobs:
         run: |
           # Add binary to PATH
           $env:Path = "C:\cfn-teleport-bin;$env:Path"
-          
+
           Write-Host "=========================================="
           Write-Host "Testing Windows Binary"
           Write-Host "=========================================="
           Write-Host ""
-          
+
           # Verify binary works
           cfn-teleport --version
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to run cfn-teleport --version"
             exit 1
           }
-          
+
           Write-Host ""
           Write-Host "====== TEST: Move bucket from WindowsTest1 to WindowsTest2 ======"
           cfn-teleport --source CfnTeleportWindowsTest1 --target CfnTeleportWindowsTest2 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
@@ -870,10 +878,10 @@ jobs:
             Write-Error "Failed to move bucket to WindowsTest2"
             exit 1
           }
-          
+
           Write-Host ""
           Write-Host "✅ Bucket moved successfully to WindowsTest2"
-          
+
           Write-Host ""
           Write-Host "====== TEST: Move bucket back to WindowsTest1 ======"
           cfn-teleport --source CfnTeleportWindowsTest2 --target CfnTeleportWindowsTest1 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
@@ -881,10 +889,10 @@ jobs:
             Write-Error "Failed to move bucket back to WindowsTest1"
             exit 1
           }
-          
+
           Write-Host ""
           Write-Host "✅ Bucket moved back successfully to WindowsTest1"
-          
+
           Write-Host ""
           Write-Host "=========================================="
           Write-Host "✅ All Windows binary tests passed!"
@@ -896,7 +904,12 @@ jobs:
 
   # Verify stack template formats and resource state
   verify-state:
-    needs: [prepare-stacks, test-refactor, test-import, test-rename, test-windows]
+    needs:
+      - test-windows
+      - prepare-stacks
+      - test-refactor
+      - test-import
+      - test-rename
     runs-on: ubuntu-latest
     outputs:
       state_valid: ${{ steps.check.outputs.state_valid }}
@@ -982,7 +995,7 @@ jobs:
   # Cleanup - only destroys stacks if verification failed
   cleanup:
     needs:
-      [prepare-stacks, test-refactor, test-import, test-rename, test-windows, verify-state]
+      - verify-state
     if: always() && needs.prepare-stacks.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
@@ -1025,14 +1038,6 @@ jobs:
     if: ${{ ! failure() }}
     runs-on: ubuntu-latest
     needs:
-      - build
-      - build-windows
-      - prepare-stacks
-      - test-refactor
-      - test-import
-      - test-rename
-      - test-windows
-      - verify-state
       - cleanup
     steps:
       - name: Report success
