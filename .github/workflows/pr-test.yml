@@ -1132,7 +1132,7 @@ jobs:
 
           # Test that --out-dir without --export is rejected
           if run_cfn_teleport --source "${STACK1}" --target "${STACK2}" \
-            --mode refactor --out-dir /tmp/test --resource "${BUCKET1}" 2>&1 | grep -qi "requires.*--export\|--out-dir.*requires"; then
+            --mode refactor --out-dir /tmp/test --resource "${BUCKET1}" 2>&1 | grep -qi "cannot use.*--out-dir.*without.*--export"; then
             echo "✓ CLI correctly rejects --out-dir without --export"
           else
             echo "✗ CLI should reject --out-dir without --export"
