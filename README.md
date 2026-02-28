@@ -243,9 +243,9 @@ cfn-teleport --source-template ./templates/Stack1-*.yaml --target-template ./tem
 
 **Benefits:**
 
-- Review and modify templates offline
+- Review and modify templates offline before applying
 - Version control migration changes
-- Test migrations without AWS access
+- Plan migrations locally (AWS access still required to apply changes)
 - Collaborative review workflows
 
 ### Migration Specification Files
@@ -301,7 +301,7 @@ The error context file includes:
 **Template Files:**
 - Templates may contain sensitive data (parameters, resource configurations)
 - Store templates securely and avoid committing secrets to version control
-- Use `.gitignore` to exclude template directories: `*.yaml`, `*.json`
+- Use `.gitignore` to exclude template export directories or files, for example: `templates/*.yaml`, `templates/*.json`
 - Review templates before sharing to ensure no credentials are exposed
 
 **Migration Spec Files:**

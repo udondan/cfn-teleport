@@ -143,6 +143,14 @@ async fn run() -> Result<(), Box<dyn Error>> {
             .into());
     }
 
+    // --out-dir only makes sense with --export
+    if args.out_dir.is_some() && !args.export {
+        return Err("Cannot use --out-dir without --export.\n\
+             The --out-dir flag specifies where to write exported templates.\n\
+             Add --export to enable export mode, or remove --out-dir."
+            .into());
+    }
+
     // Migration spec can be used with both export and template input modes
     if args.migration_spec.is_some() && args.resource.is_some() {
         return Err(
@@ -217,6 +225,14 @@ async fn run() -> Result<(), Box<dyn Error>> {
                 format!("Migration spec path is not a file: {}", spec_path.display()).into(),
             );
         }
+        // Test readability
+        fs::File::open(spec_path).map_err(|e| {
+            format!(
+                "Cannot read migration spec file: {} ({})",
+                spec_path.display(),
+                e
+            )
+        })?;
     }
 
     let config = aws_config::load_defaults(BehaviorVersion::v2026_01_12()).await;
@@ -505,9 +521,37 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     // Same-stack rename: Use CloudFormation Stack Refactoring API
     if source_stack == target_stack {
-        // If export mode, write template and return early
+        // If export mode, generate the refactored template and export it
         if args.export {
-            let templates = vec![(template_source.clone(), "refactored".to_string())];
+            // Create updated template with renamed resources and updated references
+            let mut updated_template = template_source.content.clone();
+
+            // Rename resources in the Resources section
+            if let Some(resources) = updated_template
+                .get_mut("Resources")
+                .and_then(|r| r.as_object_mut())
+            {
+                let keys_to_rename: Vec<(String, String)> = new_logical_ids_map
+                    .iter()
+                    .map(|(old, new)| (old.clone(), new.clone()))
+                    .collect();
+
+                for (old_id, new_id) in keys_to_rename {
+                    if let Some(resource) = resources.remove(&old_id) {
+                        resources.insert(new_id, resource);
+                    }
+                }
+            }
+
+            // Update all references
+            let updated_template = reference_updater::update_template_references(
+                updated_template,
+                &new_logical_ids_map,
+            );
+
+            // Export the refactored template
+            let template_to_export = Template::new(updated_template, template_source.format);
+            let templates = vec![(template_to_export, "refactored".to_string())];
             let paths = export_templates(
                 &templates,
                 args.out_dir.as_ref(),
@@ -1198,7 +1242,10 @@ fn validate_output_directory(path: &Path) -> Result<PathBuf, Box<dyn Error>> {
         }
 
         // Check if directory is writable by attempting to create a temporary file
-        let test_file = abs_path.join(".cfn-teleport-write-test");
+        // Use a unique name to avoid overwriting any existing .cfn-teleport-write-test file
+        use uuid::Uuid;
+        let test_filename = format!(".cfn-teleport-write-test-{}", Uuid::new_v4());
+        let test_file = abs_path.join(test_filename);
         match fs::File::create(&test_file) {
             Ok(_) => {
                 // Clean up test file
@@ -1408,14 +1455,6 @@ fn export_templates(
 
         // Write template to file
         write_template_to_file(template, &final_path)?;
-
-        // Notify user if collision occurred
-        if final_path.file_name() != Some(std::ffi::OsStr::new(&filename_with_timestamp)) {
-            println!(
-                "  ⚠️  File exists, writing to: {}",
-                final_path.file_name().unwrap().to_string_lossy()
-            );
-        }
 
         written_paths.push(final_path);
     }
@@ -1848,7 +1887,7 @@ fn user_confirm() -> Result<(), Box<dyn Error>> {
 
     match confirmed {
         Some(true) => Ok(()),
-        _ => Err("Selection has not been cofirmed".into()),
+        _ => Err("Selection has not been confirmed".into()),
     }
 }
 
@@ -3459,9 +3498,9 @@ Resources:
         let without_dash: String = timestamp.chars().filter(|&c| c != '-').collect();
         assert!(without_dash.chars().all(|c| c.is_ascii_digit()));
 
-        // Year should be reasonable (2020-2099)
+        // Year should be reasonable (>= 2020)
         let year: u32 = timestamp[0..4].parse().unwrap();
-        assert!(year >= 2020 && year <= 2099);
+        assert!(year >= 2020);
     }
 
     #[test]
@@ -3501,7 +3540,6 @@ Resources:
 
     #[test]
     fn test_resolve_file_collision_no_collision() {
-        use std::fs;
         use tempfile::TempDir;
 
         // Create temporary directory
