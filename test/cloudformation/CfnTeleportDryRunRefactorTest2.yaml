@@ -1,0 +1,8 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CfnTeleportDryRunRefactorTest2 - YAML target stack for dry-run refactor tests
+
+Resources:
+  # CloudFormation requires at least one resource - this is a minimal placeholder
+  # Real test resources will be moved here from DryRunRefactorTest1 during integration tests
+  WaitConditionHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle

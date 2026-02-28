@@ -1,0 +1,56 @@
+{
+  "Resources": {
+    "WaitConditionHandle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle",
+      "Metadata": {
+        "Comment": "Minimal placeholder so stack remains valid after all other resources are moved during import mode tests."
+      }
+    },
+    "DryRunImportBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-dryrun-import"
+        },
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "DryRunImportTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "ProvisionedThroughput": {
+          "ReadCapacityUnits": 5,
+          "WriteCapacityUnits": 5
+        },
+        "TableName": "cfn-teleport-dryrun-import",
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    }
+  }
+}

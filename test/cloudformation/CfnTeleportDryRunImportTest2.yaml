@@ -1,0 +1,8 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CfnTeleportDryRunImportTest2 - YAML target stack for dry-run import tests
+
+Resources:
+  # CloudFormation requires at least one resource - this is a minimal placeholder
+  # Real test resources will be moved here from DryRunImportTest1 during integration tests
+  WaitConditionHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle

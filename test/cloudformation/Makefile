@@ -51,6 +51,37 @@ deploy: phony
 		--tags ApplicationName=cfn-teleport-test \
 		--no-fail-on-empty-changeset
 	@echo ""
+	@echo "=========================================="
+	@echo "Deploying Dry-Run Test Stacks"
+	@echo "=========================================="
+	@echo "Deploying CfnTeleportDryRunRefactorTest1 (JSON)..."
+	@aws cloudformation deploy \
+		--template-file CfnTeleportDryRunRefactorTest1.json \
+		--stack-name CfnTeleportDryRunRefactorTest1 \
+		--tags ApplicationName=cfn-teleport-test \
+		--no-fail-on-empty-changeset
+	@echo ""
+	@echo "Deploying CfnTeleportDryRunRefactorTest2 (YAML)..."
+	@aws cloudformation deploy \
+		--template-file CfnTeleportDryRunRefactorTest2.yaml \
+		--stack-name CfnTeleportDryRunRefactorTest2 \
+		--tags ApplicationName=cfn-teleport-test \
+		--no-fail-on-empty-changeset
+	@echo ""
+	@echo "Deploying CfnTeleportDryRunImportTest1 (JSON)..."
+	@aws cloudformation deploy \
+		--template-file CfnTeleportDryRunImportTest1.json \
+		--stack-name CfnTeleportDryRunImportTest1 \
+		--tags ApplicationName=cfn-teleport-test \
+		--no-fail-on-empty-changeset
+	@echo ""
+	@echo "Deploying CfnTeleportDryRunImportTest2 (YAML)..."
+	@aws cloudformation deploy \
+		--template-file CfnTeleportDryRunImportTest2.yaml \
+		--stack-name CfnTeleportDryRunImportTest2 \
+		--tags ApplicationName=cfn-teleport-test \
+		--no-fail-on-empty-changeset
+	@echo ""
 	@$(MAKE) verify-formats
 
 check-drift: phony
@@ -112,6 +143,30 @@ verify-formats: phony
 		echo "✅ CfnTeleportImportTest2 is YAML format"
 	@rm -f /tmp/template-*.txt
 	@echo ""
+	@echo "=========================================="
+	@echo "Verifying dry-run test stack formats"
+	@echo "=========================================="
+	@echo "Checking JSON format stacks..."
+	@aws cloudformation get-template --stack-name CfnTeleportDryRunRefactorTest1 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-dryrun-refactor1.txt
+	@head -c 1 /tmp/template-dryrun-refactor1.txt | grep -q '{' && \
+		echo "✅ CfnTeleportDryRunRefactorTest1 is JSON format" || \
+		(echo "❌ CfnTeleportDryRunRefactorTest1 is NOT JSON format" && exit 1)
+	@aws cloudformation get-template --stack-name CfnTeleportDryRunImportTest1 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-dryrun-import1.txt
+	@head -c 1 /tmp/template-dryrun-import1.txt | grep -q '{' && \
+		echo "✅ CfnTeleportDryRunImportTest1 is JSON format" || \
+		(echo "❌ CfnTeleportDryRunImportTest1 is NOT JSON format" && exit 1)
+	@echo ""
+	@echo "Checking YAML format stacks..."
+	@aws cloudformation get-template --stack-name CfnTeleportDryRunRefactorTest2 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-dryrun-refactor2.txt
+	@head -c 1 /tmp/template-dryrun-refactor2.txt | grep -q '{' && \
+		(echo "❌ CfnTeleportDryRunRefactorTest2 is JSON format (should be YAML)" && exit 1) || \
+		echo "✅ CfnTeleportDryRunRefactorTest2 is YAML format"
+	@aws cloudformation get-template --stack-name CfnTeleportDryRunImportTest2 --query 'TemplateBody' --output json | jq -r '.' > /tmp/template-dryrun-import2.txt
+	@head -c 1 /tmp/template-dryrun-import2.txt | grep -q '{' && \
+		(echo "❌ CfnTeleportDryRunImportTest2 is JSON format (should be YAML)" && exit 1) || \
+		echo "✅ CfnTeleportDryRunImportTest2 is YAML format"
+	@rm -f /tmp/template-dryrun-*.txt
+	@echo ""
 	@echo "✅ All stacks have correct formats!"
 
 DESTROY: phony
@@ -130,5 +185,15 @@ DESTROY: phony
 	@echo "Destroying Rename Test Stack..."
 	@aws cloudformation delete-stack --stack-name CfnTeleportRenameTest1 || true
 	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportRenameTest1 || true
+	@echo ""
+	@echo "Destroying Dry-Run Test Stacks..."
+	@aws cloudformation delete-stack --stack-name CfnTeleportDryRunRefactorTest1 || true
+	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportDryRunRefactorTest1 || true
+	@aws cloudformation delete-stack --stack-name CfnTeleportDryRunRefactorTest2 || true
+	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportDryRunRefactorTest2 || true
+	@aws cloudformation delete-stack --stack-name CfnTeleportDryRunImportTest1 || true
+	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportDryRunImportTest1 || true
+	@aws cloudformation delete-stack --stack-name CfnTeleportDryRunImportTest2 || true
+	@aws cloudformation wait stack-delete-complete --stack-name CfnTeleportDryRunImportTest2 || true
 	@echo ""
 	@echo "✅ All test stacks destroyed"

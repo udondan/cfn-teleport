@@ -103,6 +103,10 @@ jobs:
           - CfnTeleportImportTest1.json
           - CfnTeleportImportTest2.yaml
           - CfnTeleportRenameTest1.json
+          - CfnTeleportDryRunRefactorTest1.json
+          - CfnTeleportDryRunRefactorTest2.yaml
+          - CfnTeleportDryRunImportTest1.json
+          - CfnTeleportDryRunImportTest2.yaml
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -647,9 +651,298 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRenameTest1
 
+  # Dry-run refactor mode tests: verify template generation, format preservation, error recovery, and file-based input
+  test-dry-run-refactor:
+    needs: [build, prepare-stacks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: cfn-teleport-binary
+          path: /tmp/cfn-teleport-bin
+
+      - name: Install binary
+        run: |
+          chmod +x /tmp/cfn-teleport-bin/cfn-teleport
+          sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
+          cfn-teleport --version
+
+      - name: Test dry-run refactor mode with template export and file-based input
+        working-directory: test/cloudformation
+        run: |
+          # Helper function to run cfn-teleport with visible output
+          run_cfn_teleport() {
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo "▶ Running: cfn-teleport $@"
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            cfn-teleport "$@" 2>&1
+            local exit_code=$?
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            echo "▶ Exit code: $exit_code"
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo ""
+            return $exit_code
+          }
+
+          TMPDIR=/tmp/cfn-teleport-dryrun-refactor
+          mkdir -p "$TMPDIR/dryrun" "$TMPDIR/error-test"
+
+          echo "######### Step 1: Dry-run to generate templates and mappings #########"
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+            --resource "${BUCKET}" \
+            --resource "${TABLE}" \
+            --dry-run \
+            --template-dir "$TMPDIR/dryrun"
+
+          echo "Verifying dry-run output files..."
+          # Source stack is JSON → expect .json extension
+          SOURCE_FINAL="$TMPDIR/dryrun/${STACK1}-final.json"
+          if [ ! -f "$SOURCE_FINAL" ]; then
+            echo "✗ Missing ${STACK1}-final.json (expected JSON format for JSON source stack)"
+            ls "$TMPDIR/dryrun/" || true
+            exit 1
+          fi
+          echo "✓ ${STACK1}-final.json written (JSON format preserved)"
+
+          # Target stack is YAML → expect .yaml extension
+          TARGET_FINAL="$TMPDIR/dryrun/${STACK2}-final.yaml"
+          if [ ! -f "$TARGET_FINAL" ]; then
+            echo "✗ Missing ${STACK2}-final.yaml (expected YAML format for YAML target stack)"
+            ls "$TMPDIR/dryrun/" || true
+            exit 1
+          fi
+          echo "✓ ${STACK2}-final.yaml written (YAML format preserved)"
+
+          # Verify YAML file is actually YAML (first char is not '{')
+          if head -c 1 "$TARGET_FINAL" | grep -q '{'; then
+            echo "✗ ${STACK2}-final.yaml is JSON, expected YAML - silent format conversion occurred!"
+            exit 1
+          fi
+          echo "✓ ${STACK2}-final.yaml is YAML format (no silent format conversion)"
+
+          # Verify resource mappings JSON was written
+          MAPPINGS_FILE="$TMPDIR/dryrun/${STACK1}-to-${STACK2}-mappings.json"
+          if [ ! -f "$MAPPINGS_FILE" ]; then
+            echo "✗ Missing resource mappings file: ${STACK1}-to-${STACK2}-mappings.json"
+            ls "$TMPDIR/dryrun/" || true
+            exit 1
+          fi
+          echo "✓ Resource mappings file written"
+          echo "  Contents: $(cat "$MAPPINGS_FILE")"
+
+          echo ""
+          echo "######### Step 2: Error test - move ALL resources triggers validation failure #########"
+          # CfnTeleportDryRunRefactorTest1 has only 2 resources (BUCKET + TABLE, no WaitConditionHandle).
+          # Moving all resources leaves source with 0 resources → CloudFormation validate_template fails
+          # before any AWS mutations → error recovery files should be written.
+          if run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+            --resource "${BUCKET}" \
+            --resource "${TABLE}" \
+            --template-dir "$TMPDIR/error-test"; then
+            echo "✗ Expected cfn-teleport to fail (source stack would have 0 resources)"
+            exit 1
+          fi
+          echo "✓ cfn-teleport failed as expected (source template would have 0 resources)"
+
+          # Verify error recovery template files were written
+          if [ ! -f "$TMPDIR/error-test/${STACK1}-final.json" ] && \
+             [ ! -f "$TMPDIR/error-test/${STACK1}-final.yaml" ]; then
+            echo "✗ Error recovery source template file not written to --template-dir"
+            ls "$TMPDIR/error-test/" || true
+            exit 1
+          fi
+          echo "✓ Error recovery source template written on failure"
+
+          # Verify error recovery mappings file was written
+          if [ ! -f "$TMPDIR/error-test/${STACK1}-to-${STACK2}-mappings.json" ]; then
+            echo "✗ Error recovery mappings file not written to --template-dir"
+            ls "$TMPDIR/error-test/" || true
+            exit 1
+          fi
+          echo "✓ Error recovery mappings file written on failure"
+
+          echo ""
+          echo "######### Step 3: Actual migration using --source-template (file-based input) #########"
+          # Move only the bucket; the table stays in source (keeps source stack valid with 1 resource).
+          # Using --source-template exercises the file-based template input feature.
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
+            --resource "${BUCKET}" \
+            --source-template "CfnTeleportDryRunRefactorTest1.json"
+
+          # Verify bucket was moved out of source
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${BUCKET}\"" > /dev/null 2>&1; then
+            echo "✗ ${BUCKET} still in ${STACK1} after migration"
+            exit 1
+          fi
+          echo "✓ ${BUCKET} successfully moved to ${STACK2}"
+
+          echo ""
+          echo "######### Step 4: Move resource back to source stack #########"
+          run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode refactor \
+            --resource "${BUCKET}"
+
+          # Verify bucket is back in source
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          if ! echo "$TEMPLATE" | jq -e ".Resources.\"${BUCKET}\"" > /dev/null 2>&1; then
+            echo "✗ ${BUCKET} not found in ${STACK1} after moving back"
+            exit 1
+          fi
+          echo "✓ ${BUCKET} successfully moved back to ${STACK1}"
+
+          echo ""
+          echo "=========================================="
+          echo "✓ All dry-run refactor tests passed!"
+          echo "=========================================="
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          STACK1: CfnTeleportDryRunRefactorTest1
+          STACK2: CfnTeleportDryRunRefactorTest2
+          BUCKET: DryRunRefactorBucket
+          TABLE: DryRunRefactorTable
+
+  # Dry-run import mode tests: verify template generation, format preservation, and --import-spec file input
+  test-dry-run-import:
+    needs: [build, prepare-stacks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: cfn-teleport-binary
+          path: /tmp/cfn-teleport-bin
+
+      - name: Install binary
+        run: |
+          chmod +x /tmp/cfn-teleport-bin/cfn-teleport
+          sudo mv /tmp/cfn-teleport-bin/cfn-teleport /usr/local/bin/
+          cfn-teleport --version
+
+      - name: Test dry-run import mode with template export and --import-spec file input
+        working-directory: test/cloudformation
+        run: |
+          # Helper function to run cfn-teleport with visible output
+          run_cfn_teleport() {
+            echo ""
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo "▶ Running: cfn-teleport $@"
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            cfn-teleport "$@" 2>&1
+            local exit_code=$?
+            echo "───────────────────────────────────────────────────────────────────────────────"
+            echo "▶ Exit code: $exit_code"
+            echo "═══════════════════════════════════════════════════════════════════════════════"
+            echo ""
+            return $exit_code
+          }
+
+          TMPDIR=/tmp/cfn-teleport-dryrun-import
+          mkdir -p "$TMPDIR/dryrun"
+
+          echo "######### Step 1: Dry-run to generate templates and import spec #########"
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
+            --resource "${BUCKET}" \
+            --dry-run \
+            --template-dir "$TMPDIR/dryrun"
+
+          echo "Verifying dry-run output files..."
+          # Source stack is JSON → expect .json extensions
+          for suffix in retained removed; do
+            FILE="$TMPDIR/dryrun/${STACK1}-${suffix}.json"
+            if [ ! -f "$FILE" ]; then
+              echo "✗ Missing ${STACK1}-${suffix}.json (expected JSON format for JSON source stack)"
+              ls "$TMPDIR/dryrun/" || true
+              exit 1
+            fi
+            echo "✓ ${STACK1}-${suffix}.json written (JSON format preserved)"
+          done
+
+          # Target stack is YAML → expect .yaml extensions
+          for suffix in import final; do
+            FILE="$TMPDIR/dryrun/${STACK2}-${suffix}.yaml"
+            if [ ! -f "$FILE" ]; then
+              echo "✗ Missing ${STACK2}-${suffix}.yaml (expected YAML format for YAML target stack)"
+              ls "$TMPDIR/dryrun/" || true
+              exit 1
+            fi
+            echo "✓ ${STACK2}-${suffix}.yaml written (YAML format preserved)"
+
+            # Verify the YAML file is actually YAML (first char is not '{')
+            if head -c 1 "$FILE" | grep -q '{'; then
+              echo "✗ $FILE is JSON, expected YAML - silent format conversion occurred!"
+              exit 1
+            fi
+          done
+          echo "✓ All YAML target files are YAML format (no silent format conversion)"
+
+          # Verify import spec JSON was written
+          IMPORT_SPEC="$TMPDIR/dryrun/${STACK2}-import-spec.json"
+          if [ ! -f "$IMPORT_SPEC" ]; then
+            echo "✗ Missing import spec file: ${STACK2}-import-spec.json"
+            ls "$TMPDIR/dryrun/" || true
+            exit 1
+          fi
+          echo "✓ Import spec written"
+          echo "  Contents: $(cat "$IMPORT_SPEC")"
+
+          echo ""
+          echo "######### Step 2: Actual migration using --import-spec (file-based spec input) #########"
+          # Use the import spec generated by the dry-run.
+          # This is the key feature: a user can inspect/modify the spec and re-use it for the migration.
+          run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
+            --resource "${BUCKET}" \
+            --import-spec "$IMPORT_SPEC"
+
+          # Verify bucket was moved out of source
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          if echo "$TEMPLATE" | jq -e ".Resources.\"${BUCKET}\"" > /dev/null 2>&1; then
+            echo "✗ ${BUCKET} still in ${STACK1} after migration"
+            exit 1
+          fi
+          echo "✓ ${BUCKET} successfully moved to ${STACK2}"
+
+          echo ""
+          echo "######### Step 3: Move resource back to source stack #########"
+          run_cfn_teleport --source "${STACK2}" --target "${STACK1}" --yes --mode import \
+            --resource "${BUCKET}"
+
+          # Verify bucket is back in source
+          TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
+          if ! echo "$TEMPLATE" | jq -e ".Resources.\"${BUCKET}\"" > /dev/null 2>&1; then
+            echo "✗ ${BUCKET} not found in ${STACK1} after moving back"
+            exit 1
+          fi
+          echo "✓ ${BUCKET} successfully moved back to ${STACK1}"
+
+          echo ""
+          echo "=========================================="
+          echo "✓ All dry-run import tests passed!"
+          echo "=========================================="
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          STACK1: CfnTeleportDryRunImportTest1
+          STACK2: CfnTeleportDryRunImportTest2
+          BUCKET: DryRunImportBucket
+
   # Verify stack template formats and resource state
   verify-state:
-    needs: [prepare-stacks, test-refactor, test-import, test-rename]
+    needs: [prepare-stacks, test-refactor, test-import, test-rename, test-dry-run-refactor, test-dry-run-import]
     runs-on: ubuntu-latest
     outputs:
       state_valid: ${{ steps.check.outputs.state_valid }}
@@ -710,6 +1003,10 @@ jobs:
           check_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
           check_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
           check_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportDryRunRefactorTest1" "CfnTeleportDryRunRefactorTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportDryRunRefactorTest2" "CfnTeleportDryRunRefactorTest2.yaml" || ALL_MATCH=false
+          check_stack "CfnTeleportDryRunImportTest1" "CfnTeleportDryRunImportTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportDryRunImportTest2" "CfnTeleportDryRunImportTest2.yaml" || ALL_MATCH=false
 
           if [ "$ALL_MATCH" = "true" ]; then
             echo ""
@@ -733,7 +1030,7 @@ jobs:
   # Cleanup - only destroys stacks if verification failed
   cleanup:
     needs:
-      [prepare-stacks, test-refactor, test-import, test-rename, verify-state]
+      [prepare-stacks, test-refactor, test-import, test-rename, test-dry-run-refactor, test-dry-run-import, verify-state]
     if: always() && needs.prepare-stacks.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
@@ -781,6 +1078,8 @@ jobs:
       - test-refactor
       - test-import
       - test-rename
+      - test-dry-run-refactor
+      - test-dry-run-import
       - verify-state
       - cleanup
     steps:
