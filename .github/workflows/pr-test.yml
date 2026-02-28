@@ -277,6 +277,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       matrix:
         template:
@@ -291,12 +294,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Deploy stack
         working-directory: test/cloudformation
-        env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           # Extract stack name from template filename (remove extension)
           STACK_NAME="${{ matrix.template }}"
@@ -340,6 +345,9 @@ jobs:
       - build
       - prepare-stacks
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -349,6 +357,12 @@ jobs:
         with:
           name: cfn-teleport-binary
           path: /tmp/cfn-teleport-bin
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Install binary
         run: |
@@ -488,9 +502,6 @@ jobs:
             exit 1
           fi
         env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRefactorTest1
           STACK2: CfnTeleportRefactorTest2
           BUCKET1: Bucket182C536A1
@@ -503,6 +514,9 @@ jobs:
       - build
       - prepare-stacks
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -512,6 +526,12 @@ jobs:
         with:
           name: cfn-teleport-binary
           path: /tmp/cfn-teleport-bin
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Install binary
         run: |
@@ -571,9 +591,6 @@ jobs:
             exit 1
           fi
         env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportImportTest1
           STACK2: CfnTeleportImportTest2
           BUCKET1: Bucket182C536A1
@@ -586,6 +603,9 @@ jobs:
       - build
       - prepare-stacks
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -595,6 +615,12 @@ jobs:
         with:
           name: cfn-teleport-binary
           path: /tmp/cfn-teleport-bin
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Install binary
         run: |
@@ -772,9 +798,6 @@ jobs:
           echo "✓ All same-stack rename tests passed and resources restored!"
           echo "=========================================="
         env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRenameTest1
 
   # Template I/O tests (export, file input, migration spec)
@@ -783,6 +806,9 @@ jobs:
       - build
       - prepare-stacks
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -792,6 +818,12 @@ jobs:
         with:
           name: cfn-teleport-binary
           path: /tmp/cfn-teleport-bin
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Install binary
         run: |
@@ -1084,9 +1116,6 @@ jobs:
           echo "✓ All template I/O tests passed!"
           echo "=========================================="
         env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRefactorTest1
           STACK2: CfnTeleportRefactorTest2
           IMPORT_STACK1: CfnTeleportImportTest1
@@ -1098,6 +1127,9 @@ jobs:
       - build-windows
       - prepare-stacks
     runs-on: windows-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -1107,6 +1139,12 @@ jobs:
         with:
           name: cfn-teleport-windows-binary
           path: C:\cfn-teleport-bin
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Test Windows binary with real AWS resources
         shell: pwsh
@@ -1181,10 +1219,6 @@ jobs:
           Write-Host "=========================================="
           Write-Host "✅ All Windows binary tests passed!"
           Write-Host "=========================================="
-        env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   # Verify stack template formats and resource state
   verify-state:
@@ -1196,11 +1230,20 @@ jobs:
       - test-template-io
     if: always()
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       state_valid: ${{ steps.check.outputs.state_valid }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Verify stack formats and resources match original templates
         id: check
@@ -1342,10 +1385,6 @@ jobs:
             echo "state_valid=false" >> $GITHUB_OUTPUT
             exit 1
           fi
-        env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   # Delete stacks in parallel (only if verification failed)
   delete-stacks:
@@ -1353,6 +1392,9 @@ jobs:
       - verify-state
     if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -1365,6 +1407,12 @@ jobs:
           - CfnTeleportWindowsTest1
           - CfnTeleportWindowsTest2
     steps:
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
       - name: Delete stack ${{ matrix.stack }}
         run: |
           echo "Deleting stack: ${{ matrix.stack }}"
@@ -1374,10 +1422,6 @@ jobs:
           aws cloudformation wait stack-delete-complete --stack-name ${{ matrix.stack }} || true
 
           echo "✅ Stack ${{ matrix.stack }} deleted"
-        env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   # Cleanup remaining resources (runs after parallel stack deletion)
   cleanup-resources:
@@ -1385,9 +1429,18 @@ jobs:
       - delete-stacks
     if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v5.1.1
+        with:
+          role-to-assume: ${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Clean up any remaining tagged resources
         run: |
@@ -1395,10 +1448,6 @@ jobs:
           echo "Cleaning up any remaining test resources"
           echo "=========================================="
           make test-clean-all
-        env:
-          AWS_DEFAULT_REGION: us-east-1
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   report-status:
     name: success
