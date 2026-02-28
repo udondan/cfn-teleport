@@ -7,6 +7,7 @@ use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect
 use std::collections::HashMap;
 use std::error::Error;
 use std::io;
+use std::path::{Path, PathBuf};
 use std::process;
 use uuid::Uuid;
 mod cfn_yaml;
@@ -40,7 +41,7 @@ enum TemplateFormat {
 }
 
 /// Wrapper for CloudFormation templates that preserves their original format
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Template {
     content: serde_json::Value,
     format: TemplateFormat,
@@ -91,6 +92,22 @@ struct Args {
     /// Operation mode for cross-stack moves
     #[arg(long, value_enum, default_value = "refactor")]
     mode: Mode,
+
+    /// Write generated templates to disk instead of executing (--dry-run)
+    #[arg(long)]
+    dry_run: bool,
+
+    /// Directory to write templates to (used with --dry-run and on errors; defaults to current directory)
+    #[arg(long, value_name = "PATH")]
+    template_dir: Option<String>,
+
+    /// Path to a file containing the source stack template (instead of fetching from AWS)
+    #[arg(long = "source-template", value_name = "FILE")]
+    source_template_file: Option<String>,
+
+    /// Path to a file containing the target stack template (instead of fetching from AWS)
+    #[arg(long = "target-template", value_name = "FILE")]
+    target_template_file: Option<String>,
 }
 
 #[tokio::main]
@@ -168,14 +185,20 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
     // Get source template for dependency analysis
-    let source_template = get_template(&client, &source_stack).await?;
+    let source_template = match &args.source_template_file {
+        Some(path) => load_template_from_file(path)?,
+        None => get_template(&client, &source_stack).await?,
+    };
 
     // Determine if this is a cross-stack move or same-stack rename
     let is_cross_stack = source_stack != target_stack;
 
     // Fetch target template early for cross-stack parameter validation
     let target_template = if is_cross_stack {
-        Some(get_template(&client, &target_stack).await?)
+        Some(match &args.target_template_file {
+            Some(path) => load_template_from_file(path)?,
+            None => get_template(&client, &target_stack).await?,
+        })
     } else {
         None
     };
@@ -355,6 +378,9 @@ async fn run() -> Result<(), Box<dyn Error>> {
         user_confirm()?;
     }
 
+    // Resolve the directory for writing templates (defaults to current directory).
+    let template_dir_path = PathBuf::from(args.template_dir.as_deref().unwrap_or("."));
+
     let template_source_str = template_source.to_string()?;
 
     // Validate that resources being moved don't have dangling references
@@ -371,6 +397,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
             &source_stack,
             template_source,
             new_logical_ids_map,
+            args.dry_run,
+            &template_dir_path,
         )
         .await;
     }
@@ -391,6 +419,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
             template_source,
             template_target,
             new_logical_ids_map,
+            args.dry_run,
+            &template_dir_path,
         )
         .await;
     }
@@ -516,6 +546,35 @@ async fn run() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // Build the list of templates to save (used for --dry-run and on error).
+    let templates_to_save: Vec<(String, Template)> = vec![
+        (
+            format!("{}-retained", source_stack),
+            Template::new(template_retained.clone(), template_source.format),
+        ),
+        (
+            format!("{}-removed", source_stack),
+            Template::new(template_removed.clone(), template_source.format),
+        ),
+        (
+            format!("{}-import", target_stack),
+            Template::new(
+                template_target_with_deletion_policy.clone(),
+                target_template_actual.format,
+            ),
+        ),
+        (
+            format!("{}-final", target_stack),
+            Template::new(template_target.clone(), target_template_actual.format),
+        ),
+    ];
+
+    if args.dry_run {
+        println!("Dry run – writing templates to disk:");
+        write_templates(&template_dir_path, &templates_to_save);
+        return Ok(());
+    }
+
     let spinner = spinner::Spin::new(
         format!(
             "Removing {} resources from stack {}",
@@ -525,56 +584,66 @@ async fn run() -> Result<(), Box<dyn Error>> {
         .as_str(),
     );
 
-    if template_source_str != template_retained_str {
+    let exec_result: Result<(), Box<dyn Error>> = async {
+        if template_source_str != template_retained_str {
+            update_stack(
+                &client,
+                &source_stack,
+                template_retained,
+                template_source.format,
+            )
+            .await?;
+            wait_for_stack_update_completion(&client, &source_stack, None).await?;
+        }
+
         update_stack(
             &client,
             &source_stack,
-            template_retained,
+            template_removed,
             template_source.format,
         )
         .await?;
-        wait_for_stack_update_completion(&client, &source_stack, None).await?;
+        wait_for_stack_update_completion(&client, &source_stack, Some(spinner)).await?;
+
+        let spinner = spinner::Spin::new(&format!(
+            "Importing {} resources into stack {}",
+            resource_ids_to_remove.len(),
+            target_stack,
+        ));
+
+        let changeset_name = create_changeset(
+            &client,
+            &target_stack,
+            template_target_with_deletion_policy,
+            target_template_actual.format,
+            selected_resources,
+            new_logical_ids_map,
+        )
+        .await?;
+
+        wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
+        execute_changeset(&client, &target_stack, &changeset_name).await?;
+        wait_for_stack_update_completion(&client, &target_stack, None).await?;
+
+        update_stack(
+            &client,
+            &target_stack,
+            template_target,
+            target_template_actual.format,
+        )
+        .await?;
+        wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
+
+        Ok(())
+    }
+    .await;
+
+    if exec_result.is_err() {
+        eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
+        write_templates(&template_dir_path, &templates_to_save);
     }
 
-    update_stack(
-        &client,
-        &source_stack,
-        template_removed,
-        template_source.format,
-    )
-    .await?;
-    wait_for_stack_update_completion(&client, &source_stack, Some(spinner)).await?;
-
-    let spinner = spinner::Spin::new(&format!(
-        "Importing {} resources into stack {}",
-        resource_ids_to_remove.len(),
-        target_stack,
-    ));
-
-    let changeset_name = create_changeset(
-        &client,
-        &target_stack,
-        template_target_with_deletion_policy,
-        target_template_actual.format,
-        selected_resources,
-        new_logical_ids_map,
-    )
-    .await?;
-
-    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
-    execute_changeset(&client, &target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, &target_stack, None).await?;
-
-    update_stack(
-        &client,
-        &target_stack,
-        template_target,
-        target_template_actual.format,
-    )
-    .await?;
-    wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
-
-    Ok(())
+    exec_result
 }
 
 fn split_ids(id: String) -> (String, String) {
@@ -1018,7 +1087,11 @@ async fn get_template(
 ) -> Result<Template, Box<dyn Error>> {
     let resp = client.get_template().stack_name(stack_name).send().await?;
     let template_str = resp.template_body().ok_or("No template found")?;
+    parse_template_str(template_str)
+}
 
+/// Parse a CloudFormation template string (JSON or YAML with CF intrinsic function support).
+fn parse_template_str(template_str: &str) -> Result<Template, Box<dyn Error>> {
     // Try JSON first (faster and more common in automated deployments)
     match serde_json::from_str(template_str) {
         Ok(parsed) => Ok(Template::new(parsed, TemplateFormat::Json)),
@@ -1067,6 +1140,52 @@ async fn get_template(
                     Ok(Template::new(parsed, TemplateFormat::Yaml))
                 }
             }
+        }
+    }
+}
+
+/// Load and parse a CloudFormation template from a file on disk.
+fn load_template_from_file(path: &str) -> Result<Template, Box<dyn Error>> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read template file '{}': {}", path, e))?;
+    parse_template_str(&content)
+}
+
+/// Return an available file path, appending `.1`, `.2`, … suffixes to avoid collisions.
+fn safe_file_path(dir: &Path, name: &str, ext: &str) -> PathBuf {
+    let base = dir.join(format!("{}.{}", name, ext));
+    if !base.exists() {
+        return base;
+    }
+    let mut suffix = 1u32;
+    loop {
+        let candidate = dir.join(format!("{}.{}.{}", name, ext, suffix));
+        if !candidate.exists() {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
+/// Write a template to disk with collision detection and print the resulting path.
+fn write_template(dir: &Path, name: &str, template: &Template) -> Result<PathBuf, Box<dyn Error>> {
+    let ext = match template.format {
+        TemplateFormat::Json => "json",
+        TemplateFormat::Yaml => "yaml",
+    };
+    let path = safe_file_path(dir, name, ext);
+    let content = template.to_string()?;
+    std::fs::write(&path, content)
+        .map_err(|e| format!("Failed to write template to '{}': {}", path.display(), e))?;
+    println!("  Written: {}", path.display());
+    Ok(path)
+}
+
+/// Write a collection of (name, template) pairs to disk, printing warnings for failures.
+fn write_templates(dir: &Path, templates: &[(String, Template)]) {
+    for (name, tmpl) in templates {
+        if let Err(e) = write_template(dir, name, tmpl) {
+            eprintln!("  Warning: Failed to write '{}': {}", name, e);
         }
     }
 }
@@ -1528,6 +1647,8 @@ async fn refactor_stack_resources(
     stack_name: &str,
     template: Template,
     id_mapping: HashMap<String, String>,
+    dry_run: bool,
+    template_dir: &Path,
 ) -> Result<(), Box<dyn Error>> {
     use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
 
@@ -1557,10 +1678,31 @@ async fn refactor_stack_resources(
     let updated_template =
         reference_updater::update_template_references(updated_template, &id_mapping);
 
+    let updated_template_obj = Template::new(updated_template.clone(), template.format);
+
+    if dry_run {
+        println!("Dry run – writing templates to disk:");
+        write_template(
+            template_dir,
+            &format!("{}-final", stack_name),
+            &updated_template_obj,
+        )?;
+        return Ok(());
+    }
+
     // Validate the updated template
-    validate_template(client, updated_template.clone())
+    if let Err(e) = validate_template(client, updated_template.clone())
         .await
-        .map_err(|e| format!("Updated template validation failed: {}", e))?;
+        .map_err(|e| format!("Updated template validation failed: {}", e))
+    {
+        eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
+        let _ = write_template(
+            template_dir,
+            &format!("{}-final", stack_name),
+            &updated_template_obj,
+        );
+        return Err(e.into());
+    }
 
     // Step 2: Build resource mappings for CloudFormation
     let resource_mappings: Vec<ResourceMapping> = id_mapping
@@ -1596,90 +1738,104 @@ async fn refactor_stack_resources(
         .template_body(Template::new(updated_template.clone(), template.format).to_string()?)
         .build();
 
-    // Create refactor
-    let create_result = client
-        .create_stack_refactor()
-        .stack_definitions(stack_definition)
-        .set_resource_mappings(Some(resource_mappings))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
-
-    let refactor_id = create_result
-        .stack_refactor_id()
-        .ok_or("No stack refactor ID returned")?;
-
-    // Wait for validation to complete
-    loop {
-        let status = client
-            .describe_stack_refactor()
-            .stack_refactor_id(refactor_id)
+    let exec_result: Result<(), Box<dyn Error>> = async {
+        // Create refactor
+        let create_result = client
+            .create_stack_refactor()
+            .stack_definitions(stack_definition)
+            .set_resource_mappings(Some(resource_mappings))
             .send()
             .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+            .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
 
-        match status.status().map(|s| s.as_str()) {
-            Some("CREATE_COMPLETE") => {
-                break;
-            }
-            Some("CREATE_FAILED") | Some("FAILED") => {
-                spinner.fail();
-                return Err(format!(
-                    "Stack refactor validation failed: {}",
-                    status.status_reason().unwrap_or("Unknown error")
-                )
-                .into());
-            }
-            _ => {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }
-        }
-    }
+        let refactor_id = create_result
+            .stack_refactor_id()
+            .ok_or("No stack refactor ID returned")?;
 
-    // Execute the refactor
-    client
-        .execute_stack_refactor()
-        .stack_refactor_id(refactor_id)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+        // Wait for validation to complete
+        loop {
+            let status = client
+                .describe_stack_refactor()
+                .stack_refactor_id(refactor_id)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
 
-    // Wait for execution to complete
-    loop {
-        let status = client
-            .describe_stack_refactor()
-            .stack_refactor_id(refactor_id)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
-
-        match status.execution_status().map(|s| s.as_str()) {
-            Some("EXECUTE_COMPLETE") => {
-                spinner.complete();
-                println!(
-                    "Renamed {} resource{} in stack {}",
-                    id_mapping.len(),
-                    if id_mapping.len() == 1 { "" } else { "s" },
-                    stack_name
-                );
-                for (old_id, new_id) in id_mapping {
-                    println!("  {} → {}", old_id, new_id);
+            match status.status().map(|s| s.as_str()) {
+                Some("CREATE_COMPLETE") => {
+                    break;
                 }
-                return Ok(());
+                Some("CREATE_FAILED") | Some("FAILED") => {
+                    spinner.fail();
+                    return Err(format!(
+                        "Stack refactor validation failed: {}",
+                        status.status_reason().unwrap_or("Unknown error")
+                    )
+                    .into());
+                }
+                _ => {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
             }
-            Some("EXECUTE_FAILED") | Some("FAILED") => {
-                spinner.fail();
-                return Err(format!(
-                    "Stack refactor execution failed: {}",
-                    status.status_reason().unwrap_or("Unknown error")
-                )
-                .into());
-            }
-            _ => {
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+
+        // Execute the refactor
+        client
+            .execute_stack_refactor()
+            .stack_refactor_id(refactor_id)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+
+        // Wait for execution to complete
+        loop {
+            let status = client
+                .describe_stack_refactor()
+                .stack_refactor_id(refactor_id)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+
+            match status.execution_status().map(|s| s.as_str()) {
+                Some("EXECUTE_COMPLETE") => {
+                    spinner.complete();
+                    println!(
+                        "Renamed {} resource{} in stack {}",
+                        id_mapping.len(),
+                        if id_mapping.len() == 1 { "" } else { "s" },
+                        stack_name
+                    );
+                    for (old_id, new_id) in id_mapping {
+                        println!("  {} → {}", old_id, new_id);
+                    }
+                    return Ok(());
+                }
+                Some("EXECUTE_FAILED") | Some("FAILED") => {
+                    spinner.fail();
+                    return Err(format!(
+                        "Stack refactor execution failed: {}",
+                        status.status_reason().unwrap_or("Unknown error")
+                    )
+                    .into());
+                }
+                _ => {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                }
             }
         }
     }
+    .await;
+
+    if exec_result.is_err() {
+        eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
+        let _ = write_template(
+            template_dir,
+            &format!("{}-final", stack_name),
+            &updated_template_obj,
+        );
+    }
+
+    exec_result
 }
 
 /// Refactor CloudFormation stack resources across stacks using the Stack Refactoring API.
@@ -1692,10 +1848,13 @@ async fn refactor_stack_resources(
 /// * `source_template` - Source stack template
 /// * `target_template` - Target stack template
 /// * `id_mapping` - Map of old logical IDs to new logical IDs
+/// * `dry_run` - If true, write templates to disk and return without executing
+/// * `template_dir` - Directory to write templates to on dry-run or error
 ///
 /// # Returns
 /// * `Ok(())` if refactoring succeeds
 /// * `Err` if validation or execution fails
+#[allow(clippy::too_many_arguments)]
 async fn refactor_stack_resources_cross_stack(
     client: &cloudformation::Client,
     source_stack_name: &str,
@@ -1703,6 +1862,8 @@ async fn refactor_stack_resources_cross_stack(
     source_template: Template,
     target_template: Template,
     id_mapping: HashMap<String, String>,
+    dry_run: bool,
+    template_dir: &Path,
 ) -> Result<(), Box<dyn Error>> {
     use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
 
@@ -1733,14 +1894,42 @@ async fn refactor_stack_resources_cross_stack(
     let target_final =
         reference_updater::update_template_references(target_with_resources, &id_mapping);
 
-    // Step 4: Validate both templates
-    validate_template(client, source_final.clone())
-        .await
-        .map_err(|e| format!("Source template validation failed: {}", e))?;
+    let source_template_obj = Template::new(source_final.clone(), source_template.format);
+    let target_template_obj = Template::new(target_final.clone(), target_template.format);
 
-    validate_template(client, target_final.clone())
-        .await
-        .map_err(|e| format!("Target template validation failed: {}", e))?;
+    let templates_to_save: Vec<(String, Template)> = vec![
+        (
+            format!("{}-final", source_stack_name),
+            source_template_obj.clone(),
+        ),
+        (
+            format!("{}-final", target_stack_name),
+            target_template_obj.clone(),
+        ),
+    ];
+
+    if dry_run {
+        println!("Dry run – writing templates to disk:");
+        write_templates(template_dir, &templates_to_save);
+        return Ok(());
+    }
+
+    // Step 4: Validate both templates
+    let validate_result = async {
+        validate_template(client, source_final.clone())
+            .await
+            .map_err(|e| format!("Source template validation failed: {}", e))?;
+        validate_template(client, target_final.clone())
+            .await
+            .map_err(|e| format!("Target template validation failed: {}", e))?;
+        Ok::<(), Box<dyn Error>>(())
+    }
+    .await;
+    if validate_result.is_err() {
+        eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
+        write_templates(template_dir, &templates_to_save);
+        return validate_result;
+    }
 
     // Step 5: Build resource mappings for CloudFormation
     let resource_mappings: Vec<ResourceMapping> = id_mapping
@@ -1774,100 +1963,110 @@ async fn refactor_stack_resources_cross_stack(
 
     let source_stack_definition = StackDefinition::builder()
         .stack_name(source_stack_name)
-        .template_body(Template::new(source_final.clone(), source_template.format).to_string()?)
+        .template_body(source_template_obj.to_string()?)
         .build();
 
     let target_stack_definition = StackDefinition::builder()
         .stack_name(target_stack_name)
-        .template_body(Template::new(target_final.clone(), target_template.format).to_string()?)
+        .template_body(target_template_obj.to_string()?)
         .build();
 
-    // Step 7: Create refactor
-    let create_result = client
-        .create_stack_refactor()
-        .stack_definitions(source_stack_definition)
-        .stack_definitions(target_stack_definition)
-        .set_resource_mappings(Some(resource_mappings))
-        .send()
-        .await
-        .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
-
-    let refactor_id = create_result
-        .stack_refactor_id()
-        .ok_or("No stack refactor ID returned")?;
-
-    // Step 8: Wait for validation to complete
-    loop {
-        let status = client
-            .describe_stack_refactor()
-            .stack_refactor_id(refactor_id)
+    let exec_result: Result<(), Box<dyn Error>> = async {
+        // Step 7: Create refactor
+        let create_result = client
+            .create_stack_refactor()
+            .stack_definitions(source_stack_definition)
+            .stack_definitions(target_stack_definition)
+            .set_resource_mappings(Some(resource_mappings))
             .send()
             .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+            .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
 
-        match status.status().map(|s| s.as_str()) {
-            Some("CREATE_COMPLETE") => {
-                break;
-            }
-            Some("CREATE_FAILED") | Some("FAILED") => {
-                spinner.fail();
-                return Err(format!(
-                    "Stack refactor validation failed: {}",
-                    status.status_reason().unwrap_or("Unknown error")
-                )
-                .into());
-            }
-            _ => {
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }
-        }
-    }
+        let refactor_id = create_result
+            .stack_refactor_id()
+            .ok_or("No stack refactor ID returned")?;
 
-    // Step 9: Execute the refactor
-    client
-        .execute_stack_refactor()
-        .stack_refactor_id(refactor_id)
-        .send()
-        .await
-        .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+        // Step 8: Wait for validation to complete
+        loop {
+            let status = client
+                .describe_stack_refactor()
+                .stack_refactor_id(refactor_id)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
 
-    // Step 10: Wait for execution to complete
-    loop {
-        let status = client
-            .describe_stack_refactor()
-            .stack_refactor_id(refactor_id)
-            .send()
-            .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
-
-        match status.execution_status().map(|s| s.as_str()) {
-            Some("EXECUTE_COMPLETE") => {
-                spinner.complete();
-                println!(
-                    "Moved {} resource{} from {} to {}",
-                    id_mapping.len(),
-                    if id_mapping.len() == 1 { "" } else { "s" },
-                    source_stack_name,
-                    target_stack_name
-                );
-                for (old_id, new_id) in id_mapping {
-                    println!("  {} → {}", old_id, new_id);
+            match status.status().map(|s| s.as_str()) {
+                Some("CREATE_COMPLETE") => {
+                    break;
                 }
-                return Ok(());
+                Some("CREATE_FAILED") | Some("FAILED") => {
+                    spinner.fail();
+                    return Err(format!(
+                        "Stack refactor validation failed: {}",
+                        status.status_reason().unwrap_or("Unknown error")
+                    )
+                    .into());
+                }
+                _ => {
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
             }
-            Some("EXECUTE_FAILED") | Some("FAILED") => {
-                spinner.fail();
-                return Err(format!(
-                    "Stack refactor execution failed: {}",
-                    status.status_reason().unwrap_or("Unknown error")
-                )
-                .into());
-            }
-            _ => {
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+
+        // Step 9: Execute the refactor
+        client
+            .execute_stack_refactor()
+            .stack_refactor_id(refactor_id)
+            .send()
+            .await
+            .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+
+        // Step 10: Wait for execution to complete
+        loop {
+            let status = client
+                .describe_stack_refactor()
+                .stack_refactor_id(refactor_id)
+                .send()
+                .await
+                .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+
+            match status.execution_status().map(|s| s.as_str()) {
+                Some("EXECUTE_COMPLETE") => {
+                    spinner.complete();
+                    println!(
+                        "Moved {} resource{} from {} to {}",
+                        id_mapping.len(),
+                        if id_mapping.len() == 1 { "" } else { "s" },
+                        source_stack_name,
+                        target_stack_name
+                    );
+                    for (old_id, new_id) in id_mapping {
+                        println!("  {} → {}", old_id, new_id);
+                    }
+                    return Ok(());
+                }
+                Some("EXECUTE_FAILED") | Some("FAILED") => {
+                    spinner.fail();
+                    return Err(format!(
+                        "Stack refactor execution failed: {}",
+                        status.status_reason().unwrap_or("Unknown error")
+                    )
+                    .into());
+                }
+                _ => {
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                }
             }
         }
     }
+    .await;
+
+    if exec_result.is_err() {
+        eprintln!("\nAn error occurred. Writing templates to disk for recovery:");
+        write_templates(template_dir, &templates_to_save);
+    }
+
+    exec_result
 }
 
 async fn update_stack(
@@ -2488,5 +2687,141 @@ Resources:
         // Note: It's hard to trigger serialization errors with serde_json/serde_yml
         // as they can serialize any valid JSON value, but we've verified the
         // error path exists by returning Result instead of unwrapping
+    }
+
+    #[test]
+    fn test_safe_file_path_no_collision() {
+        let dir = std::env::temp_dir();
+        let name = format!("cfn_teleport_test_{}", uuid::Uuid::new_v4());
+        let path = safe_file_path(&dir, &name, "json");
+        assert_eq!(path, dir.join(format!("{}.json", name)));
+    }
+
+    #[test]
+    fn test_safe_file_path_collision() {
+        let dir = std::env::temp_dir();
+        let name = format!("cfn_teleport_test_{}", uuid::Uuid::new_v4());
+        // Create the base file to force a collision
+        let base = dir.join(format!("{}.json", name));
+        std::fs::write(&base, "{}").unwrap();
+
+        let path = safe_file_path(&dir, &name, "json");
+        assert_eq!(path, dir.join(format!("{}.json.1", name)));
+
+        // Cleanup
+        std::fs::remove_file(base).unwrap();
+    }
+
+    #[test]
+    fn test_safe_file_path_multiple_collisions() {
+        let dir = std::env::temp_dir();
+        let name = format!("cfn_teleport_test_{}", uuid::Uuid::new_v4());
+        let base = dir.join(format!("{}.json", name));
+        let v1 = dir.join(format!("{}.json.1", name));
+        std::fs::write(&base, "{}").unwrap();
+        std::fs::write(&v1, "{}").unwrap();
+
+        let path = safe_file_path(&dir, &name, "json");
+        assert_eq!(path, dir.join(format!("{}.json.2", name)));
+
+        // Cleanup
+        std::fs::remove_file(base).unwrap();
+        std::fs::remove_file(v1).unwrap();
+    }
+
+    #[test]
+    fn test_write_template_creates_file() {
+        let dir = std::env::temp_dir();
+        let name = format!("cfn_teleport_test_{}", uuid::Uuid::new_v4());
+        let content = json!({"AWSTemplateFormatVersion": "2010-09-09", "Resources": {}});
+        let template = Template::new(content.clone(), TemplateFormat::Json);
+
+        let path = write_template(&dir, &name, &template).unwrap();
+        assert!(path.exists());
+
+        let written = std::fs::read_to_string(&path).unwrap();
+        let reparsed: serde_json::Value = serde_json::from_str(&written).unwrap();
+        assert_eq!(reparsed, content);
+
+        // Cleanup
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_write_template_collision_detection() {
+        let dir = std::env::temp_dir();
+        let name = format!("cfn_teleport_test_{}", uuid::Uuid::new_v4());
+        let template = Template::new(json!({"Resources": {}}), TemplateFormat::Json);
+
+        let path1 = write_template(&dir, &name, &template).unwrap();
+        let path2 = write_template(&dir, &name, &template).unwrap();
+
+        assert_ne!(path1, path2);
+        assert!(path1.ends_with(format!("{}.json", name)));
+        assert!(path2.ends_with(format!("{}.json.1", name)));
+
+        // Cleanup
+        std::fs::remove_file(path1).unwrap();
+        std::fs::remove_file(path2).unwrap();
+    }
+
+    #[test]
+    fn test_load_template_from_file_json() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("cfn_teleport_test_{}.json", uuid::Uuid::new_v4()));
+        let content = r#"{"AWSTemplateFormatVersion":"2010-09-09","Resources":{}}"#;
+        std::fs::write(&path, content).unwrap();
+
+        let template = load_template_from_file(path.to_str().unwrap()).unwrap();
+        assert!(matches!(template.format, TemplateFormat::Json));
+        assert_eq!(
+            template.content["AWSTemplateFormatVersion"].as_str(),
+            Some("2010-09-09")
+        );
+
+        // Cleanup
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_load_template_from_file_yaml() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("cfn_teleport_test_{}.yaml", uuid::Uuid::new_v4()));
+        let content = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n";
+        std::fs::write(&path, content).unwrap();
+
+        let template = load_template_from_file(path.to_str().unwrap()).unwrap();
+        assert!(matches!(template.format, TemplateFormat::Yaml));
+        assert_eq!(
+            template.content["AWSTemplateFormatVersion"].as_str(),
+            Some("2010-09-09")
+        );
+
+        // Cleanup
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn test_load_template_from_file_not_found() {
+        let result = load_template_from_file("/nonexistent/path/template.json");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Failed to read template file"));
+    }
+
+    #[test]
+    fn test_parse_template_str_json() {
+        let json_str = r#"{"AWSTemplateFormatVersion":"2010-09-09","Resources":{}}"#;
+        let template = parse_template_str(json_str).unwrap();
+        assert!(matches!(template.format, TemplateFormat::Json));
+    }
+
+    #[test]
+    fn test_parse_template_str_yaml() {
+        let yaml_str = "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\n";
+        let template = parse_template_str(yaml_str).unwrap();
+        assert!(matches!(template.format, TemplateFormat::Yaml));
     }
 }
