@@ -35,5 +35,8 @@ features = [
     "fast-rng", # Use a faster (but still sufficiently random) RNG
 ]
 
+[dev-dependencies]
+tempfile = "3.13.0"
+
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1.12"

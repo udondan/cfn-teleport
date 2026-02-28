@@ -6,8 +6,11 @@ use console::style;
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Input, MultiSelect, Select};
 use std::collections::HashMap;
 use std::error::Error;
-use std::io;
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
 use std::process;
+use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 mod cfn_yaml;
 mod reference_updater;
@@ -40,7 +43,7 @@ enum TemplateFormat {
 }
 
 /// Wrapper for CloudFormation templates that preserves their original format
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct Template {
     content: serde_json::Value,
     format: TemplateFormat,
@@ -91,6 +94,26 @@ struct Args {
     /// Operation mode for cross-stack moves
     #[arg(short, long, value_enum, default_value = "refactor")]
     mode: Mode,
+
+    /// Output directory for exported templates (export mode only)
+    #[arg(long, value_name = "PATH")]
+    out_dir: Option<PathBuf>,
+
+    /// Migration specification file with resource ID mappings (JSON format)
+    #[arg(long, value_name = "PATH")]
+    migration_spec: Option<PathBuf>,
+
+    /// Source CloudFormation template file (alternative to fetching from AWS)
+    #[arg(long, value_name = "PATH")]
+    source_template: Option<PathBuf>,
+
+    /// Target CloudFormation template file (alternative to fetching from AWS)
+    #[arg(long, value_name = "PATH")]
+    target_template: Option<PathBuf>,
+
+    /// Export templates to disk without executing migration (dry-run mode)
+    #[arg(long)]
+    export: bool,
 }
 
 #[tokio::main]
@@ -104,6 +127,113 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+
+    // Validate CLI argument combinations
+    if args.export && args.source_template.is_some() {
+        return Err("Cannot use --export with --source-template.\n\
+             Export mode fetches templates from AWS and writes them to disk.\n\
+             If you already have template files, you don't need export mode."
+            .into());
+    }
+
+    if args.export && args.target_template.is_some() {
+        return Err("Cannot use --export with --target-template.\n\
+             Export mode fetches templates from AWS and writes them to disk.\n\
+             If you already have template files, you don't need export mode."
+            .into());
+    }
+
+    // --out-dir only makes sense with --export
+    if args.out_dir.is_some() && !args.export {
+        return Err("Cannot use --out-dir without --export.\n\
+             The --out-dir flag specifies where to write exported templates.\n\
+             Add --export to enable export mode, or remove --out-dir."
+            .into());
+    }
+
+    // Migration spec can be used with both export and template input modes
+    if args.migration_spec.is_some() && args.resource.is_some() {
+        return Err(
+            "Cannot use --migration-spec with --resource.\n\
+             The migration spec file defines resource mappings, so the --resource flag is not needed."
+                .into(),
+        );
+    }
+
+    // Validate template file paths exist and are readable
+    if let Some(source_path) = &args.source_template {
+        if !source_path.exists() {
+            return Err(format!(
+                "Source template file does not exist: {}",
+                source_path.display()
+            )
+            .into());
+        }
+        if !source_path.is_file() {
+            return Err(format!(
+                "Source template path is not a file: {}",
+                source_path.display()
+            )
+            .into());
+        }
+        // Test readability by attempting to open
+        fs::File::open(source_path).map_err(|e| {
+            format!(
+                "Cannot read source template file: {} ({})",
+                source_path.display(),
+                e
+            )
+        })?;
+    }
+
+    if let Some(target_path) = &args.target_template {
+        if !target_path.exists() {
+            return Err(format!(
+                "Target template file does not exist: {}",
+                target_path.display()
+            )
+            .into());
+        }
+        if !target_path.is_file() {
+            return Err(format!(
+                "Target template path is not a file: {}",
+                target_path.display()
+            )
+            .into());
+        }
+        // Test readability
+        fs::File::open(target_path).map_err(|e| {
+            format!(
+                "Cannot read target template file: {} ({})",
+                target_path.display(),
+                e
+            )
+        })?;
+    }
+
+    // Validate migration spec file if provided
+    if let Some(spec_path) = &args.migration_spec {
+        if !spec_path.exists() {
+            return Err(format!(
+                "Migration spec file does not exist: {}",
+                spec_path.display()
+            )
+            .into());
+        }
+        if !spec_path.is_file() {
+            return Err(
+                format!("Migration spec path is not a file: {}", spec_path.display()).into(),
+            );
+        }
+        // Test readability
+        fs::File::open(spec_path).map_err(|e| {
+            format!(
+                "Cannot read migration spec file: {} ({})",
+                spec_path.display(),
+                e
+            )
+        })?;
+    }
 
     let config = aws_config::load_defaults(BehaviorVersion::v2026_01_12()).await;
     let client = cloudformation::Client::new(&config);
@@ -168,55 +298,74 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
     // Get source template for dependency analysis
-    let source_template = get_template(&client, &source_stack).await?;
+    let source_template =
+        get_template(&client, &source_stack, args.source_template.as_ref()).await?;
 
     // Determine if this is a cross-stack move or same-stack rename
     let is_cross_stack = source_stack != target_stack;
 
     // Fetch target template early for cross-stack parameter validation
     let target_template = if is_cross_stack {
-        Some(get_template(&client, &target_stack).await?)
+        Some(get_template(&client, &target_stack, args.target_template.as_ref()).await?)
     } else {
         None
     };
 
-    let selected_resources = match args.resource.clone() {
-        Some(resource) => {
-            let source_ids = resource
-                .iter()
-                .map(|r| split_ids(r.clone()).0)
-                .collect::<Vec<_>>();
+    // If migration spec file is provided, use it to determine resources and mappings
+    // This overrides the --resource CLI flag
+    let migration_spec_mappings = if let Some(spec_path) = &args.migration_spec {
+        let mappings = parse_migration_spec(spec_path)?;
+        validate_migration_spec_resources(&mappings, &source_template)?;
+        Some(mappings)
+    } else {
+        None
+    };
 
-            let non_existing_ids: Vec<String> = source_ids
-                .iter()
-                .filter(|id| {
-                    !resource_refs
-                        .iter()
-                        .any(|r| r.logical_resource_id().unwrap_or_default() == **id)
-                })
-                .map(|id| id.to_string())
-                .collect();
-
-            if !non_existing_ids.is_empty() {
-                return Err(format!(
-                    "ERROR: The following resources do not exist on stack '{}':\n - {}",
-                    source_stack,
-                    non_existing_ids.to_owned().join("\n - "),
-                )
-                .into());
-            }
+    let selected_resources = match migration_spec_mappings.as_ref() {
+        // If migration spec provided, use those resource IDs
+        Some(mappings) => {
+            let source_ids: Vec<String> = mappings.keys().cloned().collect();
             filter_resources(resource_refs, &source_ids).await?
         }
-        None => {
-            select_resources(
-                "Select resources to copy",
-                resource_refs,
-                &source_template.content,
-                target_template.as_ref().map(|t| &t.content),
-                is_cross_stack,
-            )
-            .await?
-        }
+        // Otherwise, use CLI args or interactive selection
+        None => match args.resource.clone() {
+            Some(resource) => {
+                let source_ids = resource
+                    .iter()
+                    .map(|r| split_ids(r.clone()).0)
+                    .collect::<Vec<_>>();
+
+                let non_existing_ids: Vec<String> = source_ids
+                    .iter()
+                    .filter(|id| {
+                        !resource_refs
+                            .iter()
+                            .any(|r| r.logical_resource_id().unwrap_or_default() == **id)
+                    })
+                    .map(|id| id.to_string())
+                    .collect();
+
+                if !non_existing_ids.is_empty() {
+                    return Err(format!(
+                        "ERROR: The following resources do not exist on stack '{}':\n - {}",
+                        source_stack,
+                        non_existing_ids.to_owned().join("\n - "),
+                    )
+                    .into());
+                }
+                filter_resources(resource_refs, &source_ids).await?
+            }
+            None => {
+                select_resources(
+                    "Select resources to copy",
+                    resource_refs,
+                    &source_template.content,
+                    target_template.as_ref().map(|t| &t.content),
+                    is_cross_stack,
+                )
+                .await?
+            }
+        },
     };
 
     if selected_resources.is_empty() {
@@ -226,42 +375,48 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let mut new_logical_ids_map = HashMap::new();
     //let mut resource_has_been_renamed = false;
 
-    match args.resource.clone() {
-        None => {
-            for resource in selected_resources.clone() {
-                let old_logical_id = resource
-                    .logical_resource_id()
-                    .unwrap_or_default()
-                    .to_owned();
-
-                let mut new_logical_id: String = Input::new()
-                    .with_prompt(format!(
-                        "Optionally provide a new logical ID for resource '{}'",
-                        old_logical_id
-                    ))
-                    .default(old_logical_id.clone())
-                    .interact_text()?;
-
-                if new_logical_id.is_empty() {
-                    new_logical_id = resource
+    // If migration spec provided, use those mappings directly
+    if let Some(mappings) = migration_spec_mappings {
+        new_logical_ids_map = mappings;
+    } else {
+        // Otherwise, build mappings from CLI args or interactive prompts
+        match args.resource.clone() {
+            None => {
+                for resource in selected_resources.clone() {
+                    let old_logical_id = resource
                         .logical_resource_id()
                         .unwrap_or_default()
-                        .to_string();
-                }
+                        .to_owned();
 
-                new_logical_ids_map.insert(old_logical_id, new_logical_id);
+                    let mut new_logical_id: String = Input::new()
+                        .with_prompt(format!(
+                            "Optionally provide a new logical ID for resource '{}'",
+                            old_logical_id
+                        ))
+                        .default(old_logical_id.clone())
+                        .interact_text()?;
+
+                    if new_logical_id.is_empty() {
+                        new_logical_id = resource
+                            .logical_resource_id()
+                            .unwrap_or_default()
+                            .to_string();
+                    }
+
+                    new_logical_ids_map.insert(old_logical_id, new_logical_id);
+                }
+                //            println!()
             }
-            //            println!()
-        }
-        Some(resources) => {
-            for resource in resources {
-                let ids = split_ids(resource.clone());
-                let source_id = ids.0.clone();
-                let target_id = ids.1.clone();
-                new_logical_ids_map.insert(source_id, target_id);
+            Some(resources) => {
+                for resource in resources {
+                    let ids = split_ids(resource.clone());
+                    let source_id = ids.0.clone();
+                    let target_id = ids.1.clone();
+                    new_logical_ids_map.insert(source_id, target_id);
+                }
             }
-        }
-    };
+        };
+    }
 
     // Reuse the template we already fetched at line 144
     let template_source = source_template;
@@ -366,6 +521,52 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     // Same-stack rename: Use CloudFormation Stack Refactoring API
     if source_stack == target_stack {
+        // If export mode, generate the refactored template and export it
+        if args.export {
+            // Create updated template with renamed resources and updated references
+            let mut updated_template = template_source.content.clone();
+
+            // Rename resources in the Resources section
+            if let Some(resources) = updated_template
+                .get_mut("Resources")
+                .and_then(|r| r.as_object_mut())
+            {
+                let keys_to_rename: Vec<(String, String)> = new_logical_ids_map
+                    .iter()
+                    .map(|(old, new)| (old.clone(), new.clone()))
+                    .collect();
+
+                for (old_id, new_id) in keys_to_rename {
+                    if let Some(resource) = resources.remove(&old_id) {
+                        resources.insert(new_id, resource);
+                    }
+                }
+            }
+
+            // Update all references
+            let updated_template = reference_updater::update_template_references(
+                updated_template,
+                &new_logical_ids_map,
+            );
+
+            // Export the refactored template
+            let template_to_export = Template::new(updated_template, template_source.format);
+            let templates = vec![(template_to_export, "refactored".to_string())];
+            let paths = export_templates(
+                &templates,
+                args.out_dir.as_ref(),
+                &source_stack,
+                "refactor-same-stack",
+            )?;
+
+            println!("\n✅ Templates exported successfully:");
+            for path in paths {
+                println!("  📄 {}", path.display());
+            }
+            println!("\nNo AWS resources were modified (export mode).");
+            return Ok(());
+        }
+
         return refactor_stack_resources(
             &client,
             &source_stack,
@@ -382,8 +583,58 @@ async fn run() -> Result<(), Box<dyn Error>> {
         let template_target = if let Some(tmpl) = target_template {
             tmpl
         } else {
-            get_template(&client, &target_stack).await?
+            get_template(&client, &target_stack, args.target_template.as_ref()).await?
         };
+
+        // If export mode, generate templates and write them to disk
+        if args.export {
+            // Generate the same templates that would be used in refactor mode
+            let resource_ids: Vec<String> = new_logical_ids_map.keys().cloned().collect();
+
+            let source_without_resources =
+                remove_resources(template_source.content.clone(), resource_ids.clone());
+
+            let (_, target_with_resources) = add_resources(
+                template_target.content.clone(),
+                template_source.content.clone(),
+                new_logical_ids_map.clone(),
+            );
+
+            let source_final = reference_updater::update_template_references(
+                source_without_resources,
+                &new_logical_ids_map,
+            );
+            let target_final = reference_updater::update_template_references(
+                target_with_resources,
+                &new_logical_ids_map,
+            );
+
+            let templates = vec![
+                (
+                    Template::new(source_final, template_source.format),
+                    format!("source-{}", source_stack),
+                ),
+                (
+                    Template::new(target_final, template_target.format),
+                    format!("target-{}", target_stack),
+                ),
+            ];
+
+            let paths = export_templates(
+                &templates,
+                args.out_dir.as_ref(),
+                &source_stack,
+                "refactor-cross-stack",
+            )?;
+
+            println!("\n✅ Templates exported successfully:");
+            for path in paths {
+                println!("  📄 {}", path.display());
+            }
+            println!("\nNo AWS resources were modified (export mode).");
+            return Ok(());
+        }
+
         return refactor_stack_resources_cross_stack(
             &client,
             &source_stack,
@@ -483,7 +734,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     let target_template_actual = if let Some(tmpl) = target_template {
         tmpl
     } else {
-        get_template(&client, &target_stack).await?
+        get_template(&client, &target_stack, args.target_template.as_ref()).await?
     };
 
     let (template_target_with_deletion_policy, template_target_final) = add_resources(
@@ -508,12 +759,106 @@ async fn run() -> Result<(), Box<dyn Error>> {
     ] {
         let result = validate_template(&client, template).await;
         if result.is_err() {
+            let error_msg = result.err().unwrap();
+
+            // Save templates for debugging
+            eprintln!("\n⚠️  Template validation failed. Saving templates for debugging...");
+
+            let templates_to_save = vec![
+                (
+                    Template::new(template_retained.clone(), template_source.format),
+                    "retained".to_string(),
+                ),
+                (
+                    Template::new(template_removed.clone(), template_source.format),
+                    "removed".to_string(),
+                ),
+                (
+                    Template::new(
+                        template_target_with_deletion_policy.clone(),
+                        target_template_actual.format,
+                    ),
+                    "target-with-policy".to_string(),
+                ),
+                (
+                    Template::new(template_target.clone(), target_template_actual.format),
+                    "target-final".to_string(),
+                ),
+            ];
+
+            if let Ok(paths) = export_templates(
+                &templates_to_save,
+                None, // Use current directory
+                &source_stack,
+                "error-import",
+            ) {
+                eprintln!("📄 Templates saved to:");
+                for path in &paths {
+                    eprintln!("   {}", path.display());
+                }
+            }
+
+            // Save error context
+            let timestamp = get_timestamp();
+            let context_filename =
+                format!("{}-error-import-context-{}.txt", source_stack, timestamp);
+            let context_path = std::env::current_dir()?.join(context_filename);
+
+            if write_error_context(
+                &context_path,
+                &timestamp,
+                &error_msg.to_string(),
+                &source_stack,
+                Some(&target_stack),
+                "import",
+                &new_logical_ids_map,
+            )
+            .is_ok()
+            {
+                eprintln!("📝 Error context saved to: {}", context_path.display());
+            }
+
             return Err(format!(
-                "Unable to proceed, because the template is invalid: {}",
-                result.err().unwrap()
+                "Unable to proceed, because the template is invalid: {}\n\
+                 Templates and error context have been saved for debugging.",
+                error_msg
             )
             .into());
         }
+    }
+
+    // If export mode, write all 4 templates and return early
+    if args.export {
+        let templates = vec![
+            (
+                Template::new(template_retained.clone(), template_source.format),
+                format!("source-{}-retained", source_stack),
+            ),
+            (
+                Template::new(template_removed.clone(), template_source.format),
+                format!("source-{}-removed", source_stack),
+            ),
+            (
+                Template::new(
+                    template_target_with_deletion_policy.clone(),
+                    target_template_actual.format,
+                ),
+                format!("target-{}-with-deletion-policy", target_stack),
+            ),
+            (
+                Template::new(template_target.clone(), target_template_actual.format),
+                format!("target-{}-final", target_stack),
+            ),
+        ];
+
+        let paths = export_templates(&templates, args.out_dir.as_ref(), &source_stack, "import")?;
+
+        println!("\n✅ Templates exported successfully:");
+        for path in paths {
+            println!("  📄 {}", path.display());
+        }
+        println!("\nNo AWS resources were modified (export mode).");
+        return Ok(());
     }
 
     let spinner = spinner::Spin::new(
@@ -585,6 +930,541 @@ fn split_ids(id: String) -> (String, String) {
         (id.clone(), id)
     }
 }
+
+// ============================================================================
+// Template File I/O Utilities
+// ============================================================================
+
+/// Generates a timestamp string in YYYYMMDD-HHMMSS format (UTC-based from system time, sortable)
+fn get_timestamp() -> String {
+    let now = SystemTime::now();
+    let duration = now.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let secs = duration.as_secs();
+
+    // Calculate date/time components from Unix timestamp
+    // This is a simplified calculation for local time approximation
+    let total_days = secs / 86400;
+    let remaining_secs = secs % 86400;
+
+    // Calculate hours, minutes, seconds
+    let hours = remaining_secs / 3600;
+    let minutes = (remaining_secs % 3600) / 60;
+    let seconds = remaining_secs % 60;
+
+    // Approximate year/month/day (simplified - doesn't account for leap years perfectly)
+    // Using Unix epoch start (1970-01-01) as base
+    let mut year = 1970;
+    let mut days_left = total_days;
+
+    loop {
+        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
+        if days_left >= days_in_year {
+            days_left -= days_in_year;
+            year += 1;
+        } else {
+            break;
+        }
+    }
+
+    // Calculate month and day
+    let days_in_months = if is_leap_year(year) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+
+    let mut month = 1;
+    let mut day = days_left + 1;
+
+    for (i, &days_in_month) in days_in_months.iter().enumerate() {
+        if day <= days_in_month {
+            month = i + 1;
+            break;
+        }
+        day -= days_in_month;
+    }
+
+    format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        year, month, day, hours, minutes, seconds
+    )
+}
+
+fn is_leap_year(year: u64) -> bool {
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
+}
+
+/// Generates a template filename based on stack name, operation, and format
+///
+/// # Examples
+/// - `generate_filename("MyStack", "refactor", TemplateFormat::Yaml)` → "MyStack-refactor-20260228-143022.yaml"
+/// - `generate_filename("StackA", "retain", TemplateFormat::Json)` → "StackA-retain-20260228-143022.json"
+#[allow(dead_code)]
+fn generate_filename(stack_name: &str, operation: &str, format: TemplateFormat) -> String {
+    let timestamp = get_timestamp();
+    let extension = match format {
+        TemplateFormat::Json => "json",
+        TemplateFormat::Yaml => "yaml",
+    };
+    format!("{}-{}-{}.{}", stack_name, operation, timestamp, extension)
+}
+
+/// Resolves file name collisions by appending .1, .2, .3, etc. before the extension
+///
+/// # Arguments
+/// * `dir` - Directory where file will be written
+/// * `filename` - Base filename (e.g., "MyStack-refactor-20260228-143022.yaml")
+///
+/// # Returns
+/// PathBuf with collision-free filename. If base exists, tries .1, .2, etc. up to 100 variants.
+fn resolve_file_collision(dir: &Path, filename: &str) -> Result<PathBuf, Box<dyn Error>> {
+    let base_path = dir.join(filename);
+
+    // If file doesn't exist, use base name
+    if !base_path.exists() {
+        return Ok(base_path);
+    }
+
+    // Extract base name and extension
+    let path_obj = Path::new(filename);
+    let stem = path_obj
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("Invalid filename")?;
+    let ext = path_obj.extension().and_then(|s| s.to_str()).unwrap_or("");
+
+    // Try numbered variants: .1, .2, .3, etc.
+    for i in 1..=100 {
+        let numbered_filename = if ext.is_empty() {
+            format!("{}.{}", stem, i)
+        } else {
+            format!("{}.{}.{}", stem, i, ext)
+        };
+        let numbered_path = dir.join(numbered_filename);
+
+        if !numbered_path.exists() {
+            println!(
+                "  {} File collision detected, writing to: {}",
+                style("⚠").yellow(),
+                numbered_path.display()
+            );
+            return Ok(numbered_path);
+        }
+    }
+
+    Err("Too many file collisions (tried up to .100)".into())
+}
+
+/// Writes a template to disk in its original format (JSON or YAML)
+///
+/// # Arguments
+/// * `template` - Template to write
+/// * `path` - File path where template will be written
+///
+/// # Returns
+/// Ok(()) on success, error if file cannot be written
+fn write_template_to_file(template: &Template, path: &Path) -> Result<(), Box<dyn Error>> {
+    let template_str = template
+        .to_string()
+        .map_err(|e| format!("Failed to serialize template: {}", e))?;
+
+    let mut file = fs::File::create(path)
+        .map_err(|e| format!("Failed to create file {}: {}", path.display(), e))?;
+
+    file.write_all(template_str.as_bytes())
+        .map_err(|e| format!("Failed to write template to {}: {}", path.display(), e))?;
+
+    Ok(())
+}
+
+/// Reads a template from a file, detecting format automatically (JSON or YAML)
+///
+/// # Arguments
+/// * `path` - Path to template file
+///
+/// # Returns
+/// Template struct with content and detected format
+fn read_template_from_file(path: &Path) -> Result<Template, Box<dyn Error>> {
+    let mut file = fs::File::open(path)
+        .map_err(|e| format!("Failed to open file {}: {}", path.display(), e))?;
+
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)
+        .map_err(|e| format!("Failed to read file {}: {}", path.display(), e))?;
+
+    // Try JSON first (faster and more common in automated deployments)
+    match serde_json::from_str(&contents) {
+        Ok(parsed) => Ok(Template::new(parsed, TemplateFormat::Json)),
+        Err(_json_err) => {
+            // Fallback to YAML parsing with CloudFormation tag support
+            let has_cf_tags = contents.contains("!Ref")
+                || contents.contains("!Sub")
+                || contents.contains("!GetAtt")
+                || contents.contains("!Join")
+                || contents.contains("!Select")
+                || contents.contains("!Split")
+                || contents.contains("!FindInMap")
+                || contents.contains("!Base64")
+                || contents.contains("!GetAZs")
+                || contents.contains("!ImportValue")
+                || contents.contains("!If")
+                || contents.contains("!Not")
+                || contents.contains("!And")
+                || contents.contains("!Or")
+                || contents.contains("!Equals");
+
+            // Try the CF-aware parser first
+            match cfn_yaml::parse_yaml_to_json(&contents) {
+                Ok(parsed) => {
+                    if has_cf_tags {
+                        eprintln!("\n⚠️  Warning: Template contains CloudFormation intrinsic function tags (!Ref, !Sub, etc.)");
+                        eprintln!(
+                            "   These will be converted to long-form when the template is updated:"
+                        );
+                        eprintln!("   - '!Ref MyParam' becomes 'Ref: MyParam'");
+                        eprintln!("   - '!Sub ${{...}}' becomes 'Fn::Sub: ${{...}}'");
+                        eprintln!("   Both forms are functionally equivalent and accepted by CloudFormation.\n");
+                    }
+                    Ok(Template::new(parsed, TemplateFormat::Yaml))
+                }
+                Err(_cf_yaml_err) => {
+                    // If CF parser fails, try standard YAML parser as fallback
+                    let parsed: serde_json::Value =
+                        serde_yml::from_str(&contents).map_err(|yaml_err| {
+                            format!(
+                                "Failed to parse template file {} as JSON or YAML. YAML error: {}",
+                                path.display(),
+                                yaml_err
+                            )
+                        })?;
+                    Ok(Template::new(parsed, TemplateFormat::Yaml))
+                }
+            }
+        }
+    }
+}
+
+/// Writes an error context file with debugging information
+///
+/// # Arguments
+/// * `path` - Path where context file will be written (typically error-{operation}-{timestamp}.context.txt)
+/// * `error_msg` - The error message
+/// * `source_stack` - Source stack name
+/// * `target_stack` - Target stack name (None for same-stack operations)
+/// * `operation` - Operation type ("refactor" or "import")
+/// * `resources` - List of resource IDs being migrated (old -> new mappings)
+fn write_error_context(
+    path: &Path,
+    timestamp: &str,
+    error_msg: &str,
+    source_stack: &str,
+    target_stack: Option<&str>,
+    operation: &str,
+    resources: &HashMap<String, String>,
+) -> Result<(), Box<dyn Error>> {
+    let mut context = String::new();
+
+    context.push_str(&format!("Error: {}\n", error_msg));
+    context.push_str(&format!("Timestamp: {}\n", timestamp));
+    context.push_str(&format!("Operation: {}\n", operation));
+    context.push_str(&format!("Source Stack: {}\n", source_stack));
+
+    if let Some(target) = target_stack {
+        context.push_str(&format!("Target Stack: {}\n", target));
+    }
+
+    context.push_str("Resources:\n");
+    for (old_id, new_id) in resources {
+        if old_id == new_id {
+            context.push_str(&format!("  - {} (no rename)\n", old_id));
+        } else {
+            context.push_str(&format!("  - {} -> {}\n", old_id, new_id));
+        }
+    }
+
+    context.push_str("\nFull Error Details:\n");
+    context.push_str(error_msg);
+    context.push('\n');
+
+    let mut file = fs::File::create(path).map_err(|e| {
+        format!(
+            "Failed to create error context file {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    file.write_all(context.as_bytes())
+        .map_err(|e| format!("Failed to write error context to {}: {}", path.display(), e))?;
+
+    Ok(())
+}
+
+// End of Template File I/O Utilities
+// ============================================================================
+
+// ============================================================================
+// Directory and Path Validation
+// ============================================================================
+
+/// Validates and resolves an output directory path.
+///
+/// This function ensures that the specified path:
+/// - Exists or can be created
+/// - Is a directory (not a file)
+/// - Is writable
+///
+/// # Arguments
+/// * `path` - The directory path to validate
+///
+/// # Returns
+/// * `Ok(PathBuf)` - The validated absolute path
+/// * `Err(Box<dyn Error>)` - If the path is invalid or cannot be used
+///
+/// # Example
+/// ```ignore
+/// let dir = validate_output_directory(Path::new("./templates"))?;
+/// ```
+fn validate_output_directory(path: &Path) -> Result<PathBuf, Box<dyn Error>> {
+    // Convert to absolute path
+    let abs_path = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+
+    // Check if path exists
+    if abs_path.exists() {
+        // Ensure it's a directory
+        if !abs_path.is_dir() {
+            return Err(
+                format!("Path exists but is not a directory: {}", abs_path.display()).into(),
+            );
+        }
+
+        // Check if directory is writable by attempting to create a temporary file
+        // Use a unique name to avoid overwriting any existing .cfn-teleport-write-test file
+        use uuid::Uuid;
+        let test_filename = format!(".cfn-teleport-write-test-{}", Uuid::new_v4());
+        let test_file = abs_path.join(test_filename);
+        match fs::File::create(&test_file) {
+            Ok(_) => {
+                // Clean up test file
+                let _ = fs::remove_file(&test_file);
+            }
+            Err(e) => {
+                return Err(
+                    format!("Directory is not writable: {} ({})", abs_path.display(), e).into(),
+                );
+            }
+        }
+    } else {
+        // Attempt to create the directory
+        fs::create_dir_all(&abs_path).map_err(|e| {
+            format!(
+                "Failed to create output directory: {} ({})",
+                abs_path.display(),
+                e
+            )
+        })?;
+    }
+
+    Ok(abs_path)
+}
+
+// End of Directory and Path Validation
+// ============================================================================
+
+// ============================================================================
+// Migration Specification File Parsing
+// ============================================================================
+
+/// Parses a migration specification file and returns resource ID mappings.
+///
+/// The migration spec file should be a JSON file with the following format:
+/// ```json
+/// {
+///   "resources": {
+///     "OldResourceId": "NewResourceId",
+///     "AnotherResource": "RenamedResource"
+///   }
+/// }
+/// ```
+///
+/// # Arguments
+/// * `path` - Path to the migration specification file
+///
+/// # Returns
+/// * `Ok(HashMap<String, String>)` - Map of old IDs to new IDs
+/// * `Err(Box<dyn Error>)` - If the file cannot be read or parsed
+///
+/// # Example
+/// ```ignore
+/// let mappings = parse_migration_spec(Path::new("migration.json"))?;
+/// ```
+fn parse_migration_spec(path: &Path) -> Result<HashMap<String, String>, Box<dyn Error>> {
+    // Read file contents
+    let content = fs::read_to_string(path).map_err(|e| {
+        format!(
+            "Failed to read migration spec file: {} ({})",
+            path.display(),
+            e
+        )
+    })?;
+
+    // Parse JSON
+    let parsed: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
+        format!(
+            "Failed to parse migration spec as JSON: {} ({})",
+            path.display(),
+            e
+        )
+    })?;
+
+    // Extract resources object
+    let resources_obj = parsed
+        .get("resources")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| {
+            format!(
+                "Migration spec must contain a 'resources' object: {}",
+                path.display()
+            )
+        })?;
+
+    // Convert to HashMap
+    let mut mappings = HashMap::new();
+    for (old_id, new_id_value) in resources_obj {
+        let new_id = new_id_value.as_str().ok_or_else(|| {
+            format!(
+                "Resource mapping value must be a string: {} -> {:?}",
+                old_id, new_id_value
+            )
+        })?;
+
+        mappings.insert(old_id.clone(), new_id.to_string());
+    }
+
+    if mappings.is_empty() {
+        return Err(format!(
+            "Migration spec contains no resource mappings: {}",
+            path.display()
+        )
+        .into());
+    }
+
+    Ok(mappings)
+}
+
+/// Validates that all resource IDs in the migration spec exist in the source template.
+///
+/// # Arguments
+/// * `mappings` - Resource ID mappings from migration spec
+/// * `template` - Source CloudFormation template
+///
+/// # Returns
+/// * `Ok(())` - If all resource IDs are valid
+/// * `Err(Box<dyn Error>)` - If any resource ID is not found in the template
+fn validate_migration_spec_resources(
+    mappings: &HashMap<String, String>,
+    template: &Template,
+) -> Result<(), Box<dyn Error>> {
+    let resources = template
+        .content
+        .get("Resources")
+        .and_then(|v| v.as_object())
+        .ok_or("Template does not contain a Resources section")?;
+
+    let mut invalid_ids = Vec::new();
+    for old_id in mappings.keys() {
+        if !resources.contains_key(old_id) {
+            invalid_ids.push(old_id.as_str());
+        }
+    }
+
+    if !invalid_ids.is_empty() {
+        return Err(format!(
+            "Migration spec contains resource IDs that do not exist in the source template: {}",
+            invalid_ids.join(", ")
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+// End of Migration Specification File Parsing
+// ============================================================================
+
+// ============================================================================
+// Template Export Functions
+// ============================================================================
+
+/// Exports CloudFormation templates to disk with automatic collision handling.
+///
+/// This function writes one or more templates to the specified output directory,
+/// automatically handling filename collisions by appending .1, .2, etc.
+///
+/// # Arguments
+/// * `templates` - Vector of (template, suffix) tuples to export
+/// * `output_dir` - Directory to write templates to (will be validated/created)
+/// * `stack_name` - Stack name for filename generation
+/// * `operation` - Operation type ("refactor", "import", etc.) for filename generation
+///
+/// # Returns
+/// * `Ok(Vec<PathBuf>)` - Paths to all written template files
+/// * `Err(Box<dyn Error>)` - If any file operation fails
+///
+/// # Example
+/// ```ignore
+/// let templates = vec![
+///     (source_template, "source".to_string()),
+///     (target_template, "target".to_string()),
+/// ];
+/// let paths = export_templates(&templates, Some(&output_dir), "MyStack", "refactor")?;
+/// ```
+fn export_templates(
+    templates: &[(Template, String)],
+    output_dir: Option<&PathBuf>,
+    stack_name: &str,
+    operation: &str,
+) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    // Determine output directory (current dir if not specified)
+    let dir = if let Some(d) = output_dir {
+        validate_output_directory(d)?
+    } else {
+        std::env::current_dir()?
+    };
+
+    let timestamp = get_timestamp();
+    let mut written_paths = Vec::new();
+
+    for (template, suffix) in templates {
+        // Generate filename with suffix and timestamp
+        let extension = match template.format {
+            TemplateFormat::Json => "json",
+            TemplateFormat::Yaml => "yaml",
+        };
+
+        let filename_with_timestamp = format!(
+            "{}-{}-{}-{}.{}",
+            stack_name, operation, suffix, timestamp, extension
+        );
+
+        // Resolve any filename collisions
+        let final_path = resolve_file_collision(&dir, &filename_with_timestamp)?;
+
+        // Write template to file
+        write_template_to_file(template, &final_path)?;
+
+        written_paths.push(final_path);
+    }
+
+    Ok(written_paths)
+}
+
+// End of Template Export Functions
+// ============================================================================
 
 async fn get_stacks(
     client: &cloudformation::Client,
@@ -1008,14 +1888,21 @@ fn user_confirm() -> Result<(), Box<dyn Error>> {
 
     match confirmed {
         Some(true) => Ok(()),
-        _ => Err("Selection has not been cofirmed".into()),
+        _ => Err("Selection has not been confirmed".into()),
     }
 }
 
 async fn get_template(
     client: &cloudformation::Client,
     stack_name: &str,
+    template_file: Option<&PathBuf>,
 ) -> Result<Template, Box<dyn Error>> {
+    // If template file is provided, read from file instead of AWS
+    if let Some(file_path) = template_file {
+        return read_template_from_file(file_path);
+    }
+
+    // Otherwise, fetch from AWS CloudFormation
     let resp = client.get_template().stack_name(stack_name).send().await?;
     let template_str = resp.template_body().ok_or("No template found")?;
 
@@ -1558,9 +2445,52 @@ async fn refactor_stack_resources(
         reference_updater::update_template_references(updated_template, &id_mapping);
 
     // Validate the updated template
-    validate_template(client, updated_template.clone())
-        .await
-        .map_err(|e| format!("Updated template validation failed: {}", e))?;
+    if let Err(e) = validate_template(client, updated_template.clone()).await {
+        eprintln!("\n⚠️  Template validation failed. Saving template for debugging...");
+
+        // Save template
+        let template_to_save = Template::new(updated_template.clone(), template.format);
+        let templates = vec![(template_to_save, "refactored".to_string())];
+
+        if let Ok(paths) =
+            export_templates(&templates, None, stack_name, "error-refactor-same-stack")
+        {
+            eprintln!("📄 Template saved to:");
+            for path in &paths {
+                eprintln!("   {}", path.display());
+            }
+        }
+
+        // Save error context
+        let timestamp = get_timestamp();
+        let context_filename = format!("{}-error-refactor-context-{}.txt", stack_name, timestamp);
+        let context_path = std::env::current_dir()
+            .ok()
+            .map(|d| d.join(context_filename));
+
+        if let Some(path) = context_path {
+            if write_error_context(
+                &path,
+                &timestamp,
+                &e.to_string(),
+                stack_name,
+                None,
+                "refactor-same-stack",
+                &id_mapping,
+            )
+            .is_ok()
+            {
+                eprintln!("📝 Error context saved to: {}", path.display());
+            }
+        }
+
+        return Err(format!(
+            "Updated template validation failed: {}\n\
+             Template and error context have been saved for debugging.",
+            e
+        )
+        .into());
+    }
 
     // Step 2: Build resource mappings for CloudFormation
     let resource_mappings: Vec<ResourceMapping> = id_mapping
@@ -1734,13 +2664,75 @@ async fn refactor_stack_resources_cross_stack(
         reference_updater::update_template_references(target_with_resources, &id_mapping);
 
     // Step 4: Validate both templates
-    validate_template(client, source_final.clone())
-        .await
-        .map_err(|e| format!("Source template validation failed: {}", e))?;
+    let source_validation = validate_template(client, source_final.clone()).await;
+    let target_validation = validate_template(client, target_final.clone()).await;
 
-    validate_template(client, target_final.clone())
-        .await
-        .map_err(|e| format!("Target template validation failed: {}", e))?;
+    if source_validation.is_err() || target_validation.is_err() {
+        eprintln!("\n⚠️  Template validation failed. Saving templates for debugging...");
+
+        // Save both templates
+        let templates = vec![
+            (
+                Template::new(source_final.clone(), source_template.format),
+                format!("source-{}", source_stack_name),
+            ),
+            (
+                Template::new(target_final.clone(), target_template.format),
+                format!("target-{}", target_stack_name),
+            ),
+        ];
+
+        if let Ok(paths) = export_templates(
+            &templates,
+            None,
+            source_stack_name,
+            "error-refactor-cross-stack",
+        ) {
+            eprintln!("📄 Templates saved to:");
+            for path in &paths {
+                eprintln!("   {}", path.display());
+            }
+        }
+
+        // Save error context
+        let timestamp = get_timestamp();
+        let context_filename = format!(
+            "{}-error-refactor-cross-stack-context-{}.txt",
+            source_stack_name, timestamp
+        );
+        let context_path = std::env::current_dir()
+            .ok()
+            .map(|d| d.join(context_filename));
+
+        let error_msg = match (&source_validation, &target_validation) {
+            (Err(e), _) => format!("Source template validation failed: {}", e),
+            (_, Err(e)) => format!("Target template validation failed: {}", e),
+            _ => "Unknown validation error".to_string(),
+        };
+
+        if let Some(path) = context_path {
+            if write_error_context(
+                &path,
+                &timestamp,
+                &error_msg,
+                source_stack_name,
+                Some(target_stack_name),
+                "refactor-cross-stack",
+                &id_mapping,
+            )
+            .is_ok()
+            {
+                eprintln!("📝 Error context saved to: {}", path.display());
+            }
+        }
+
+        // Return appropriate error
+        return Err(format!(
+            "{}\nTemplates and error context have been saved for debugging.",
+            error_msg
+        )
+        .into());
+    }
 
     // Step 5: Build resource mappings for CloudFormation
     let resource_mappings: Vec<ResourceMapping> = id_mapping
@@ -2488,5 +3480,1179 @@ Resources:
         // Note: It's hard to trigger serialization errors with serde_json/serde_yml
         // as they can serialize any valid JSON value, but we've verified the
         // error path exists by returning Result instead of unwrapping
+    }
+
+    // ========================================================================
+    // Template File I/O Utility Tests
+    // ========================================================================
+
+    #[test]
+    fn test_get_timestamp_format() {
+        // Test: Timestamp is in YYYYMMDD-HHMMSS format
+        let timestamp = get_timestamp();
+
+        // Should be 15 characters: YYYYMMDD-HHMMSS
+        assert_eq!(timestamp.len(), 15);
+
+        // Should have dash in position 8
+        assert_eq!(&timestamp[8..9], "-");
+
+        // Should be all digits except the dash
+        let without_dash: String = timestamp.chars().filter(|&c| c != '-').collect();
+        assert!(without_dash.chars().all(|c| c.is_ascii_digit()));
+
+        // Year should be reasonable (>= 2020)
+        let year: u32 = timestamp[0..4].parse().unwrap();
+        assert!(year >= 2020);
+    }
+
+    #[test]
+    fn test_is_leap_year() {
+        // Test known leap years
+        assert!(is_leap_year(2020)); // Divisible by 4
+        assert!(is_leap_year(2024)); // Divisible by 4
+        assert!(is_leap_year(2000)); // Divisible by 400
+
+        // Test non-leap years
+        assert!(!is_leap_year(2021)); // Not divisible by 4
+        assert!(!is_leap_year(2022)); // Not divisible by 4
+        assert!(!is_leap_year(1900)); // Divisible by 100 but not 400
+        assert!(!is_leap_year(2100)); // Divisible by 100 but not 400
+    }
+
+    #[test]
+    fn test_generate_filename() {
+        // Test JSON format
+        let filename = generate_filename("MyStack", "refactor", TemplateFormat::Json);
+        assert!(filename.starts_with("MyStack-refactor-"));
+        assert!(filename.ends_with(".json"));
+        assert!(filename.contains('-')); // Contains timestamp
+
+        // Test YAML format
+        let filename = generate_filename("TestStack", "retain", TemplateFormat::Yaml);
+        assert!(filename.starts_with("TestStack-retain-"));
+        assert!(filename.ends_with(".yaml"));
+
+        // Test different operations
+        let filename = generate_filename("Stack1", "import", TemplateFormat::Json);
+        assert!(filename.contains("Stack1-import-"));
+
+        let filename = generate_filename("Stack2", "final", TemplateFormat::Yaml);
+        assert!(filename.contains("Stack2-final-"));
+    }
+
+    #[test]
+    fn test_resolve_file_collision_no_collision() {
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+
+        // Test: File doesn't exist, should return base path
+        let result = resolve_file_collision(dir_path, "test.yaml");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert_eq!(path.file_name().unwrap(), "test.yaml");
+    }
+
+    #[test]
+    fn test_resolve_file_collision_with_collision() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+
+        // Create existing file
+        let existing_file = dir_path.join("test.yaml");
+        fs::write(&existing_file, "existing content").unwrap();
+
+        // Test: File exists, should return .1 variant
+        let result = resolve_file_collision(dir_path, "test.yaml");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert_eq!(path.file_name().unwrap(), "test.1.yaml");
+    }
+
+    #[test]
+    fn test_resolve_file_collision_multiple_collisions() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+
+        // Create existing files: test.yaml, test.1.yaml, test.2.yaml
+        fs::write(dir_path.join("test.yaml"), "v0").unwrap();
+        fs::write(dir_path.join("test.1.yaml"), "v1").unwrap();
+        fs::write(dir_path.join("test.2.yaml"), "v2").unwrap();
+
+        // Test: Should return .3 variant
+        let result = resolve_file_collision(dir_path, "test.yaml");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert_eq!(path.file_name().unwrap(), "test.3.yaml");
+    }
+
+    #[test]
+    fn test_resolve_file_collision_json_format() {
+        use std::fs;
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+
+        // Create existing JSON file
+        fs::write(dir_path.join("stack.json"), "{}").unwrap();
+
+        // Test: Should handle .json extension correctly
+        let result = resolve_file_collision(dir_path, "stack.json");
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert_eq!(path.file_name().unwrap(), "stack.1.json");
+    }
+
+    #[test]
+    fn test_write_and_read_template_json() {
+        use serde_json::json;
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test-template.json");
+
+        // Create a test template
+        let template_content = json!({
+            "AWSTemplateFormatVersion": "2010-09-09",
+            "Resources": {
+                "MyBucket": {
+                    "Type": "AWS::S3::Bucket"
+                }
+            }
+        });
+        let template = Template::new(template_content.clone(), TemplateFormat::Json);
+
+        // Write template to file
+        let write_result = write_template_to_file(&template, &file_path);
+        assert!(write_result.is_ok());
+
+        // Verify file exists
+        assert!(file_path.exists());
+
+        // Read template back from file
+        let read_result = read_template_from_file(&file_path);
+        assert!(read_result.is_ok());
+        let read_template = read_result.unwrap();
+
+        // Verify format is preserved
+        assert_eq!(read_template.format, TemplateFormat::Json);
+
+        // Verify content is identical
+        assert_eq!(read_template.content, template_content);
+    }
+
+    #[test]
+    fn test_write_and_read_template_yaml() {
+        use serde_json::json;
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test-template.yaml");
+
+        // Create a test template
+        let template_content = json!({
+            "AWSTemplateFormatVersion": "2010-09-09",
+            "Resources": {
+                "MyTable": {
+                    "Type": "AWS::DynamoDB::Table",
+                    "Properties": {
+                        "TableName": "TestTable"
+                    }
+                }
+            }
+        });
+        let template = Template::new(template_content.clone(), TemplateFormat::Yaml);
+
+        // Write template to file
+        let write_result = write_template_to_file(&template, &file_path);
+        assert!(write_result.is_ok());
+
+        // Verify file exists
+        assert!(file_path.exists());
+
+        // Read template back from file
+        let read_result = read_template_from_file(&file_path);
+        assert!(read_result.is_ok());
+        let read_template = read_result.unwrap();
+
+        // Verify format is detected as YAML (file parsing detects from content, not extension)
+        // Since we write as YAML, it should be read back as YAML
+        assert_eq!(read_template.format, TemplateFormat::Yaml);
+
+        // Verify content is identical
+        assert_eq!(read_template.content, template_content);
+    }
+
+    #[test]
+    fn test_read_template_from_file_not_found() {
+        use std::path::PathBuf;
+
+        let non_existent = PathBuf::from("/tmp/does-not-exist-12345.yaml");
+        let result = read_template_from_file(&non_existent);
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Failed to open file"));
+    }
+
+    #[test]
+    fn test_write_error_context() {
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let context_path = temp_dir.path().join("error-context.txt");
+
+        // Create resource mappings
+        let mut resources = HashMap::new();
+        resources.insert("Bucket1".to_string(), "Bucket1New".to_string());
+        resources.insert("Table1".to_string(), "Table1".to_string());
+
+        // Write error context
+        let result = write_error_context(
+            &context_path,
+            "20260228-143022",
+            "Template validation failed",
+            "SourceStack",
+            Some("TargetStack"),
+            "refactor",
+            &resources,
+        );
+
+        assert!(result.is_ok());
+        assert!(context_path.exists());
+
+        // Read and verify content
+        let content = std::fs::read_to_string(&context_path).unwrap();
+        assert!(content.contains("Error: Template validation failed"));
+        assert!(content.contains("Operation: refactor"));
+        assert!(content.contains("Source Stack: SourceStack"));
+        assert!(content.contains("Target Stack: TargetStack"));
+        assert!(content.contains("Bucket1 -> Bucket1New"));
+        assert!(content.contains("Table1 (no rename)"));
+        assert!(content.contains("Full Error Details:"));
+    }
+
+    #[test]
+    fn test_write_error_context_same_stack() {
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let context_path = temp_dir.path().join("error-context-same-stack.txt");
+
+        // Create resource mappings
+        let mut resources = HashMap::new();
+        resources.insert("OldId".to_string(), "NewId".to_string());
+
+        // Write error context (no target stack for same-stack operation)
+        let result = write_error_context(
+            &context_path,
+            "20260228-143022",
+            "AWS API error",
+            "MyStack",
+            None,
+            "refactor",
+            &resources,
+        );
+
+        assert!(result.is_ok());
+        assert!(context_path.exists());
+
+        // Read and verify content
+        let content = std::fs::read_to_string(&context_path).unwrap();
+        assert!(content.contains("Source Stack: MyStack"));
+        assert!(!content.contains("Target Stack:")); // Should not have target stack line
+        assert!(content.contains("OldId -> NewId"));
+    }
+
+    #[test]
+    fn test_validate_output_directory_existing() {
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+
+        // Validate existing directory
+        let result = validate_output_directory(dir_path);
+        assert!(result.is_ok());
+
+        let validated_path = result.unwrap();
+        assert!(validated_path.is_absolute());
+        assert!(validated_path.is_dir());
+    }
+
+    #[test]
+    fn test_validate_output_directory_creates_new() {
+        use tempfile::TempDir;
+
+        // Create temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let new_dir = temp_dir.path().join("new_subdir").join("nested");
+
+        // Directory should not exist yet
+        assert!(!new_dir.exists());
+
+        // Validate should create it
+        let result = validate_output_directory(&new_dir);
+        assert!(result.is_ok());
+
+        // Directory should now exist
+        assert!(new_dir.exists());
+        assert!(new_dir.is_dir());
+    }
+
+    #[test]
+    fn test_validate_output_directory_file_not_directory() {
+        use tempfile::NamedTempFile;
+
+        // Create a temporary file (not a directory)
+        let temp_file = NamedTempFile::new().unwrap();
+        let file_path = temp_file.path();
+
+        // Attempting to validate a file as a directory should fail
+        let result = validate_output_directory(file_path);
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("not a directory"));
+    }
+
+    #[test]
+    fn test_validate_output_directory_relative_path() {
+        use std::env;
+        use tempfile::TempDir;
+
+        // Create temporary directory and change to it
+        let temp_dir = TempDir::new().unwrap();
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).unwrap();
+
+        // Validate relative path
+        let rel_path = Path::new("./test_output");
+        let result = validate_output_directory(rel_path);
+
+        // Restore original directory
+        env::set_current_dir(original_dir).unwrap();
+
+        assert!(result.is_ok());
+        let validated_path = result.unwrap();
+        assert!(validated_path.is_absolute());
+    }
+
+    #[test]
+    fn test_parse_migration_spec_valid() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create temporary migration spec file
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let spec_content = r#"{
+            "resources": {
+                "OldBucket": "NewBucket",
+                "OldTable": "NewTable",
+                "SameNameResource": "SameNameResource"
+            }
+        }"#;
+        temp_file.write_all(spec_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        // Parse migration spec
+        let result = parse_migration_spec(temp_file.path());
+        assert!(result.is_ok());
+
+        let mappings = result.unwrap();
+        assert_eq!(mappings.len(), 3);
+        assert_eq!(mappings.get("OldBucket"), Some(&"NewBucket".to_string()));
+        assert_eq!(mappings.get("OldTable"), Some(&"NewTable".to_string()));
+        assert_eq!(
+            mappings.get("SameNameResource"),
+            Some(&"SameNameResource".to_string())
+        );
+    }
+
+    #[test]
+    fn test_parse_migration_spec_file_not_found() {
+        use std::path::PathBuf;
+
+        let non_existent = PathBuf::from("/tmp/migration-spec-does-not-exist.json");
+        let result = parse_migration_spec(&non_existent);
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Failed to read migration spec file"));
+    }
+
+    #[test]
+    fn test_parse_migration_spec_invalid_json() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create temporary file with invalid JSON
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(b"{ invalid json }").unwrap();
+        temp_file.flush().unwrap();
+
+        let result = parse_migration_spec(temp_file.path());
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Failed to parse migration spec as JSON"));
+    }
+
+    #[test]
+    fn test_parse_migration_spec_missing_resources_field() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create temporary file without "resources" field
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let spec_content = r#"{ "other_field": {} }"#;
+        temp_file.write_all(spec_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let result = parse_migration_spec(temp_file.path());
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("must contain a 'resources' object"));
+    }
+
+    #[test]
+    fn test_parse_migration_spec_non_string_value() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create temporary file with non-string value
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let spec_content = r#"{
+            "resources": {
+                "Resource1": "ValidString",
+                "Resource2": 123
+            }
+        }"#;
+        temp_file.write_all(spec_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let result = parse_migration_spec(temp_file.path());
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("mapping value must be a string"));
+    }
+
+    #[test]
+    fn test_parse_migration_spec_empty_resources() {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create temporary file with empty resources object
+        let mut temp_file = NamedTempFile::new().unwrap();
+        let spec_content = r#"{ "resources": {} }"#;
+        temp_file.write_all(spec_content.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        let result = parse_migration_spec(temp_file.path());
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("contains no resource mappings"));
+    }
+
+    #[test]
+    fn test_validate_migration_spec_resources_valid() {
+        // Create template with resources
+        let template_json = serde_json::json!({
+            "Resources": {
+                "Bucket1": { "Type": "AWS::S3::Bucket" },
+                "Table1": { "Type": "AWS::DynamoDB::Table" },
+                "Instance1": { "Type": "AWS::EC2::Instance" }
+            }
+        });
+        let template = Template::new(template_json, TemplateFormat::Json);
+
+        // Create mappings with valid resource IDs
+        let mut mappings = HashMap::new();
+        mappings.insert("Bucket1".to_string(), "NewBucket".to_string());
+        mappings.insert("Table1".to_string(), "Table1".to_string());
+
+        // Validation should succeed
+        let result = validate_migration_spec_resources(&mappings, &template);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_migration_spec_resources_invalid_id() {
+        // Create template with resources
+        let template_json = serde_json::json!({
+            "Resources": {
+                "Bucket1": { "Type": "AWS::S3::Bucket" },
+                "Table1": { "Type": "AWS::DynamoDB::Table" }
+            }
+        });
+        let template = Template::new(template_json, TemplateFormat::Json);
+
+        // Create mappings with invalid resource ID
+        let mut mappings = HashMap::new();
+        mappings.insert("NonExistent".to_string(), "NewName".to_string());
+        mappings.insert("Table1".to_string(), "Table1".to_string());
+
+        // Validation should fail
+        let result = validate_migration_spec_resources(&mappings, &template);
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("do not exist in the source template"));
+        assert!(err_msg.contains("NonExistent"));
+    }
+
+    #[test]
+    fn test_validate_migration_spec_resources_template_without_resources() {
+        // Create template without Resources section
+        let template_json = serde_json::json!({
+            "AWSTemplateFormatVersion": "2010-09-09"
+        });
+        let template = Template::new(template_json, TemplateFormat::Json);
+
+        // Create mappings
+        let mut mappings = HashMap::new();
+        mappings.insert("Bucket1".to_string(), "NewBucket".to_string());
+
+        // Validation should fail
+        let result = validate_migration_spec_resources(&mappings, &template);
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("does not contain a Resources section"));
+    }
+
+    // ============================================================================
+    // Integration/Workflow Tests
+    // ============================================================================
+
+    #[test]
+    fn test_workflow_template_file_collision_handling() {
+        // T041: Test file collision handling with actual files
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+
+        // Create a template
+        let template_json = serde_json::json!({
+            "Resources": {
+                "Bucket1": { "Type": "AWS::S3::Bucket" }
+            }
+        });
+        let template = Template::new(template_json, TemplateFormat::Json);
+
+        // Write the first template (no collision)
+        let path1 = export_templates(
+            &[(template.clone(), "source".to_string())],
+            Some(&dir_path.to_path_buf()),
+            "TestStack",
+            "refactor",
+        )
+        .unwrap()[0]
+            .clone();
+
+        assert!(path1.exists());
+        assert_eq!(
+            path1
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("TestStack-refactor-source-"),
+            true
+        );
+        assert_eq!(path1.extension().unwrap(), "json");
+
+        // Write the second template (should create .1 variant)
+        let path2 = export_templates(
+            &[(template.clone(), "source".to_string())],
+            Some(&dir_path.to_path_buf()),
+            "TestStack",
+            "refactor",
+        )
+        .unwrap()[0]
+            .clone();
+
+        assert!(path2.exists());
+        assert_ne!(path1, path2);
+        assert!(path2
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains(".1.json"));
+
+        // Write the third template (should create .2 variant)
+        let path3 = export_templates(
+            &[(template.clone(), "source".to_string())],
+            Some(&dir_path.to_path_buf()),
+            "TestStack",
+            "refactor",
+        )
+        .unwrap()[0]
+            .clone();
+
+        assert!(path3.exists());
+        assert_ne!(path1, path3);
+        assert_ne!(path2, path3);
+        assert!(path3
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains(".2.json"));
+    }
+
+    #[test]
+    fn test_workflow_export_multiple_templates() {
+        // T037/T038: Test exporting multiple templates in one operation
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+
+        // Create different templates
+        let template1_json = serde_json::json!({
+            "Resources": {
+                "Bucket1": { "Type": "AWS::S3::Bucket" }
+            }
+        });
+        let template1 = Template::new(template1_json, TemplateFormat::Json);
+
+        let template2_json = serde_json::json!({
+            "Resources": {
+                "Table1": { "Type": "AWS::DynamoDB::Table" }
+            }
+        });
+        let template2 = Template::new(template2_json, TemplateFormat::Yaml);
+
+        // Export multiple templates (simulating import mode with 4 templates)
+        let paths = export_templates(
+            &[
+                (template1.clone(), "source-retained".to_string()),
+                (template1.clone(), "source-removed".to_string()),
+                (template2.clone(), "target-with-retention".to_string()),
+                (template2.clone(), "target-final".to_string()),
+            ],
+            Some(&dir_path.to_path_buf()),
+            "ImportStack",
+            "import",
+        )
+        .unwrap();
+
+        // Verify 4 files were created
+        assert_eq!(paths.len(), 4);
+
+        // Verify all files exist and have correct extensions
+        assert!(paths[0].exists());
+        assert!(paths[0]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("source-retained"));
+        assert_eq!(paths[0].extension().unwrap(), "json");
+
+        assert!(paths[1].exists());
+        assert!(paths[1]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("source-removed"));
+        assert_eq!(paths[1].extension().unwrap(), "json");
+
+        assert!(paths[2].exists());
+        assert!(paths[2]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("target-with-retention"));
+        assert_eq!(paths[2].extension().unwrap(), "yaml");
+
+        assert!(paths[3].exists());
+        assert!(paths[3]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("target-final"));
+        assert_eq!(paths[3].extension().unwrap(), "yaml");
+
+        // Verify file contents are readable
+        let read_back1 = read_template_from_file(&paths[0]).unwrap();
+        assert_eq!(read_back1.format, TemplateFormat::Json);
+
+        let read_back2 = read_template_from_file(&paths[2]).unwrap();
+        assert_eq!(read_back2.format, TemplateFormat::Yaml);
+    }
+
+    #[test]
+    fn test_workflow_roundtrip_template_json() {
+        // T027: Test template input workflow - write and read back JSON template
+        use tempfile::NamedTempFile;
+
+        let template_json = serde_json::json!({
+            "AWSTemplateFormatVersion": "2010-09-09",
+            "Resources": {
+                "MyBucket": {
+                    "Type": "AWS::S3::Bucket",
+                    "Properties": {
+                        "BucketName": "my-test-bucket"
+                    }
+                },
+                "MyTable": {
+                    "Type": "AWS::DynamoDB::Table",
+                    "Properties": {
+                        "TableName": "my-test-table",
+                        "AttributeDefinitions": [
+                            { "AttributeName": "id", "AttributeType": "S" }
+                        ],
+                        "KeySchema": [
+                            { "AttributeName": "id", "KeyType": "HASH" }
+                        ]
+                    }
+                }
+            }
+        });
+
+        let original = Template::new(template_json, TemplateFormat::Json);
+
+        // Write template to file
+        let temp_file = NamedTempFile::new().unwrap();
+        write_template_to_file(&original, temp_file.path()).unwrap();
+
+        // Read template back
+        let read_back = read_template_from_file(temp_file.path()).unwrap();
+
+        // Verify format preserved
+        assert_eq!(read_back.format, TemplateFormat::Json);
+
+        // Verify content matches
+        assert_eq!(
+            read_back
+                .content
+                .get("AWSTemplateFormatVersion")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "2010-09-09"
+        );
+
+        let resources = read_back
+            .content
+            .get("Resources")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert!(resources.contains_key("MyBucket"));
+        assert!(resources.contains_key("MyTable"));
+
+        let bucket = resources.get("MyBucket").unwrap().as_object().unwrap();
+        assert_eq!(
+            bucket.get("Type").unwrap().as_str().unwrap(),
+            "AWS::S3::Bucket"
+        );
+    }
+
+    #[test]
+    fn test_workflow_roundtrip_template_yaml() {
+        // T027: Test template input workflow - write and read back YAML template
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let yaml_file = temp_dir.path().join("test-template.yaml");
+
+        let template_json = serde_json::json!({
+            "AWSTemplateFormatVersion": "2010-09-09",
+            "Description": "Test YAML template",
+            "Resources": {
+                "SecurityGroup": {
+                    "Type": "AWS::EC2::SecurityGroup",
+                    "Properties": {
+                        "GroupDescription": "Test security group",
+                        "SecurityGroupIngress": [
+                            {
+                                "IpProtocol": "tcp",
+                                "FromPort": 80,
+                                "ToPort": 80,
+                                "CidrIp": "0.0.0.0/0"
+                            }
+                        ]
+                    }
+                }
+            }
+        });
+
+        let original = Template::new(template_json, TemplateFormat::Yaml);
+
+        // Write template to file
+        write_template_to_file(&original, &yaml_file).unwrap();
+
+        // Verify file exists and has .yaml extension
+        assert!(yaml_file.exists());
+        assert!(yaml_file
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .ends_with(".yaml"));
+
+        // Read template back
+        let read_back = read_template_from_file(&yaml_file).unwrap();
+
+        // Verify format preserved as YAML
+        assert_eq!(read_back.format, TemplateFormat::Yaml);
+
+        // Verify content matches
+        assert_eq!(
+            read_back
+                .content
+                .get("Description")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "Test YAML template"
+        );
+
+        let resources = read_back
+            .content
+            .get("Resources")
+            .unwrap()
+            .as_object()
+            .unwrap();
+        assert!(resources.contains_key("SecurityGroup"));
+    }
+
+    #[test]
+    fn test_workflow_migration_spec_end_to_end() {
+        // T027: Test migration spec workflow - write spec file, read it back, validate against template
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        // Create migration spec file
+        let spec_content = r#"{
+  "resources": {
+    "OldBucket": "NewBucket",
+    "OldTable": "NewTable",
+    "OldInstance": "Instance1"
+  }
+}"#;
+
+        let mut spec_file = NamedTempFile::new().unwrap();
+        spec_file.write_all(spec_content.as_bytes()).unwrap();
+        spec_file.flush().unwrap();
+
+        // Parse migration spec
+        let mappings = parse_migration_spec(spec_file.path()).unwrap();
+
+        assert_eq!(mappings.len(), 3);
+        assert_eq!(mappings.get("OldBucket").unwrap(), "NewBucket");
+        assert_eq!(mappings.get("OldTable").unwrap(), "NewTable");
+        assert_eq!(mappings.get("OldInstance").unwrap(), "Instance1");
+
+        // Create matching template
+        let template_json = serde_json::json!({
+            "Resources": {
+                "OldBucket": { "Type": "AWS::S3::Bucket" },
+                "OldTable": { "Type": "AWS::DynamoDB::Table" },
+                "OldInstance": { "Type": "AWS::EC2::Instance" }
+            }
+        });
+        let template = Template::new(template_json, TemplateFormat::Json);
+
+        // Validate spec against template
+        let result = validate_migration_spec_resources(&mappings, &template);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_workflow_format_preservation_across_operations() {
+        // T052: Verify format preservation through export and import
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+
+        // Test JSON preservation
+        let json_template = Template::new(
+            serde_json::json!({"Resources": {"Bucket1": {"Type": "AWS::S3::Bucket"}}}),
+            TemplateFormat::Json,
+        );
+
+        let json_paths = export_templates(
+            &[(json_template, "source".to_string())],
+            Some(&temp_dir.path().to_path_buf()),
+            "JsonStack",
+            "refactor",
+        )
+        .unwrap();
+
+        let json_read_back = read_template_from_file(&json_paths[0]).unwrap();
+        assert_eq!(json_read_back.format, TemplateFormat::Json);
+        assert_eq!(json_paths[0].extension().unwrap(), "json");
+
+        // Test YAML preservation
+        let yaml_template = Template::new(
+            serde_json::json!({"Resources": {"Table1": {"Type": "AWS::DynamoDB::Table"}}}),
+            TemplateFormat::Yaml,
+        );
+
+        let yaml_paths = export_templates(
+            &[(yaml_template, "target".to_string())],
+            Some(&temp_dir.path().to_path_buf()),
+            "YamlStack",
+            "import",
+        )
+        .unwrap();
+
+        let yaml_read_back = read_template_from_file(&yaml_paths[0]).unwrap();
+        assert_eq!(yaml_read_back.format, TemplateFormat::Yaml);
+        assert_eq!(yaml_paths[0].extension().unwrap(), "yaml");
+    }
+
+    #[test]
+    fn test_workflow_error_context_generation() {
+        // T049: Test error context file generation workflow
+        use tempfile::TempDir;
+
+        let temp_dir = TempDir::new().unwrap();
+        let error_file = temp_dir.path().join("migration-error.txt");
+
+        let error_msg =
+            "Template validation failed: Missing required property 'Type' in resource 'MyBucket'";
+        let source_stack = "FailedStack";
+        let target_stack = Some("TargetStack");
+        let operation = "refactor";
+
+        // Create resource mappings
+        let mut resources = HashMap::new();
+        resources.insert("MyBucket".to_string(), "NewBucket".to_string());
+        resources.insert("MyTable".to_string(), "MyTable".to_string());
+
+        // Write error context
+        let result = write_error_context(
+            &error_file,
+            "20260228-143022",
+            error_msg,
+            source_stack,
+            target_stack,
+            operation,
+            &resources,
+        );
+
+        assert!(result.is_ok());
+
+        // Verify file exists
+        assert!(error_file.exists());
+
+        // Verify file content
+        let content = std::fs::read_to_string(&error_file).unwrap();
+        assert!(content.contains("Error: Template validation failed"));
+        assert!(content.contains("Operation: refactor"));
+        assert!(content.contains("Source Stack: FailedStack"));
+        assert!(content.contains("Target Stack: TargetStack"));
+        assert!(content.contains("MyBucket -> NewBucket"));
+        assert!(content.contains("MyTable (no rename)"));
+        assert!(content.contains("Full Error Details:"));
+    }
+
+    // ============================================================================
+    // CLI Argument Validation Tests (T059)
+    // ============================================================================
+    // Note: These test the validation logic extracted from run() function.
+    // The actual validations occur at lines 132-157 in run().
+
+    /// Helper function to test CLI argument validation logic
+    /// Mirrors the validation checks in run() function (lines 132-157)
+    fn validate_cli_args(
+        export: bool,
+        source_template: bool,
+        target_template: bool,
+        migration_spec: bool,
+        resource: bool,
+    ) -> Result<(), String> {
+        // Validation 1: Cannot use --export with --source-template
+        if export && source_template {
+            return Err("Cannot use --export with --source-template.\n\
+                 Export mode fetches templates from AWS and writes them to disk.\n\
+                 If you already have template files, you don't need export mode."
+                .to_string());
+        }
+
+        // Validation 2: Cannot use --export with --target-template
+        if export && target_template {
+            return Err("Cannot use --export with --target-template.\n\
+                 Export mode fetches templates from AWS and writes them to disk.\n\
+                 If you already have template files, you don't need export mode."
+                .to_string());
+        }
+
+        // Validation 3: Cannot use --migration-spec with --resource
+        if migration_spec && resource {
+            return Err(
+                "Cannot use --migration-spec with --resource.\n\
+                 The migration spec file defines resource mappings, so the --resource flag is not needed."
+                    .to_string(),
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cli_validation_export_with_source_template() {
+        // T059: Test --export + --source-template conflict
+        let result = validate_cli_args(
+            true,  // export
+            true,  // source_template
+            false, // target_template
+            false, // migration_spec
+            false, // resource
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Cannot use --export with --source-template"));
+    }
+
+    #[test]
+    fn test_cli_validation_export_with_target_template() {
+        // T059: Test --export + --target-template conflict
+        let result = validate_cli_args(
+            true,  // export
+            false, // source_template
+            true,  // target_template
+            false, // migration_spec
+            false, // resource
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Cannot use --export with --target-template"));
+    }
+
+    #[test]
+    fn test_cli_validation_migration_spec_with_resource() {
+        // T059: Test --migration-spec + --resource conflict
+        let result = validate_cli_args(
+            false, // export
+            false, // source_template
+            false, // target_template
+            true,  // migration_spec
+            true,  // resource
+        );
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("Cannot use --migration-spec with --resource"));
+    }
+
+    #[test]
+    fn test_cli_validation_export_only() {
+        // T059: Test --export alone is valid
+        let result = validate_cli_args(
+            true,  // export
+            false, // source_template
+            false, // target_template
+            false, // migration_spec
+            false, // resource
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_validation_source_template_only() {
+        // T059: Test --source-template alone is valid
+        let result = validate_cli_args(
+            false, // export
+            true,  // source_template
+            false, // target_template
+            false, // migration_spec
+            false, // resource
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_validation_migration_spec_only() {
+        // T059: Test --migration-spec alone is valid
+        let result = validate_cli_args(
+            false, // export
+            false, // source_template
+            false, // target_template
+            true,  // migration_spec
+            false, // resource
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_validation_export_with_migration_spec() {
+        // T059: Test --export + --migration-spec is valid (both allowed together)
+        let result = validate_cli_args(
+            true,  // export
+            false, // source_template
+            false, // target_template
+            true,  // migration_spec
+            false, // resource
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_validation_templates_with_migration_spec() {
+        // T059: Test --source-template + --migration-spec is valid
+        let result = validate_cli_args(
+            false, // export
+            true,  // source_template
+            true,  // target_template
+            true,  // migration_spec
+            false, // resource
+        );
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_cli_validation_all_conflicts() {
+        // T059: Test multiple conflicts at once (export takes precedence)
+        let result = validate_cli_args(
+            true, // export
+            true, // source_template
+            true, // target_template
+            true, // migration_spec
+            true, // resource
+        );
+
+        assert!(result.is_err());
+        // Should catch the first validation (export + source_template)
+        let err = result.unwrap_err();
+        assert!(err.contains("Cannot use --export with --source-template"));
     }
 }
