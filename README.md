@@ -46,18 +46,37 @@ cargo install cfn-teleport
 
 ```bash
 $ cfn-teleport --help
-Move CloudFormation resources between stacks
+Moves CloudFormation resources between stacks
 
 Usage: cfn-teleport [OPTIONS]
 
 Options:
-  -s, --source <SOURCE>         Name of the source stack
-  -t, --target <TARGET>         Name of the target stack
-  -r, --resource <ID[:NEW_ID]>  Logical ID of a resource from the source stack - optionally with a new ID for the target stack
-  -y, --yes                     Automatically confirm all prompts
-      --mode <MODE>             Operation mode: 'refactor' (safe, atomic, fewer resource types) or 'import' (legacy, more resource types, can orphan resources) [default: refactor]
-  -h, --help                    Print help
-  -V, --version                 Print version
+  -s, --source <SOURCE>
+          Name of the source stack
+
+  -t, --target <TARGET>
+          Name of the target stack
+
+  -r, --resource <ID[:NEW_ID]>
+          Logical ID of a resource from the source stack - optionally with a new ID for the target stack
+
+  -y, --yes
+          Automatically confirm all prompts
+
+  -m, --mode <MODE>
+          Operation mode for cross-stack moves
+
+          Possible values:
+          - refactor: Safe, atomic CloudFormation Stack Refactoring API (supports fewer resource types)
+          - import:   Legacy import/export flow (supports more resource types but can orphan resources on failure)
+
+          [default: refactor]
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
 ```
 
 ### Moving Resources Between Stacks
@@ -72,14 +91,14 @@ cfn-teleport --source Stack1 --target Stack2 --resource Bucket21D68F7E8 --resour
 
 cfn-teleport supports two modes for cross-stack resource moves:
 
-| Feature                    | Refactor Mode (Default)                          | Import Mode (Legacy)                        |
-| -------------------------- | ------------------------------------------------ | ------------------------------------------- |
-| **Safety**                 | ✅ Atomic, rolls back on failure                 | ⚠️ Multi-step, can fail mid-way             |
-| **Resource Orphaning**     | ✅ Never happens                                 | ⚠️ Possible on failure                      |
-| **Resource Tags**          | ✅ Updated to new stack                          | ⚠️ Shows old stack name                     |
-| **Supported Types**        | ❌ Fewer (no KeyPair, etc.)                      | ✅ More types                               |
-| **Parameter Dependencies** | ✅ Allowed (target must have matching parameter) | ❌ Blocked (not validated for import mode)  |
-| **Recommendation**         | ✅ Use by default                                | ⚠️ Only for unsupported types               |
+| Feature                    | Refactor Mode (Default)                          | Import Mode (Legacy)                       |
+| -------------------------- | ------------------------------------------------ | ------------------------------------------ |
+| **Safety**                 | ✅ Atomic, rolls back on failure                 | ⚠️ Multi-step, can fail mid-way            |
+| **Resource Orphaning**     | ✅ Never happens                                 | ⚠️ Possible on failure                     |
+| **Resource Tags**          | ✅ Updated to new stack                          | ⚠️ Shows old stack name                    |
+| **Supported Types**        | ❌ Fewer (no KeyPair, etc.)                      | ✅ More types                              |
+| **Parameter Dependencies** | ✅ Allowed (target must have matching parameter) | ❌ Blocked (not validated for import mode) |
+| **Recommendation**         | ✅ Use by default                                | ⚠️ Only for unsupported types              |
 
 ##### Refactor Mode (Default, Recommended)
 
