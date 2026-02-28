@@ -927,6 +927,7 @@ jobs:
       - test-refactor
       - test-import
       - test-rename
+    if: always()
     runs-on: ubuntu-latest
     outputs:
       state_valid: ${{ steps.check.outputs.state_valid }}
