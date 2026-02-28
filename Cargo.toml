@@ -36,7 +36,7 @@ features = [
 ]
 
 [dev-dependencies]
-tempfile = "3.13.0"
+tempfile = "3.26.0"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1.12"
