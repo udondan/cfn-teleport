@@ -359,32 +359,8 @@ jobs:
       - name: Test refactor mode with supported resource types
         working-directory: test/cloudformation
         run: |
-          # Helper function to run cfn-teleport with visible output
-          run_cfn_teleport() {
-            echo ""
-            echo "═══════════════════════════════════════════════════════════════════════════════"
-            echo "▶ Running: cfn-teleport $@"
-            echo "───────────────────────────────────────────────────────────────────────────────"
-            cfn-teleport "$@" 2>&1
-            local exit_code=$?
-            echo "───────────────────────────────────────────────────────────────────────────────"
-            echo "▶ Exit code: $exit_code"
-            echo "═══════════════════════════════════════════════════════════════════════════════"
-            echo ""
-            return $exit_code
-          }
-
-          # Helper function to check drift using Makefile target
-          check_drift() {
-            local stack="$1"
-            local expect="$2"
-            local template="$3"
-            cd test/cloudformation
-            make check-drift STACK="$stack" EXPECT="$expect" TEMPLATE="$template"
-            local result=$?
-            cd ../..
-            return $result
-          }
+          # Source test helper functions
+          source test-helpers.sh
 
           echo "######### TEST 1: Refactor mode with standalone resources #########"
 
@@ -546,32 +522,8 @@ jobs:
       - name: Test import mode with simple resources
         working-directory: test/cloudformation
         run: |
-          # Helper function to run cfn-teleport with visible output
-          run_cfn_teleport() {
-            echo ""
-            echo "═══════════════════════════════════════════════════════════════════════════════"
-            echo "▶ Running: cfn-teleport $@"
-            echo "───────────────────────────────────────────────────────────────────────────────"
-            cfn-teleport "$@" 2>&1
-            local exit_code=$?
-            echo "───────────────────────────────────────────────────────────────────────────────"
-            echo "▶ Exit code: $exit_code"
-            echo "═══════════════════════════════════════════════════════════════════════════════"
-            echo ""
-            return $exit_code
-          }
-
-          # Helper function to check drift using Makefile target
-          check_drift() {
-            local stack="$1"
-            local expect="$2"
-            local template="$3"
-            cd test/cloudformation
-            make check-drift STACK="$stack" EXPECT="$expect" TEMPLATE="$template"
-            local result=$?
-            cd ../..
-            return $result
-          }
+          # Source test helper functions
+          source test-helpers.sh
 
           # Find simple resources (no parameter dependencies - import mode compatible)
           TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK1}" --query 'TemplateBody' --output json | jq -r '.')
@@ -653,20 +605,8 @@ jobs:
       - name: Test same-stack renaming
         working-directory: test/cloudformation
         run: |
-          # Helper function to run cfn-teleport with visible output
-          run_cfn_teleport() {
-            echo ""
-            echo "═══════════════════════════════════════════════════════════════════════════════"
-            echo "▶ Running: cfn-teleport $@"
-            echo "───────────────────────────────────────────────────────────────────────────────"
-            cfn-teleport "$@" 2>&1
-            local exit_code=$?
-            echo "───────────────────────────────────────────────────────────────────────────────"
-            echo "▶ Exit code: $exit_code"
-            echo "═══════════════════════════════════════════════════════════════════════════════"
-            echo ""
-            return $exit_code
-          }
+          # Source test helper functions
+          source test-helpers.sh
 
           echo "######### Finding rename test resources #########"
           # Logical IDs have hash suffixes, e.g., RenameBucket615F0D5B
@@ -1179,6 +1119,9 @@ jobs:
           Write-Host "=========================================="
           Write-Host ""
 
+          # Source PowerShell helper functions
+          . test\cloudformation\test-helpers.ps1
+
           # Verify binary works
           cfn-teleport --version
           if ($LASTEXITCODE -ne 0) {
@@ -1211,6 +1154,10 @@ jobs:
             Write-Error "Failed to move bucket to WindowsTest2"
             exit 1
           }
+          
+          # Wait for both stacks to reach stable state
+          if (-not (Wait-ForStackStable "CfnTeleportWindowsTest1")) { exit 1 }
+          if (-not (Wait-ForStackStable "CfnTeleportWindowsTest2")) { exit 1 }
 
           Write-Host ""
           Write-Host "✅ Bucket moved successfully to WindowsTest2"
@@ -1222,6 +1169,10 @@ jobs:
             Write-Error "Failed to move bucket back to WindowsTest1"
             exit 1
           }
+          
+          # Wait for both stacks to reach stable state
+          if (-not (Wait-ForStackStable "CfnTeleportWindowsTest1")) { exit 1 }
+          if (-not (Wait-ForStackStable "CfnTeleportWindowsTest2")) { exit 1 }
 
           Write-Host ""
           Write-Host "✅ Bucket moved back successfully to WindowsTest1"
