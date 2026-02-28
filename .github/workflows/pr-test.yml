@@ -858,19 +858,29 @@ jobs:
         run: |
           # Add binary to PATH
           $env:Path = "C:\cfn-teleport-bin;$env:Path"
-
+          
           Write-Host "=========================================="
           Write-Host "Testing Windows Binary"
           Write-Host "=========================================="
           Write-Host ""
-
+          
           # Verify binary works
           cfn-teleport --version
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to run cfn-teleport --version"
             exit 1
           }
-
+          
+          # Verify stacks exist and bucket is deployed
+          Write-Host ""
+          Write-Host "====== Verifying test stacks exist ======"
+          aws cloudformation describe-stacks --stack-name CfnTeleportWindowsTest1 --query 'Stacks[0].[StackName,StackStatus]' --output text
+          aws cloudformation describe-stacks --stack-name CfnTeleportWindowsTest2 --query 'Stacks[0].[StackName,StackStatus]' --output text
+          
+          Write-Host ""
+          Write-Host "====== Listing resources in WindowsTest1 ======"
+          aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus]' --output table
+          
           Write-Host ""
           Write-Host "====== TEST: Move bucket from WindowsTest1 to WindowsTest2 ======"
           cfn-teleport --source CfnTeleportWindowsTest1 --target CfnTeleportWindowsTest2 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
@@ -878,10 +888,10 @@ jobs:
             Write-Error "Failed to move bucket to WindowsTest2"
             exit 1
           }
-
+          
           Write-Host ""
           Write-Host "✅ Bucket moved successfully to WindowsTest2"
-
+          
           Write-Host ""
           Write-Host "====== TEST: Move bucket back to WindowsTest1 ======"
           cfn-teleport --source CfnTeleportWindowsTest2 --target CfnTeleportWindowsTest1 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
@@ -889,10 +899,10 @@ jobs:
             Write-Error "Failed to move bucket back to WindowsTest1"
             exit 1
           }
-
+          
           Write-Host ""
           Write-Host "✅ Bucket moved back successfully to WindowsTest1"
-
+          
           Write-Host ""
           Write-Host "=========================================="
           Write-Host "✅ All Windows binary tests passed!"
