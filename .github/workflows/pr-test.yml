@@ -1096,26 +1096,30 @@ jobs:
 
           echo ""
           echo "######### TEST 8: Verify format preservation (YAML stack) #########"
-          # RefactorTest2 is YAML, verify exported template is also YAML
-          # Instead of parsing the template (which is YAML), list actual resources from the stack
-          YAML_BUCKET=$(aws cloudformation list-stack-resources --stack-name "${STACK2}" \
-            --query 'StackResourceSummaries[?starts_with(LogicalResourceId, `Bucket`)].LogicalResourceId' \
-            --output text | head -1)
+          # RefactorTest2 is YAML. To verify YAML export, we'll use ImportTest2 which is also YAML
+          # and has resources we can export
+          echo "Exporting from YAML stack (ImportTest2)..."
           
-          if [ -z "$YAML_BUCKET" ]; then
-            echo "✗ Could not find bucket in YAML stack"
+          # Get a resource from ImportTest2 (YAML stack)
+          YAML_RESOURCE=$(aws cloudformation list-stack-resources --stack-name "${IMPORT_STACK2}" \
+            --query 'StackResourceSummaries[0].LogicalResourceId' \
+            --output text)
+          
+          if [ -z "$YAML_RESOURCE" ]; then
+            echo "✗ Could not find resource in YAML import stack"
             exit 1
           fi
+          
+          echo "Found resource in YAML stack: $YAML_RESOURCE"
 
-          echo "Exporting from YAML stack (RefactorTest2)..."
-          run_cfn_teleport --source "${STACK2}" --target "${STACK1}" \
+          run_cfn_teleport --source "${IMPORT_STACK2}" --target "${IMPORT_STACK1}" \
             --mode refactor --export --out-dir /tmp/cfn-test-yaml --yes \
-            --resource "${YAML_BUCKET}"
+            --resource "${YAML_RESOURCE}"
 
-          # Verify YAML file was created (not JSON)
-          if ls /tmp/cfn-test-yaml/*.yaml > /dev/null 2>&1; then
+          # Verify YAML file was created (not JSON) - source stack is YAML
+          if ls /tmp/cfn-test-yaml/*-source-*.yaml > /dev/null 2>&1; then
             echo "✓ YAML stack exported to YAML file (format preserved)"
-            ls -lh /tmp/cfn-test-yaml/*.yaml
+            ls -lh /tmp/cfn-test-yaml/*-source-*.yaml
           else
             echo "✗ YAML stack did not export to YAML file"
             ls -lh /tmp/cfn-test-yaml/
