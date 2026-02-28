@@ -1063,6 +1063,15 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
+  # Final cleanup gate - always runs
+  cleanup-done:
+    needs: [verify-state, cleanup-resources]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cleanup complete
+        run: echo "Cleanup phase complete"
+
   report-status:
     name: success
     if: always()
@@ -1072,6 +1081,7 @@ jobs:
       - test-import
       - test-rename
       - test-windows
+      - cleanup-done
     steps:
       - name: Check test results
         run: |
