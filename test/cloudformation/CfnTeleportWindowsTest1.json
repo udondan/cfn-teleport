@@ -30,12 +30,6 @@
     }
   },
   "Outputs": {
-    "BucketName": {
-      "Description": "Name of the test bucket",
-      "Value": {
-        "Ref": "WindowsTestBucketA1B2C3D4"
-      }
-    },
     "StackFormat": {
       "Description": "Format of this stack template",
       "Value": "JSON"
