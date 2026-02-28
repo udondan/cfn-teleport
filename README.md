@@ -105,7 +105,7 @@ cfn-teleport supports two modes for cross-stack resource moves:
 Uses the AWS CloudFormation Stack Refactoring API:
 
 ```bash
-cfn-teleport --source Stack1 --target Stack2 --resource MyBucket -m refactor
+cfn-teleport --source Stack1 --target Stack2 --resource MyBucket --mode refactor
 ```
 
 **Advantages:**
@@ -125,7 +125,7 @@ cfn-teleport --source Stack1 --target Stack2 --resource MyBucket -m refactor
 Uses the legacy import/export flow (6-step manual process):
 
 ```bash
-cfn-teleport --source Stack1 --target Stack2 --resource MyKeyPair -m import
+cfn-teleport --source Stack1 --target Stack2 --resource MyKeyPair --mode import
 ```
 
 **Advantages:**
