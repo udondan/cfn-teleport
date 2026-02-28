@@ -806,6 +806,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
             if write_error_context(
                 &context_path,
+                &timestamp,
                 &error_msg.to_string(),
                 &source_stack,
                 Some(&target_stack),
@@ -934,7 +935,7 @@ fn split_ids(id: String) -> (String, String) {
 // Template File I/O Utilities
 // ============================================================================
 
-/// Generates a timestamp string in YYYYMMDD-HHMMSS format (local time, sortable)
+/// Generates a timestamp string in YYYYMMDD-HHMMSS format (UTC-based from system time, sortable)
 fn get_timestamp() -> String {
     let now = SystemTime::now();
     let duration = now.duration_since(UNIX_EPOCH).unwrap_or_default();
@@ -1154,13 +1155,13 @@ fn read_template_from_file(path: &Path) -> Result<Template, Box<dyn Error>> {
 /// * `resources` - List of resource IDs being migrated (old -> new mappings)
 fn write_error_context(
     path: &Path,
+    timestamp: &str,
     error_msg: &str,
     source_stack: &str,
     target_stack: Option<&str>,
     operation: &str,
     resources: &HashMap<String, String>,
 ) -> Result<(), Box<dyn Error>> {
-    let timestamp = get_timestamp();
     let mut context = String::new();
 
     context.push_str(&format!("Error: {}\n", error_msg));
@@ -2470,6 +2471,7 @@ async fn refactor_stack_resources(
         if let Some(path) = context_path {
             if write_error_context(
                 &path,
+                &timestamp,
                 &e.to_string(),
                 stack_name,
                 None,
@@ -2711,6 +2713,7 @@ async fn refactor_stack_resources_cross_stack(
         if let Some(path) = context_path {
             if write_error_context(
                 &path,
+                &timestamp,
                 &error_msg,
                 source_stack_name,
                 Some(target_stack_name),
@@ -3723,6 +3726,7 @@ Resources:
         // Write error context
         let result = write_error_context(
             &context_path,
+            "20260228-143022",
             "Template validation failed",
             "SourceStack",
             Some("TargetStack"),
@@ -3759,6 +3763,7 @@ Resources:
         // Write error context (no target stack for same-stack operation)
         let result = write_error_context(
             &context_path,
+            "20260228-143022",
             "AWS API error",
             "MyStack",
             None,
@@ -4449,6 +4454,7 @@ Resources:
         // Write error context
         let result = write_error_context(
             &error_file,
+            "20260228-143022",
             error_msg,
             source_stack,
             target_stack,
