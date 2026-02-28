@@ -265,6 +265,13 @@ jobs:
               exit 1
           }
 
+      - name: Upload Windows binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: cfn-teleport-windows-binary
+          path: target/release/cfn-teleport.exe
+          retention-days: 1
+
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
     needs: changes
@@ -278,6 +285,8 @@ jobs:
           - CfnTeleportImportTest1.json
           - CfnTeleportImportTest2.yaml
           - CfnTeleportRenameTest1.json
+          - CfnTeleportWindowsTest1.json
+          - CfnTeleportWindowsTest2.yaml
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -822,9 +831,72 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           STACK1: CfnTeleportRenameTest1
 
+  # Windows binary test (runs in parallel with other tests)
+  test-windows:
+    needs: [build-windows, prepare-stacks]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Download Windows binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: cfn-teleport-windows-binary
+          path: C:\cfn-teleport-bin
+
+      - name: Test Windows binary with real AWS resources
+        shell: pwsh
+        run: |
+          # Add binary to PATH
+          $env:Path = "C:\cfn-teleport-bin;$env:Path"
+          
+          Write-Host "=========================================="
+          Write-Host "Testing Windows Binary"
+          Write-Host "=========================================="
+          Write-Host ""
+          
+          # Verify binary works
+          cfn-teleport --version
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to run cfn-teleport --version"
+            exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "====== TEST: Move bucket from WindowsTest1 to WindowsTest2 ======"
+          cfn-teleport --source CfnTeleportWindowsTest1 --target CfnTeleportWindowsTest2 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to move bucket to WindowsTest2"
+            exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "✅ Bucket moved successfully to WindowsTest2"
+          
+          Write-Host ""
+          Write-Host "====== TEST: Move bucket back to WindowsTest1 ======"
+          cfn-teleport --source CfnTeleportWindowsTest2 --target CfnTeleportWindowsTest1 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to move bucket back to WindowsTest1"
+            exit 1
+          }
+          
+          Write-Host ""
+          Write-Host "✅ Bucket moved back successfully to WindowsTest1"
+          
+          Write-Host ""
+          Write-Host "=========================================="
+          Write-Host "✅ All Windows binary tests passed!"
+          Write-Host "=========================================="
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
   # Verify stack template formats and resource state
   verify-state:
-    needs: [prepare-stacks, test-refactor, test-import, test-rename]
+    needs: [prepare-stacks, test-refactor, test-import, test-rename, test-windows]
     runs-on: ubuntu-latest
     outputs:
       state_valid: ${{ steps.check.outputs.state_valid }}
@@ -885,6 +957,8 @@ jobs:
           check_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
           check_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
           check_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportWindowsTest1" "CfnTeleportWindowsTest1.json" || ALL_MATCH=false
+          check_stack "CfnTeleportWindowsTest2" "CfnTeleportWindowsTest2.yaml" || ALL_MATCH=false
 
           if [ "$ALL_MATCH" = "true" ]; then
             echo ""
@@ -908,7 +982,7 @@ jobs:
   # Cleanup - only destroys stacks if verification failed
   cleanup:
     needs:
-      [prepare-stacks, test-refactor, test-import, test-rename, verify-state]
+      [prepare-stacks, test-refactor, test-import, test-rename, test-windows, verify-state]
     if: always() && needs.prepare-stacks.result != 'skipped'
     runs-on: ubuntu-latest
     steps:
@@ -957,6 +1031,7 @@ jobs:
       - test-refactor
       - test-import
       - test-rename
+      - test-windows
       - verify-state
       - cleanup
     steps:

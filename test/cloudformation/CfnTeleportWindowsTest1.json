@@ -1,0 +1,44 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "CfnTeleportWindowsTest1 - Minimal source stack for Windows binary testing",
+  "Resources": {
+    "WaitConditionHandle": {
+      "Type": "AWS::CloudFormation::WaitConditionHandle",
+      "Metadata": {
+        "Comment": "Minimal placeholder to ensure stack always has at least one resource"
+      }
+    },
+    "WindowsTestBucketA1B2C3D4": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "${AWS::AccountId}-cfn-teleport-windows-test"
+        },
+        "Tags": [
+          {
+            "Key": "ApplicationName",
+            "Value": "cfn-teleport-test"
+          },
+          {
+            "Key": "TestType",
+            "Value": "windows-binary"
+          }
+        ]
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    }
+  },
+  "Outputs": {
+    "BucketName": {
+      "Description": "Name of the test bucket",
+      "Value": {
+        "Ref": "WindowsTestBucketA1B2C3D4"
+      }
+    },
+    "StackFormat": {
+      "Description": "Format of this stack template",
+      "Value": "JSON"
+    }
+  }
+}
