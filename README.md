@@ -72,6 +72,21 @@ Options:
 
           [default: refactor]
 
+      --out-dir <PATH>
+          Output directory for exported templates (export mode only)
+
+      --migration-spec <PATH>
+          Migration specification file with resource ID mappings (JSON format)
+
+      --source-template <PATH>
+          Source CloudFormation template file (alternative to fetching from AWS)
+
+      --target-template <PATH>
+          Target CloudFormation template file (alternative to fetching from AWS)
+
+      --export
+          Export templates to disk without executing migration (dry-run mode)
+
   -h, --help
           Print help (see a summary with '-h')
 
@@ -181,6 +196,117 @@ cfn-teleport
 # - Resources to move/rename
 # - Optional: New logical IDs for each resource
 ```
+
+## Template I/O Features
+
+### Export Templates Without Execution (Dry-Run Mode)
+
+Preview migration changes by exporting templates to disk without executing them:
+
+```bash
+# Export templates for a same-stack rename
+cfn-teleport --source MyStack --target MyStack --resource OldName:NewName --export
+
+# Export templates for cross-stack move
+cfn-teleport --source Stack1 --target Stack2 --resource Bucket --export --out-dir ./templates
+
+# Export templates for import mode (generates 4 template files)
+cfn-teleport --source Stack1 --target Stack2 --resource Bucket --mode import --export
+```
+
+**What gets exported:**
+
+- **Same-stack refactor**: 1 file (refactored template)
+- **Cross-stack refactor**: 2 files (source and target templates)
+- **Import mode**: 4 files (source-retained, source-removed, target-with-deletion-policy, target-final)
+
+Exported files are timestamped to avoid collisions: `StackName-operation-suffix-YYYYMMDD-HHMMSS.yaml`
+
+### Use Template Files as Input
+
+Work with template files instead of fetching from AWS:
+
+```bash
+# Use local template files
+cfn-teleport \
+  --source-template ./my-stack-source.yaml \
+  --target-template ./my-stack-target.yaml \
+  --source Stack1 \
+  --target Stack2 \
+  --resource Bucket
+
+# Modify exported templates and apply them
+cfn-teleport --export --source Stack1 --target Stack2 --resource Bucket --out-dir ./templates
+# Edit templates as needed...
+cfn-teleport --source-template ./templates/Stack1-*.yaml --target-template ./templates/Stack2-*.yaml ...
+```
+
+**Benefits:**
+
+- Review and modify templates offline
+- Version control migration changes
+- Test migrations without AWS access
+- Collaborative review workflows
+
+### Migration Specification Files
+
+Define resource mappings in a JSON file for repeatable migrations:
+
+```bash
+# Create migration spec file (migration.json):
+{
+  "resources": {
+    "OldBucketId": "NewBucketId",
+    "OldTableId": "NewTableId",
+    "KeepSameName": "KeepSameName"
+  }
+}
+
+# Use migration spec
+cfn-teleport \
+  --source Stack1 \
+  --target Stack2 \
+  --migration-spec migration.json
+```
+
+**Benefits:**
+
+- Version control resource mappings
+- Repeatable migrations across environments
+- No need to specify `--resource` flags
+- Self-documenting migration plan
+
+### Error Recovery
+
+When template validation or migration fails, cfn-teleport automatically saves templates and error context for debugging:
+
+```
+⚠️  Template validation failed. Saving templates for debugging...
+📄 Templates saved to:
+   MyStack-error-import-retained-20260228-143022.yaml
+   MyStack-error-import-removed-20260228-143022.yaml
+   MyStack-error-import-target-with-policy-20260228-143022.yaml
+   MyStack-error-import-target-final-20260228-143022.yaml
+📝 Error context saved to: MyStack-error-import-context-20260228-143022.txt
+```
+
+The error context file includes:
+- Error message details
+- Operation type and stack names
+- Resource ID mappings
+- Timestamp
+
+### Security Considerations
+
+**Template Files:**
+- Templates may contain sensitive data (parameters, resource configurations)
+- Store templates securely and avoid committing secrets to version control
+- Use `.gitignore` to exclude template directories: `*.yaml`, `*.json`
+- Review templates before sharing to ensure no credentials are exposed
+
+**Migration Spec Files:**
+- Migration specs are generally safe to version control (only resource IDs)
+- Review for any resource IDs that might be considered sensitive
 
 ## Contributing
 
