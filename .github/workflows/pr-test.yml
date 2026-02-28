@@ -1123,7 +1123,7 @@ jobs:
           echo "######### TEST 9: Verify CLI validation (incompatible flags) #########"
           # Test that --export with --source-template is rejected
           if run_cfn_teleport --source-template "$EXPORTED_TEMPLATE" --target "${STACK2}" \
-            --mode refactor --export --resource "${BUCKET1}" 2>&1 | grep -q "cannot be used together"; then
+            --mode refactor --export --resource "${BUCKET1}" 2>&1 | grep -qi "cannot use.*--export.*--source-template"; then
             echo "✓ CLI correctly rejects --export with --source-template"
           else
             echo "✗ CLI should reject --export with --source-template"
@@ -1132,7 +1132,7 @@ jobs:
 
           # Test that --out-dir without --export is rejected
           if run_cfn_teleport --source "${STACK1}" --target "${STACK2}" \
-            --mode refactor --out-dir /tmp/test --resource "${BUCKET1}" 2>&1 | grep -q "requires --export"; then
+            --mode refactor --out-dir /tmp/test --resource "${BUCKET1}" 2>&1 | grep -qi "requires.*--export\|--out-dir.*requires"; then
             echo "✓ CLI correctly rejects --out-dir without --export"
           else
             echo "✗ CLI should reject --out-dir without --export"
