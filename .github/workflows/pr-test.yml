@@ -871,19 +871,27 @@ jobs:
             exit 1
           }
           
-          # Verify stacks exist and bucket is deployed
+          # Find the actual bucket logical ID from the deployed stack
           Write-Host ""
-          Write-Host "====== Verifying test stacks exist ======"
-          aws cloudformation describe-stacks --stack-name CfnTeleportWindowsTest1 --query 'Stacks[0].[StackName,StackStatus]' --output text
-          aws cloudformation describe-stacks --stack-name CfnTeleportWindowsTest2 --query 'Stacks[0].[StackName,StackStatus]' --output text
+          Write-Host "====== Finding bucket resource in WindowsTest1 ======"
+          $template = aws cloudformation get-template --stack-name CfnTeleportWindowsTest1 --query 'TemplateBody' --output json | ConvertFrom-Json
+          $bucketId = $template.Resources.PSObject.Properties.Name | Where-Object { $_ -like "WindowsTestBucket*" }
+          
+          if (-not $bucketId) {
+            Write-Error "Could not find WindowsTestBucket resource in stack"
+            aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus]' --output table
+            exit 1
+          }
+          
+          Write-Host "Found bucket resource: $bucketId"
           
           Write-Host ""
-          Write-Host "====== Listing resources in WindowsTest1 ======"
-          aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus]' --output table
+          Write-Host "====== Verifying bucket exists in AWS ======"
+          aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus,PhysicalResourceId]' --output table
           
           Write-Host ""
           Write-Host "====== TEST: Move bucket from WindowsTest1 to WindowsTest2 ======"
-          cfn-teleport --source CfnTeleportWindowsTest1 --target CfnTeleportWindowsTest2 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
+          cfn-teleport --source CfnTeleportWindowsTest1 --target CfnTeleportWindowsTest2 --yes --mode refactor --resource $bucketId
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to move bucket to WindowsTest2"
             exit 1
@@ -894,7 +902,7 @@ jobs:
           
           Write-Host ""
           Write-Host "====== TEST: Move bucket back to WindowsTest1 ======"
-          cfn-teleport --source CfnTeleportWindowsTest2 --target CfnTeleportWindowsTest1 --yes --mode refactor --resource WindowsTestBucketA1B2C3D4
+          cfn-teleport --source CfnTeleportWindowsTest2 --target CfnTeleportWindowsTest1 --yes --mode refactor --resource $bucketId
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to move bucket back to WindowsTest1"
             exit 1
