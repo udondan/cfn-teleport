@@ -1097,8 +1097,10 @@ jobs:
           echo ""
           echo "######### TEST 8: Verify format preservation (YAML stack) #########"
           # RefactorTest2 is YAML, verify exported template is also YAML
-          YAML_TEMPLATE=$(aws cloudformation get-template --stack-name "${STACK2}" --query 'TemplateBody' --output json | jq -r '.')
-          YAML_BUCKET=$(echo "$YAML_TEMPLATE" | jq -r '.Resources | keys[] | select(startswith("Bucket"))')
+          # Instead of parsing the template (which is YAML), list actual resources from the stack
+          YAML_BUCKET=$(aws cloudformation list-stack-resources --stack-name "${STACK2}" \
+            --query 'StackResourceSummaries[?starts_with(LogicalResourceId, `Bucket`)].LogicalResourceId' \
+            --output text | head -1)
           
           if [ -z "$YAML_BUCKET" ]; then
             echo "✗ Could not find bucket in YAML stack"
