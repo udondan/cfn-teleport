@@ -89,7 +89,7 @@ struct Args {
     yes: bool,
 
     /// Operation mode for cross-stack moves
-    #[arg(long, value_enum, default_value = "refactor")]
+    #[arg(short, long, value_enum, default_value = "refactor")]
     mode: Mode,
 }
 
