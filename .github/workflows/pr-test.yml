@@ -908,20 +908,24 @@ jobs:
             exit 1
           fi
 
-          # Verify format preservation: Stack1 is JSON → exported file should be JSON
-          EXPORTED_FILE=$(ls /tmp/cfn-test-export/*.json | head -1)
-          if jq empty "$EXPORTED_FILE" 2>/dev/null; then
-            echo "✓ Exported template is valid JSON (format preserved)"
+          # Verify format preservation: Stack1 is JSON → source file is JSON, target is YAML
+          SOURCE_FILE=$(ls /tmp/cfn-test-export/*source*.json | head -1)
+          TARGET_FILE=$(ls /tmp/cfn-test-export/*target*.yaml | head -1)
+          
+          if jq empty "$SOURCE_FILE" 2>/dev/null; then
+            echo "✓ Source template is valid JSON (format preserved from Stack1)"
           else
-            echo "✗ Exported template is not valid JSON"
+            echo "✗ Source template is not valid JSON"
             exit 1
           fi
 
-          # Verify the exported template contains the resource
-          if jq -e ".Resources.\"$BUCKET1\"" "$EXPORTED_FILE" > /dev/null; then
-            echo "✓ Exported template contains resource $BUCKET1"
+          # Verify the exported target template contains the moved resource
+          # (In cross-stack refactor, resource moves from source to target)
+          if grep -q "Bucket182C536A1" "$TARGET_FILE"; then
+            echo "✓ Target template contains moved resource $BUCKET1"
           else
-            echo "✗ Exported template missing resource $BUCKET1"
+            echo "✗ Target template missing moved resource $BUCKET1"
+            cat "$TARGET_FILE"
             exit 1
           fi
 
