@@ -118,7 +118,14 @@ struct Args {
 async fn main() {
     if let Err(err) = run().await {
         // Print error with proper formatting (interprets escape sequences)
-        eprintln!("\n{}\n", err);
+        eprintln!("\n{}", err);
+        // Print error source chain for more context (e.g. AWS service errors)
+        let mut source = err.source();
+        while let Some(cause) = source {
+            eprintln!("  caused by: {}", cause);
+            source = cause.source();
+        }
+        eprintln!();
         process::exit(1);
     }
 }
@@ -2394,8 +2401,11 @@ async fn get_changeset_status(
     };
 
     if change_set.status == Some(cloudformation::types::ChangeSetStatus::Failed) {
-        println!("{:?}", change_set);
-        return Err(change_set.status_reason().unwrap().to_string().into());
+        let reason = change_set
+            .status_reason()
+            .unwrap_or("unknown reason")
+            .to_string();
+        return Err(format!("Changeset creation failed: {}", reason).into());
     }
 
     Ok(change_set.status)

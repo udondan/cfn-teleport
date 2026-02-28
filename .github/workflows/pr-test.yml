@@ -691,51 +691,49 @@ jobs:
             return $exit_code
           }
 
-          TMPDIR=/tmp/cfn-teleport-dryrun-refactor
-          mkdir -p "$TMPDIR/dryrun" "$TMPDIR/error-test"
+          OUTDIR=/tmp/cfn-teleport-dryrun-refactor
+          mkdir -p "$OUTDIR/dryrun" "$OUTDIR/error-test"
 
           echo "######### Step 1: Dry-run to generate templates and mappings #########"
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${BUCKET}" \
             --resource "${TABLE}" \
             --dry-run \
-            --template-dir "$TMPDIR/dryrun"
+            --template-dir "$OUTDIR/dryrun"
 
           echo "Verifying dry-run output files..."
           # Source stack is JSON → expect .json extension
-          SOURCE_FINAL="$TMPDIR/dryrun/${STACK1}-final.json"
+          SOURCE_FINAL="$OUTDIR/dryrun/${STACK1}-final.json"
           if [ ! -f "$SOURCE_FINAL" ]; then
             echo "✗ Missing ${STACK1}-final.json (expected JSON format for JSON source stack)"
-            ls "$TMPDIR/dryrun/" || true
+            ls "$OUTDIR/dryrun/" || true
             exit 1
           fi
-          echo "✓ ${STACK1}-final.json written (JSON format preserved)"
+          echo "✓ ${STACK1}-final.json written"
 
           # Target stack is YAML → expect .yaml extension
-          TARGET_FINAL="$TMPDIR/dryrun/${STACK2}-final.yaml"
+          TARGET_FINAL="$OUTDIR/dryrun/${STACK2}-final.yaml"
           if [ ! -f "$TARGET_FINAL" ]; then
             echo "✗ Missing ${STACK2}-final.yaml (expected YAML format for YAML target stack)"
-            ls "$TMPDIR/dryrun/" || true
+            ls "$OUTDIR/dryrun/" || true
             exit 1
           fi
-          echo "✓ ${STACK2}-final.yaml written (YAML format preserved)"
+          echo "✓ ${STACK2}-final.yaml written"
 
           # Verify YAML file is actually YAML (first char is not '{')
           if head -c 1 "$TARGET_FINAL" | grep -q '{'; then
             echo "✗ ${STACK2}-final.yaml is JSON, expected YAML - silent format conversion occurred!"
             exit 1
           fi
-          echo "✓ ${STACK2}-final.yaml is YAML format (no silent format conversion)"
 
           # Verify resource mappings JSON was written
-          MAPPINGS_FILE="$TMPDIR/dryrun/${STACK1}-to-${STACK2}-mappings.json"
+          MAPPINGS_FILE="$OUTDIR/dryrun/${STACK1}-to-${STACK2}-mappings.json"
           if [ ! -f "$MAPPINGS_FILE" ]; then
             echo "✗ Missing resource mappings file: ${STACK1}-to-${STACK2}-mappings.json"
-            ls "$TMPDIR/dryrun/" || true
+            ls "$OUTDIR/dryrun/" || true
             exit 1
           fi
           echo "✓ Resource mappings file written"
-          echo "  Contents: $(cat "$MAPPINGS_FILE")"
 
           echo ""
           echo "######### Step 2: Error test - move ALL resources triggers validation failure #########"
@@ -745,25 +743,25 @@ jobs:
           if run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode refactor \
             --resource "${BUCKET}" \
             --resource "${TABLE}" \
-            --template-dir "$TMPDIR/error-test"; then
+            --template-dir "$OUTDIR/error-test"; then
             echo "✗ Expected cfn-teleport to fail (source stack would have 0 resources)"
             exit 1
           fi
           echo "✓ cfn-teleport failed as expected (source template would have 0 resources)"
 
           # Verify error recovery template files were written
-          if [ ! -f "$TMPDIR/error-test/${STACK1}-final.json" ] && \
-             [ ! -f "$TMPDIR/error-test/${STACK1}-final.yaml" ]; then
+          if [ ! -f "$OUTDIR/error-test/${STACK1}-final.json" ] && \
+             [ ! -f "$OUTDIR/error-test/${STACK1}-final.yaml" ]; then
             echo "✗ Error recovery source template file not written to --template-dir"
-            ls "$TMPDIR/error-test/" || true
+            ls "$OUTDIR/error-test/" || true
             exit 1
           fi
           echo "✓ Error recovery source template written on failure"
 
           # Verify error recovery mappings file was written
-          if [ ! -f "$TMPDIR/error-test/${STACK1}-to-${STACK2}-mappings.json" ]; then
+          if [ ! -f "$OUTDIR/error-test/${STACK1}-to-${STACK2}-mappings.json" ]; then
             echo "✗ Error recovery mappings file not written to --template-dir"
-            ls "$TMPDIR/error-test/" || true
+            ls "$OUTDIR/error-test/" || true
             exit 1
           fi
           echo "✓ Error recovery mappings file written on failure"
@@ -850,36 +848,36 @@ jobs:
             return $exit_code
           }
 
-          TMPDIR=/tmp/cfn-teleport-dryrun-import
-          mkdir -p "$TMPDIR/dryrun"
+          OUTDIR=/tmp/cfn-teleport-dryrun-import
+          mkdir -p "$OUTDIR/dryrun"
 
           echo "######### Step 1: Dry-run to generate templates and import spec #########"
           run_cfn_teleport --source "${STACK1}" --target "${STACK2}" --yes --mode import \
             --resource "${BUCKET}" \
             --dry-run \
-            --template-dir "$TMPDIR/dryrun"
+            --template-dir "$OUTDIR/dryrun"
 
           echo "Verifying dry-run output files..."
           # Source stack is JSON → expect .json extensions
           for suffix in retained removed; do
-            FILE="$TMPDIR/dryrun/${STACK1}-${suffix}.json"
+            FILE="$OUTDIR/dryrun/${STACK1}-${suffix}.json"
             if [ ! -f "$FILE" ]; then
               echo "✗ Missing ${STACK1}-${suffix}.json (expected JSON format for JSON source stack)"
-              ls "$TMPDIR/dryrun/" || true
+              ls "$OUTDIR/dryrun/" || true
               exit 1
             fi
-            echo "✓ ${STACK1}-${suffix}.json written (JSON format preserved)"
+            echo "✓ ${STACK1}-${suffix}.json written"
           done
 
           # Target stack is YAML → expect .yaml extensions
           for suffix in import final; do
-            FILE="$TMPDIR/dryrun/${STACK2}-${suffix}.yaml"
+            FILE="$OUTDIR/dryrun/${STACK2}-${suffix}.yaml"
             if [ ! -f "$FILE" ]; then
               echo "✗ Missing ${STACK2}-${suffix}.yaml (expected YAML format for YAML target stack)"
-              ls "$TMPDIR/dryrun/" || true
+              ls "$OUTDIR/dryrun/" || true
               exit 1
             fi
-            echo "✓ ${STACK2}-${suffix}.yaml written (YAML format preserved)"
+            echo "✓ ${STACK2}-${suffix}.yaml written"
 
             # Verify the YAML file is actually YAML (first char is not '{')
             if head -c 1 "$FILE" | grep -q '{'; then
@@ -887,17 +885,15 @@ jobs:
               exit 1
             fi
           done
-          echo "✓ All YAML target files are YAML format (no silent format conversion)"
 
           # Verify import spec JSON was written
-          IMPORT_SPEC="$TMPDIR/dryrun/${STACK2}-import-spec.json"
+          IMPORT_SPEC="$OUTDIR/dryrun/${STACK2}-import-spec.json"
           if [ ! -f "$IMPORT_SPEC" ]; then
             echo "✗ Missing import spec file: ${STACK2}-import-spec.json"
-            ls "$TMPDIR/dryrun/" || true
+            ls "$OUTDIR/dryrun/" || true
             exit 1
           fi
-          echo "✓ Import spec written"
-          echo "  Contents: $(cat "$IMPORT_SPEC")"
+          echo "✓ Import spec written: $IMPORT_SPEC"
 
           echo ""
           echo "######### Step 2: Actual migration using --import-spec (file-based spec input) #########"
