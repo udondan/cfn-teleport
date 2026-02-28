@@ -1,12 +1,32 @@
 #!/bin/bash
 
+height="25"
+width="101"
+# Resize iTerm2 window to match demo.gif dimensions (800x362)
+printf '\033[8;%s;%st' "$height" "$width"
+
 . "$HOME/code/github.com/paxtonhare/demo-magic/demo-magic.sh"
 
-make build
+# Override the prompt rendering function to avoid subshell
+function p() {
+  echo -n "$ "
+  if [[ -z $TYPE_SPEED ]]; then
+    echo -en "$1"
+  else
+    echo -en "$1" | pv -qL $[$TYPE_SPEED+(-2 + RANDOM%5)];
+  fi
+  echo ""
+}
 
 clear
 echo -n "\$ "
 
 sleep 5
 clear
-pei "cfn-teleport"
+
+# Show "cfn-teleport" but actually run the compiled binary
+p "cfn-teleport"
+./target/debug/cfn-teleport || true
+echo -n "\$ "
+
+sleep 5
