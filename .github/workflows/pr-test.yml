@@ -906,7 +906,6 @@ jobs:
   verify-state:
     needs:
       - test-windows
-      - prepare-stacks
       - test-refactor
       - test-import
       - test-rename
