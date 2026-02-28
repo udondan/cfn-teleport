@@ -858,37 +858,37 @@ jobs:
         run: |
           # Add binary to PATH
           $env:Path = "C:\cfn-teleport-bin;$env:Path"
-          
+
           Write-Host "=========================================="
           Write-Host "Testing Windows Binary"
           Write-Host "=========================================="
           Write-Host ""
-          
+
           # Verify binary works
           cfn-teleport --version
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Failed to run cfn-teleport --version"
             exit 1
           }
-          
+
           # Find the actual bucket logical ID from the deployed stack
           Write-Host ""
           Write-Host "====== Finding bucket resource in WindowsTest1 ======"
           $template = aws cloudformation get-template --stack-name CfnTeleportWindowsTest1 --query 'TemplateBody' --output json | ConvertFrom-Json
           $bucketId = $template.Resources.PSObject.Properties.Name | Where-Object { $_ -like "WindowsTestBucket*" }
-          
+
           if (-not $bucketId) {
             Write-Error "Could not find WindowsTestBucket resource in stack"
             aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus]' --output table
             exit 1
           }
-          
+
           Write-Host "Found bucket resource: $bucketId"
-          
+
           Write-Host ""
           Write-Host "====== Verifying bucket exists in AWS ======"
           aws cloudformation list-stack-resources --stack-name CfnTeleportWindowsTest1 --query 'StackResourceSummaries[*].[LogicalResourceId,ResourceType,ResourceStatus,PhysicalResourceId]' --output table
-          
+
           Write-Host ""
           Write-Host "====== TEST: Move bucket from WindowsTest1 to WindowsTest2 ======"
           cfn-teleport --source CfnTeleportWindowsTest1 --target CfnTeleportWindowsTest2 --yes --mode refactor --resource $bucketId
@@ -896,10 +896,10 @@ jobs:
             Write-Error "Failed to move bucket to WindowsTest2"
             exit 1
           }
-          
+
           Write-Host ""
           Write-Host "✅ Bucket moved successfully to WindowsTest2"
-          
+
           Write-Host ""
           Write-Host "====== TEST: Move bucket back to WindowsTest1 ======"
           cfn-teleport --source CfnTeleportWindowsTest2 --target CfnTeleportWindowsTest1 --yes --mode refactor --resource $bucketId
@@ -907,10 +907,10 @@ jobs:
             Write-Error "Failed to move bucket back to WindowsTest1"
             exit 1
           }
-          
+
           Write-Host ""
           Write-Host "✅ Bucket moved back successfully to WindowsTest1"
-          
+
           Write-Host ""
           Write-Host "=========================================="
           Write-Host "✅ All Windows binary tests passed!"
@@ -1011,7 +1011,8 @@ jobs:
 
   # Delete stacks in parallel (only if verification failed)
   delete-stacks:
-    needs: [prepare-stacks, verify-state]
+    needs:
+      - verify-state
     if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     strategy:
@@ -1030,10 +1031,10 @@ jobs:
         run: |
           echo "Deleting stack: ${{ matrix.stack }}"
           aws cloudformation delete-stack --stack-name ${{ matrix.stack }} || true
-          
+
           echo "Waiting for deletion to complete..."
           aws cloudformation wait stack-delete-complete --stack-name ${{ matrix.stack }} || true
-          
+
           echo "✅ Stack ${{ matrix.stack }} deleted"
         env:
           AWS_DEFAULT_REGION: us-east-1
@@ -1042,7 +1043,8 @@ jobs:
 
   # Cleanup remaining resources (runs after parallel stack deletion)
   cleanup-resources:
-    needs: [prepare-stacks, verify-state, delete-stacks]
+    needs:
+      - delete-stacks
     if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     steps:
@@ -1060,40 +1062,13 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-  # Summary job for stack preservation
-  cleanup-summary:
-    needs: [prepare-stacks, verify-state]
-    if: always() && needs.prepare-stacks.result != 'skipped'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Report cleanup status
-        run: |
-          if [ "${{ needs.verify-state.outputs.state_valid }}" = "true" ]; then
-            echo "=========================================="
-            echo "✅ Test stacks preserved for next CI run"
-            echo "=========================================="
-            echo "This saves ~3-4 minutes on next pipeline run!"
-          else
-            echo "=========================================="
-            echo "⚠️  Stacks destroyed and resources cleaned up"
-            echo "=========================================="
-            echo "Next run will recreate stacks from scratch"
-          fi
-
   report-status:
     name: success
     if: ${{ ! failure() }}
     runs-on: ubuntu-latest
     needs:
-      - build
-      - build-windows
-      - prepare-stacks
-      - test-refactor
-      - test-import
-      - test-rename
-      - test-windows
+      - cleanup-resources
       - verify-state
-      - cleanup-summary
     steps:
       - name: Report success
         run: echo 'Success'
