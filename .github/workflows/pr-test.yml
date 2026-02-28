@@ -90,6 +90,181 @@ jobs:
           path: ~/.cargo/bin/cfn-teleport
           retention-days: 1
 
+  # Build Windows binary and validate embedded metadata
+  build-windows:
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Update local toolchain
+        run: rustup update
+
+      - name: Install stable toolchain
+        run: |
+          rustup install stable
+          rustup default stable
+
+      - name: Toolchain info
+        run: |
+          cargo --version --verbose
+          rustc --version
+
+      - name: Rust dependency cache
+        uses: actions/cache@v5
+        with:
+          path: target
+          key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-stable-target-
+
+      - name: Build Windows binary
+        run: cargo build --release
+
+      - name: Validate Windows executable metadata
+        shell: pwsh
+        run: |
+          Write-Host "=========================================="
+          Write-Host "Validating Windows Executable Metadata"
+          Write-Host "=========================================="
+          Write-Host ""
+
+          # Parse expected version from Cargo.toml
+          $cargoToml = Get-Content "Cargo.toml" -Raw
+          if ($cargoToml -match 'version\s*=\s*"([^"]+)"') {
+              $expectedVersion = $matches[1]
+              Write-Host "Expected version from Cargo.toml: $expectedVersion"
+          } else {
+              Write-Host "ERROR: Could not parse version from Cargo.toml"
+              exit 1
+          }
+
+          # Parse expected description from Cargo.toml
+          if ($cargoToml -match 'description\s*=\s*"([^"]+)"') {
+              $expectedDescription = $matches[1]
+              Write-Host "Expected description from Cargo.toml: $expectedDescription"
+          } else {
+              Write-Host "ERROR: Could not parse description from Cargo.toml"
+              exit 1
+          }
+
+          # Parse expected authors from Cargo.toml
+          if ($cargoToml -match 'authors\s*=\s*\[([^\]]+)\]') {
+              $authorsMatch = $matches[1]
+              # Extract first author (remove quotes and whitespace)
+              if ($authorsMatch -match '"([^"]+)"') {
+                  $expectedCompany = $matches[1]
+                  Write-Host "Expected company name from Cargo.toml: $expectedCompany"
+              } else {
+                  Write-Host "ERROR: Could not parse authors from Cargo.toml"
+                  exit 1
+              }
+          } else {
+              Write-Host "ERROR: Could not find authors in Cargo.toml"
+              exit 1
+          }
+
+          # Parse expected license from Cargo.toml
+          if ($cargoToml -match 'license\s*=\s*"([^"]+)"') {
+              $expectedLicense = $matches[1]
+              Write-Host "Expected license from Cargo.toml: $expectedLicense"
+          } else {
+              Write-Host "ERROR: Could not parse license from Cargo.toml"
+              exit 1
+          }
+
+          # Construct expected copyright string
+          $expectedCopyright = "Copyright © $expectedCompany. Licensed under $expectedLicense"
+          Write-Host "Expected copyright: $expectedCopyright"
+          Write-Host ""
+
+          # Read metadata from the compiled .exe
+          $exePath = "target\release\cfn-teleport.exe"
+          if (-not (Test-Path $exePath)) {
+              Write-Host "ERROR: Binary not found at $exePath"
+              exit 1
+          }
+
+          Write-Host "Reading metadata from: $exePath"
+          $versionInfo = (Get-Item $exePath).VersionInfo
+
+          # Validate all metadata fields
+          $allValid = $true
+
+          # 1. FileVersion
+          if ($versionInfo.FileVersion -ne $expectedVersion) {
+              Write-Host "❌ FileVersion mismatch: expected '$expectedVersion', got '$($versionInfo.FileVersion)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ FileVersion: $($versionInfo.FileVersion)"
+          }
+
+          # 2. ProductVersion
+          if ($versionInfo.ProductVersion -ne $expectedVersion) {
+              Write-Host "❌ ProductVersion mismatch: expected '$expectedVersion', got '$($versionInfo.ProductVersion)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ ProductVersion: $($versionInfo.ProductVersion)"
+          }
+
+          # 3. FileDescription
+          if ($versionInfo.FileDescription -ne $expectedDescription) {
+              Write-Host "❌ FileDescription mismatch: expected '$expectedDescription', got '$($versionInfo.FileDescription)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ FileDescription: $($versionInfo.FileDescription)"
+          }
+
+          # 4. ProductName
+          if ($versionInfo.ProductName -ne "cfn-teleport") {
+              Write-Host "❌ ProductName mismatch: expected 'cfn-teleport', got '$($versionInfo.ProductName)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ ProductName: $($versionInfo.ProductName)"
+          }
+
+          # 5. CompanyName
+          if ($versionInfo.CompanyName -ne $expectedCompany) {
+              Write-Host "❌ CompanyName mismatch: expected '$expectedCompany', got '$($versionInfo.CompanyName)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ CompanyName: $($versionInfo.CompanyName)"
+          }
+
+          # 6. LegalCopyright
+          if ($versionInfo.LegalCopyright -ne $expectedCopyright) {
+              Write-Host "❌ LegalCopyright mismatch: expected '$expectedCopyright', got '$($versionInfo.LegalCopyright)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ LegalCopyright: $($versionInfo.LegalCopyright)"
+          }
+
+          # 7. OriginalFilename
+          if ($versionInfo.OriginalFilename -ne "cfn-teleport.exe") {
+              Write-Host "❌ OriginalFilename mismatch: expected 'cfn-teleport.exe', got '$($versionInfo.OriginalFilename)'"
+              $allValid = $false
+          } else {
+              Write-Host "✅ OriginalFilename: $($versionInfo.OriginalFilename)"
+          }
+
+          Write-Host ""
+          if ($allValid) {
+              Write-Host "=========================================="
+              Write-Host "✅ All metadata fields validated successfully!"
+              Write-Host "=========================================="
+              exit 0
+          } else {
+              Write-Host "=========================================="
+              Write-Host "❌ Metadata validation failed!"
+              Write-Host "=========================================="
+              exit 1
+          }
+
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
     needs: changes
@@ -777,6 +952,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - build
+      - build-windows
       - prepare-stacks
       - test-refactor
       - test-import
