@@ -1,3 +1,4 @@
+use aws_config::retry::RetryConfig;
 use aws_config::BehaviorVersion;
 use aws_sdk_cloudformation as cloudformation;
 use aws_sdk_cloudformation::error::ProvideErrorMetadata;
@@ -235,7 +236,16 @@ async fn run() -> Result<(), Box<dyn Error>> {
         })?;
     }
 
-    let config = aws_config::load_defaults(BehaviorVersion::v2026_01_12()).await;
+    // Configure retry with 3 retries (4 total attempts), exponential backoff
+    let retry_config = RetryConfig::standard()
+        .with_max_attempts(4) // 1 initial + 3 retries
+        .with_initial_backoff(std::time::Duration::from_secs(1))
+        .with_max_backoff(std::time::Duration::from_secs(4));
+
+    let config = aws_config::defaults(BehaviorVersion::v2026_01_12())
+        .retry_config(retry_config)
+        .load()
+        .await;
     let client = cloudformation::Client::new(&config);
 
     // Try to get stacks and handle credential errors specifically
@@ -1273,6 +1283,48 @@ fn validate_output_directory(path: &Path) -> Result<PathBuf, Box<dyn Error>> {
 }
 
 // End of Directory and Path Validation
+// ============================================================================
+
+// ============================================================================
+// AWS Error Formatting
+// ============================================================================
+
+/// Formats a CloudFormation API error with all available details.
+///
+/// Extracts error code and message from AWS SDK errors to provide actionable
+/// information to users instead of generic "service error" messages.
+///
+/// # Arguments
+/// * `operation` - Description of the operation that failed (e.g., "create stack refactor")
+/// * `err` - The CloudFormation SDK error
+///
+/// # Returns
+/// A formatted error string with all available details
+///
+/// # Example
+/// ```ignore
+/// .map_err(|e| format_cfn_error("create change set", &e))?;
+/// ```
+fn format_cfn_error(operation: &str, err: &impl ProvideErrorMetadata) -> String {
+    let mut parts = vec![format!("Failed to {}", operation)];
+
+    if let Some(code) = err.code() {
+        parts.push(format!("Error code: {}", code));
+    }
+
+    if let Some(msg) = err.message() {
+        parts.push(format!("Message: {}", msg));
+    }
+
+    // If we only have the operation description, add a note about lack of details
+    if parts.len() == 1 {
+        parts.push("(No additional error details provided by AWS)".to_string());
+    }
+
+    parts.join("\n")
+}
+
+// End of AWS Error Formatting
 // ============================================================================
 
 // ============================================================================
@@ -2533,7 +2585,7 @@ async fn refactor_stack_resources(
         .set_resource_mappings(Some(resource_mappings))
         .send()
         .await
-        .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
+        .map_err(|e| format_cfn_error("create stack refactor", &e))?;
 
     let refactor_id = create_result
         .stack_refactor_id()
@@ -2546,7 +2598,7 @@ async fn refactor_stack_resources(
             .stack_refactor_id(refactor_id)
             .send()
             .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+            .map_err(|e| format_cfn_error("describe stack refactor", &e))?;
 
         match status.status().map(|s| s.as_str()) {
             Some("CREATE_COMPLETE") => {
@@ -2572,7 +2624,7 @@ async fn refactor_stack_resources(
         .stack_refactor_id(refactor_id)
         .send()
         .await
-        .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+        .map_err(|e| format_cfn_error("execute stack refactor", &e))?;
 
     // Wait for execution to complete
     loop {
@@ -2581,7 +2633,7 @@ async fn refactor_stack_resources(
             .stack_refactor_id(refactor_id)
             .send()
             .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+            .map_err(|e| format_cfn_error("describe stack refactor", &e))?;
 
         match status.execution_status().map(|s| s.as_str()) {
             Some("EXECUTE_COMPLETE") => {
@@ -2782,7 +2834,7 @@ async fn refactor_stack_resources_cross_stack(
         .set_resource_mappings(Some(resource_mappings))
         .send()
         .await
-        .map_err(|e| format!("Failed to create stack refactor: {}", e))?;
+        .map_err(|e| format_cfn_error("create stack refactor", &e))?;
 
     let refactor_id = create_result
         .stack_refactor_id()
@@ -2795,7 +2847,7 @@ async fn refactor_stack_resources_cross_stack(
             .stack_refactor_id(refactor_id)
             .send()
             .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+            .map_err(|e| format_cfn_error("describe stack refactor", &e))?;
 
         match status.status().map(|s| s.as_str()) {
             Some("CREATE_COMPLETE") => {
@@ -2821,7 +2873,7 @@ async fn refactor_stack_resources_cross_stack(
         .stack_refactor_id(refactor_id)
         .send()
         .await
-        .map_err(|e| format!("Failed to execute stack refactor: {}", e))?;
+        .map_err(|e| format_cfn_error("execute stack refactor", &e))?;
 
     // Step 10: Wait for execution to complete
     loop {
@@ -2830,7 +2882,7 @@ async fn refactor_stack_resources_cross_stack(
             .stack_refactor_id(refactor_id)
             .send()
             .await
-            .map_err(|e| format!("Failed to describe stack refactor: {}", e))?;
+            .map_err(|e| format_cfn_error("describe stack refactor", &e))?;
 
         match status.execution_status().map(|s| s.as_str()) {
             Some("EXECUTE_COMPLETE") => {
