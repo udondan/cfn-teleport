@@ -653,6 +653,9 @@ jobs:
             arch=("aarch64" "arm" "armv7h" "i686" "x86_64")
             url="${{ github.server_url }}/${{ github.repository }}"
             license=("APACHE")
+            conflicts=("cfn-teleport")
+            provides=("cfn-teleport")
+            replaces=("cfn-teleport")
 
             # Source files
             source_aarch64=("${url}/releases/download/v${pkgver}/cfn-teleport-aarch64-unknown-linux-musl-v${pkgver}.tar.gz")
