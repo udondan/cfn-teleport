@@ -28,37 +28,21 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 64-bit version of the x86 architecture for Linux-based systems with the GNU C Library (glibc)
-          - TARGET: x86_64-unknown-linux-gnu
+          # 64-bit version of the x86 architecture for Linux-based systems with musl libc
+          - TARGET: x86_64-unknown-linux-musl
             OS: ubuntu-latest
 
-          # disabled, because ring package does not support musl
-          #- TARGET: x86_64-unknown-linux-musl # test in an alpine container on a mac
-          #  OS: ubuntu-latest
-
-          # 64-bit version of the ARM architecture for Linux-based systems with the GNU C Library (glibc)
-          - TARGET: aarch64-unknown-linux-gnu # tested on aws t4g.nano
+          # 64-bit version of the ARM architecture for Linux-based systems with musl libc
+          - TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
             OS: ubuntu-latest
 
-          # disabled, because ring package does not support musl
-          #- TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
-          #  OS: ubuntu-latest
-
-          # 32-bit version of the ARM architecture for Linux-based systems with the GNU C Library (glibc) and hardware floating-point support
-          - TARGET: armv7-unknown-linux-gnueabihf
+          # 32-bit version of the ARM architecture for Linux-based systems with musl libc and hardware floating-point support
+          - TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4
             OS: ubuntu-latest
 
-          # disabled, because ring package does not support musl
-          #- TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4, not tested
-          #  OS: ubuntu-latest
-
-          # 32-bit version of the ARM architecture for Linux-based systems with the GNU C Library (glibc) and hardware floating-point support
-          - TARGET: arm-unknown-linux-gnueabihf
+          # 32-bit version of the ARM architecture for Linux-based systems with musl libc and hardware floating-point support
+          - TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1
             OS: ubuntu-latest
-
-          # disabled, because ring package does not support musl
-          #- TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1, not tested
-          #  OS: ubuntu-latest
 
           # 64-bit version of the x86 architecture for macOS
           - TARGET: x86_64-apple-darwin
@@ -80,8 +64,8 @@ jobs:
           - TARGET: i686-pc-windows-msvc
             OS: windows-latest
 
-          # 32-bit version of the x86 architecture for Linux-based systems with the GNU C Library (glibc)
-          - TARGET: i686-unknown-linux-gnu
+          # 32-bit version of the x86 architecture for Linux-based systems with musl libc
+          - TARGET: i686-unknown-linux-musl
             OS: ubuntu-latest
 
     runs-on: ${{ matrix.OS }}
@@ -213,8 +197,206 @@ jobs:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
           ARTIFACT: ${{ steps.compress.outputs.ARTIFACT }}
 
-  cargo-publish:
+  test-binaries:
     needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true  # Abort on first failure
+      matrix:
+        include:
+          # Linux x86_64 - test on multiple distros (most common)
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: ubuntu:22.04
+            distro: Ubuntu 22.04
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: ubuntu:24.04
+            distro: Ubuntu 24.04
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: debian:12
+            distro: Debian 12
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: alpine:latest
+            distro: Alpine Linux
+          
+          # Linux i686
+          - target: i686-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: i386/ubuntu:22.04
+            distro: Ubuntu 22.04 i386
+          - target: i686-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: i386/alpine:latest
+            distro: Alpine Linux i386
+          
+          # Linux ARM64
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: ubuntu:22.04
+            distro: Ubuntu 22.04 ARM64
+            platform: linux/arm64
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: alpine:latest
+            distro: Alpine Linux ARM64
+            platform: linux/arm64
+          
+          # Linux ARMv7
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-latest
+            test_image: arm32v7/ubuntu:22.04
+            distro: Ubuntu 22.04 ARMv7
+            platform: linux/arm/v7
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-latest
+            test_image: arm32v7/alpine:latest
+            distro: Alpine Linux ARMv7
+            platform: linux/arm/v7
+          
+          # Linux ARM
+          - target: arm-unknown-linux-musleabihf
+            os: ubuntu-latest
+            test_image: arm32v6/ubuntu:22.04
+            distro: Ubuntu 22.04 ARM
+            platform: linux/arm/v6
+          
+          # macOS Intel
+          - target: x86_64-apple-darwin
+            os: macos-13  # Intel runner
+            distro: macOS 13 Intel
+          
+          # macOS Apple Silicon (also test on Intel with Rosetta)
+          - target: aarch64-apple-darwin
+            os: macos-13
+            distro: macOS 13 Intel (Rosetta 2)
+          - target: aarch64-apple-darwin
+            os: macos-14  # M1 runner
+            distro: macOS 14 ARM
+          
+          # Windows MSVC
+          - target: x86_64-pc-windows-msvc
+            os: windows-2019
+            distro: Windows Server 2019
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
+            distro: Windows Server 2022
+          - target: i686-pc-windows-msvc
+            os: windows-2022
+            distro: Windows Server 2022 32-bit
+          
+          # Windows GNU
+          - target: x86_64-pc-windows-gnu
+            os: windows-2022
+            distro: Windows Server 2022 (GNU)
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: artifacts
+      
+      - name: Set up QEMU for ARM emulation (Linux only)
+        if: matrix.platform != '' && runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: ${{ matrix.platform }}
+      
+      - name: Extract and test binary (Linux in Docker)
+        if: runner.os == 'Linux'
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+          
+          TARBALL="artifacts/cfn-teleport-${{ matrix.target }}-${VERSION}.tar.gz"
+          tar -xzf "${TARBALL}"
+          chmod +x cfn-teleport
+          
+          echo "Testing binary in ${{ matrix.distro }}..."
+          docker run --rm \
+            ${{ matrix.platform && format('--platform {0}', matrix.platform) || '' }} \
+            -v "$PWD/cfn-teleport:/usr/local/bin/cfn-teleport:ro" \
+            ${{ matrix.test_image }} \
+            sh -c '
+              echo "=== Testing cfn-teleport ==="
+              echo "Distribution: ${{ matrix.distro }}"
+              echo ""
+              
+              echo "1. Version check:"
+              /usr/local/bin/cfn-teleport --version
+              
+              echo ""
+              echo "2. Help output:"
+              /usr/local/bin/cfn-teleport --help | head -10
+              
+              echo ""
+              echo "3. Binary information:"
+              file /usr/local/bin/cfn-teleport 2>/dev/null || echo "file command not available"
+              
+              echo ""
+              echo "✅ All tests passed for ${{ matrix.distro }}"
+            '
+      
+      - name: Extract and test binary (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+          
+          hdiutil attach "artifacts/cfn-teleport-${{ matrix.target }}-${VERSION}.dmg"
+          cp "/Volumes/cfn-teleport/cfn-teleport" ./cfn-teleport
+          hdiutil detach "/Volumes/cfn-teleport"
+          chmod +x cfn-teleport
+          
+          echo "=== Testing cfn-teleport on ${{ matrix.distro }} ==="
+          
+          echo "1. Version check:"
+          ./cfn-teleport --version
+          
+          echo ""
+          echo "2. Help output:"
+          ./cfn-teleport --help | head -10
+          
+          echo ""
+          echo "3. Binary information:"
+          file cfn-teleport
+          
+          echo ""
+          echo "✅ All tests passed for ${{ matrix.distro }}"
+      
+      - name: Extract and test binary (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+          
+          BINARY="artifacts/cfn-teleport-${{ matrix.target }}-${VERSION}.exe"
+          chmod +x "${BINARY}"
+          
+          echo "=== Testing cfn-teleport on ${{ matrix.distro }} ==="
+          
+          echo "1. Version check:"
+          "${BINARY}" --version
+          
+          echo ""
+          echo "2. Help output:"
+          "${BINARY}" --help | head -10
+          
+          echo ""
+          echo "✅ All tests passed for ${{ matrix.distro }}"
+
+  cargo-publish:
+    needs: test-binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -229,9 +411,9 @@ jobs:
           path: |
             ~/.cargo/registry
             ./target
-          key: ubuntu-latest-x86_64-unknown-linux-gnu-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ubuntu-latest-x86_64-unknown-linux-musl-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ubuntu-latest-x86_64-unknown-linux-gnu-target-
+            ubuntu-latest-x86_64-unknown-linux-musl-target-
 
       - name: Publish to crates.io
         run: |
@@ -244,7 +426,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   homebrew-publish:
-    needs: build
+    needs: test-binaries
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -267,10 +449,10 @@ jobs:
 
           AARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
           AINTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
-          LARM32=($(shasum -a 256 artifacts/cfn-teleport-arm-unknown-linux-gnueabihf-${VERSION}.tar.gz))
-          LARM64=($(shasum -a 256 artifacts/cfn-teleport-aarch64-unknown-linux-gnu-${VERSION}.tar.gz))
-          LINTEL32=($(shasum -a 256 artifacts/cfn-teleport-i686-unknown-linux-gnu-${VERSION}.tar.gz))
-          LINTEL64=($(shasum -a 256 artifacts/cfn-teleport-x86_64-unknown-linux-gnu-${VERSION}.tar.gz))
+          LARM32=($(shasum -a 256 artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz))
+          LARM64=($(shasum -a 256 artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz))
+          LINTEL32=($(shasum -a 256 artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz))
+          LINTEL64=($(shasum -a 256 artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz))
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
@@ -347,7 +529,7 @@ jobs:
             end
 
   aur-publish:
-    needs: build
+    needs: test-binaries
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
@@ -389,11 +571,11 @@ jobs:
             VERSION="v9.9.9"
           fi
 
-          ARM=($(sha256sum ../artifacts/cfn-teleport-arm-unknown-linux-gnueabihf-${VERSION}.tar.gz))
-          X86_64=($(sha256sum ../artifacts/cfn-teleport-x86_64-unknown-linux-gnu-${VERSION}.tar.gz))
-          AARCH64=($(sha256sum ../artifacts/cfn-teleport-aarch64-unknown-linux-gnu-${VERSION}.tar.gz))
-          ARMV7H=($(sha256sum ../artifacts/cfn-teleport-armv7-unknown-linux-gnueabihf-${VERSION}.tar.gz))
-          I686=($(sha256sum ../artifacts/cfn-teleport-i686-unknown-linux-gnu-${VERSION}.tar.gz))
+          ARM=($(sha256sum ../artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz))
+          X86_64=($(sha256sum ../artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz))
+          AARCH64=($(sha256sum ../artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz))
+          ARMV7H=($(sha256sum ../artifacts/cfn-teleport-armv7-unknown-linux-musleabihf-${VERSION}.tar.gz))
+          I686=($(sha256sum ../artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz))
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
@@ -443,11 +625,11 @@ jobs:
             license=("APACHE")
 
             # Source files
-            source_aarch64=("${url}/releases/download/v${pkgver}/cfn-teleport-aarch64-unknown-linux-gnu-v${pkgver}.tar.gz")
-            source_arm=("${url}/releases/download/v${pkgver}/cfn-teleport-arm-unknown-linux-gnueabihf-v${pkgver}.tar.gz")
-            source_armv7h=("${url}/releases/download/v${pkgver}/cfn-teleport-armv7-unknown-linux-gnueabihf-v${pkgver}.tar.gz")
-            source_i686=("${url}/releases/download/v${pkgver}/cfn-teleport-i686-unknown-linux-gnu-v${pkgver}.tar.gz")
-            source_x86_64=("${url}/releases/download/v${pkgver}/cfn-teleport-x86_64-unknown-linux-gnu-v${pkgver}.tar.gz")
+            source_aarch64=("${url}/releases/download/v${pkgver}/cfn-teleport-aarch64-unknown-linux-musl-v${pkgver}.tar.gz")
+            source_arm=("${url}/releases/download/v${pkgver}/cfn-teleport-arm-unknown-linux-musleabihf-v${pkgver}.tar.gz")
+            source_armv7h=("${url}/releases/download/v${pkgver}/cfn-teleport-armv7-unknown-linux-musleabihf-v${pkgver}.tar.gz")
+            source_i686=("${url}/releases/download/v${pkgver}/cfn-teleport-i686-unknown-linux-musl-v${pkgver}.tar.gz")
+            source_x86_64=("${url}/releases/download/v${pkgver}/cfn-teleport-x86_64-unknown-linux-musl-v${pkgver}.tar.gz")
 
             # Checksums
             sha256sums_aarch64=("{{ aarch64_sha }}")
@@ -465,11 +647,11 @@ jobs:
             package() {
               # Extract the package based on the current architecture
               case "$CARCH" in
-                'aarch64') tar -xzf "${srcdir}/cfn-teleport-aarch64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
-                'arm')     tar -xzf "${srcdir}/cfn-teleport-arm-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
-                'armv7h')  tar -xzf "${srcdir}/cfn-teleport-armv7-unknown-linux-gnueabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
-                'i686')    tar -xzf "${srcdir}/cfn-teleport-i686-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
-                'x86_64')  tar -xzf "${srcdir}/cfn-teleport-x86_64-unknown-linux-gnu-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'aarch64') tar -xzf "${srcdir}/cfn-teleport-aarch64-unknown-linux-musl-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'arm')     tar -xzf "${srcdir}/cfn-teleport-arm-unknown-linux-musleabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'armv7h')  tar -xzf "${srcdir}/cfn-teleport-armv7-unknown-linux-musleabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'i686')    tar -xzf "${srcdir}/cfn-teleport-i686-unknown-linux-musl-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'x86_64')  tar -xzf "${srcdir}/cfn-teleport-x86_64-unknown-linux-musl-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
               esac
 
               # Move the binary to /usr/bin
