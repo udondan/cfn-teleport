@@ -261,8 +261,8 @@ jobs:
           
           # macOS Intel
           - target: x86_64-apple-darwin
-            os: macos-13  # Intel runner
-            distro: macOS 13 Intel
+            os: macos-12  # Intel runner
+            distro: macOS 12 Intel
           
           # macOS Apple Silicon (native ARM + x86_64 under Rosetta)
           - target: x86_64-apple-darwin
