@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.48.0](https://github.com/udondan/cfn-teleport/compare/v0.47.0...v0.48.0) (2026-03-01)
+
+
+### Features
+
+* add retry logic and detailed error messages for CloudFormation API calls ([#1304](https://github.com/udondan/cfn-teleport/issues/1304)) ([62c40c2](https://github.com/udondan/cfn-teleport/commit/62c40c21b827b35dc6c108c975cc50877c80d85b))
+* add short option -m for --mode flag ([#1301](https://github.com/udondan/cfn-teleport/issues/1301)) ([7f5a741](https://github.com/udondan/cfn-teleport/commit/7f5a74186405eafbdee6a4550515b96b2cb7e2f0))
+* add support for YAML CloudFormation templates ([#1267](https://github.com/udondan/cfn-teleport/issues/1267)) ([1536f34](https://github.com/udondan/cfn-teleport/commit/1536f34b13d2df16eb320c20ee2f072e67970da0))
+* add template I/O support for export and file-based migrations ([#1302](https://github.com/udondan/cfn-teleport/issues/1302)) ([a97f0fe](https://github.com/udondan/cfn-teleport/commit/a97f0fe29260121e48ba6a06c879ab3ee7f90b09))
+* add Windows executable metadata ([#1297](https://github.com/udondan/cfn-teleport/issues/1297)) ([3c06fa6](https://github.com/udondan/cfn-teleport/commit/3c06fa6a078f223f34f8034110b47c9cbdc265b6))
+* improve dependency validation error messages ([#1265](https://github.com/udondan/cfn-teleport/issues/1265)) ([d006a80](https://github.com/udondan/cfn-teleport/commit/d006a8016239b9de657d444e5a815bc5f5f3be98))
+* migrate Linux builds to musl for better compatibility ([#1308](https://github.com/udondan/cfn-teleport/issues/1308)) ([d1ef351](https://github.com/udondan/cfn-teleport/commit/d1ef3516cb1d322b0f7a136d765b099fbd4cce85))
+
+
+### Bug Fixes
+
+* change MultiSelect unchecked item color from purple to grey ([#1287](https://github.com/udondan/cfn-teleport/issues/1287)) ([e1cb9cb](https://github.com/udondan/cfn-teleport/commit/e1cb9cb0f41d286e7e4c4eccc09a4075b9ce1560))
+
 ## [0.47.0](https://github.com/udondan/cfn-teleport/compare/v0.46.0...v0.47.0) (2026-02-22)
 
 
