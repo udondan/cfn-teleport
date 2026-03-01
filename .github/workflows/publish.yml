@@ -255,8 +255,8 @@ jobs:
           # Linux ARM
           - target: arm-unknown-linux-musleabihf
             os: ubuntu-latest
-            test_image: arm32v6/ubuntu:22.04
-            distro: Ubuntu 22.04 ARM
+            test_image: arm32v6/alpine:latest
+            distro: Alpine Linux ARM v6
             platform: linux/arm/v6
           
           # macOS Intel
