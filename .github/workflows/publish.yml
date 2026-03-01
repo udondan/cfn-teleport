@@ -112,10 +112,6 @@ jobs:
             sudo apt-get install musl-tools
           fi
 
-          if [[ "${TARGET}" == "i686-unknown-linux-gnu" ]]; then
-            sudo apt-get install gcc-multilib
-          fi
-
       - name: Install rust target
         run: rustup target add "${TARGET}"
 
@@ -268,12 +264,12 @@ jobs:
             os: macos-13  # Intel runner
             distro: macOS 13 Intel
           
-          # macOS Apple Silicon (also test on Intel with Rosetta)
+          # macOS Apple Silicon (native ARM + x86_64 under Rosetta)
+          - target: x86_64-apple-darwin
+            os: macos-14  # ARM runner, runs x86_64 via Rosetta 2
+            distro: macOS 14 ARM (Rosetta x86_64)
           - target: aarch64-apple-darwin
-            os: macos-13
-            distro: macOS 13 Intel (Rosetta 2)
-          - target: aarch64-apple-darwin
-            os: macos-14  # M1 runner
+            os: macos-14  # ARM runner
             distro: macOS 14 ARM
           
           # Windows MSVC
@@ -300,7 +296,7 @@ jobs:
           path: artifacts
       
       - name: Set up QEMU for ARM emulation (Linux only)
-        if: matrix.platform != '' && runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.platform != ''
         uses: docker/setup-qemu-action@v3
         with:
           platforms: ${{ matrix.platform }}
@@ -323,6 +319,7 @@ jobs:
             -v "$PWD/cfn-teleport:/usr/local/bin/cfn-teleport:ro" \
             ${{ matrix.test_image }} \
             sh -c '
+              set -e
               echo "=== Testing cfn-teleport ==="
               echo "Distribution: ${{ matrix.distro }}"
               echo ""
@@ -332,7 +329,8 @@ jobs:
               
               echo ""
               echo "2. Help output:"
-              /usr/local/bin/cfn-teleport --help | head -10
+              /usr/local/bin/cfn-teleport --help > /tmp/help.txt
+              head -10 /tmp/help.txt
               
               echo ""
               echo "3. Binary information:"
