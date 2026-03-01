@@ -119,19 +119,19 @@ jobs:
       - name: Install rust target
         run: rustup target add "${TARGET}"
 
-      - name: Install bindgen-cli for ARM cross-compilation
-        if: startsWith(matrix.TARGET, 'arm')
+      - name: Install bindgen-cli for cross-compilation
+        if: startsWith(matrix.TARGET, 'arm') || contains(matrix.TARGET, 'musl')
         run: cargo install --force --locked bindgen-cli
 
       - name: Run build
         run: cargo build --release --verbose --target "${TARGET}"
         env:
           # Enable external bindgen for aws-lc-sys when cross-compiling
-          AWS_LC_SYS_EXTERNAL_BINDGEN: ${{ startsWith(matrix.TARGET, 'arm') && '1' || '' }}
+          AWS_LC_SYS_EXTERNAL_BINDGEN: ${{ (startsWith(matrix.TARGET, 'arm') || contains(matrix.TARGET, 'musl')) && '1' || '' }}
           # Set the target for cross-compilation linkers
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: ${{ matrix.TARGET == 'armv7-unknown-linux-gnueabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
-          CARGO_TARGET_ARM_UNKNOWN_LINUX_GNUEABIHF_LINKER: ${{ matrix.TARGET == 'arm-unknown-linux-gnueabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: ${{ matrix.TARGET == 'aarch64-unknown-linux-gnu' && 'aarch64-linux-gnu-gcc' || '' }}
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: ${{ matrix.TARGET == 'armv7-unknown-linux-musleabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
+          CARGO_TARGET_ARM_UNKNOWN_LINUX_MUSLEABIHF_LINKER: ${{ matrix.TARGET == 'arm-unknown-linux-musleabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: ${{ matrix.TARGET == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-gcc' || '' }}
 
       - name: List target
         run: find ./target
