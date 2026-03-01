@@ -82,3 +82,70 @@ check_drift() {
   cd ../..
   return $result
 }
+
+# Verify stack resources match original template
+# Usage: verify_stack "StackName" "TemplatePath"
+verify_stack() {
+  local stack_name="$1"
+  local template_file="$2"
+
+  echo "Checking $stack_name..."
+
+  # Get deployed template - AWS returns TemplateBody as a JSON string or object depending on format
+  # We need to extract it first with jq -r, then parse it
+  if ! aws cloudformation get-template \
+    --stack-name "$stack_name" \
+    --output json > /tmp/aws-response-${stack_name}.json 2>/tmp/aws-error-${stack_name}.txt; then
+    echo "❌ Failed to get deployed template"
+    cat /tmp/aws-error-${stack_name}.txt
+    return 1
+  fi
+
+  # Extract TemplateBody and parse resources
+  if ! jq -r '.TemplateBody' /tmp/aws-response-${stack_name}.json > /tmp/deployed-raw-${stack_name}.txt 2>/tmp/jq1-error-${stack_name}.txt; then
+    echo "❌ Failed to extract TemplateBody"
+    cat /tmp/jq1-error-${stack_name}.txt
+    return 1
+  fi
+
+  # Try parsing as JSON first, fall back to YAML
+  if jq -cS '.Resources | keys | sort' /tmp/deployed-raw-${stack_name}.txt > /tmp/deployed-${stack_name}.json 2>/dev/null; then
+    : # Successfully parsed as JSON
+  else
+    # Must be YAML, convert it (requires yq)
+    if ! yq -o=json '.Resources | keys | sort' /tmp/deployed-raw-${stack_name}.txt > /tmp/deployed-${stack_name}.json 2>/tmp/yq-deployed-error-${stack_name}.txt; then
+      echo "❌ Failed to parse deployed template as YAML"
+      cat /tmp/yq-deployed-error-${stack_name}.txt
+      return 1
+    fi
+  fi
+
+  # Get original template resources (handle both JSON and YAML)
+  if echo "$template_file" | grep -q '\.yaml$'; then
+    # YAML template - use yq to convert to JSON, then extract resources
+    if ! yq -o=json '.Resources | keys | sort' "$template_file" > /tmp/original-${stack_name}.json 2>/tmp/yq-error-${stack_name}.txt; then
+      echo "❌ Failed to parse YAML template"
+      cat /tmp/yq-error-${stack_name}.txt
+      return 1
+    fi
+  else
+    # JSON template
+    if ! jq -cS '.Resources | keys | sort' "$template_file" > /tmp/original-${stack_name}.json 2>/tmp/jq3-error-${stack_name}.txt; then
+      echo "❌ Failed to parse JSON template"
+      cat /tmp/jq3-error-${stack_name}.txt
+      return 1
+    fi
+  fi
+
+  if diff -q /tmp/original-${stack_name}.json /tmp/deployed-${stack_name}.json > /dev/null 2>&1; then
+    echo "✅ $stack_name resources match original template"
+    return 0
+  else
+    echo "❌ $stack_name resources differ from original template"
+    echo "Expected resources:"
+    cat /tmp/original-${stack_name}.json
+    echo "Actual resources:"
+    cat /tmp/deployed-${stack_name}.json
+    return 1
+  fi
+}
