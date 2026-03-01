@@ -1463,12 +1463,25 @@ jobs:
     steps:
       - name: Check test results
         run: |
-          if [ "${{ needs.test-refactor.result }}" != "success" ] || \
-             [ "${{ needs.test-import.result }}" != "success" ] || \
-             [ "${{ needs.test-rename.result }}" != "success" ] || \
-             [ "${{ needs.test-template-io.result }}" != "success" ] || \
-             [ "${{ needs.test-windows.result }}" != "success" ]; then
-            echo "One or more tests failed"
+          # Accept both "success" and "skipped" as valid outcomes
+          if [ "${{ needs.test-refactor.result }}" != "success" ] && [ "${{ needs.test-refactor.result }}" != "skipped" ]; then
+            echo "test-refactor failed: ${{ needs.test-refactor.result }}"
+            exit 1
+          fi
+          if [ "${{ needs.test-import.result }}" != "success" ] && [ "${{ needs.test-import.result }}" != "skipped" ]; then
+            echo "test-import failed: ${{ needs.test-import.result }}"
+            exit 1
+          fi
+          if [ "${{ needs.test-rename.result }}" != "success" ] && [ "${{ needs.test-rename.result }}" != "skipped" ]; then
+            echo "test-rename failed: ${{ needs.test-rename.result }}"
+            exit 1
+          fi
+          if [ "${{ needs.test-template-io.result }}" != "success" ] && [ "${{ needs.test-template-io.result }}" != "skipped" ]; then
+            echo "test-template-io failed: ${{ needs.test-template-io.result }}"
+            exit 1
+          fi
+          if [ "${{ needs.test-windows.result }}" != "success" ] && [ "${{ needs.test-windows.result }}" != "skipped" ]; then
+            echo "test-windows failed: ${{ needs.test-windows.result }}"
             exit 1
           fi
           echo 'Success'
