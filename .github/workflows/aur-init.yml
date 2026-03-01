@@ -17,18 +17,18 @@ jobs:
 
       - name: Configure SSH
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
-          
-          cat > ~/.ssh/config <<EOF
-          Host aur.archlinux.org
-            User aur
-            IdentityFile ~/.ssh/id_ed25519
-            PreferredAuthentications publickey
-            StrictHostKeyChecking yes
-          EOF
+          mkdir -p /etc/ssh
+          echo "${SSH_CONF}" > /etc/ssh/ssh_config
+          echo "${{ secrets.AUR_SSH_KEY }}" > /etc/ssh/id_ed25519
+          chmod 600 /etc/ssh/id_ed25519
+          ssh-keyscan aur.archlinux.org >> /etc/ssh/ssh_known_hosts
+        env:
+          SSH_CONF: |
+            Host aur.archlinux.org
+              User aur
+              IdentityFile /etc/ssh/id_ed25519
+              PreferredAuthentications publickey
+              StrictHostKeyChecking yes
 
       - name: Configure git
         run: |
