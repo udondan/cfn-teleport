@@ -112,11 +112,7 @@ verify_stack() {
   if jq -cS '.Resources | keys | sort' /tmp/deployed-raw-${stack_name}.txt > /tmp/deployed-${stack_name}.json 2>/dev/null; then
     : # Successfully parsed as JSON
   else
-    # Must be YAML, convert it
-    if ! command -v yq &> /dev/null; then
-      echo "❌ yq not found. Install with: brew install yq"
-      return 1
-    fi
+    # Must be YAML, convert it (requires yq)
     if ! yq -o=json '.Resources | keys | sort' /tmp/deployed-raw-${stack_name}.txt > /tmp/deployed-${stack_name}.json 2>/tmp/yq-deployed-error-${stack_name}.txt; then
       echo "❌ Failed to parse deployed template as YAML"
       cat /tmp/yq-deployed-error-${stack_name}.txt

@@ -1250,6 +1250,14 @@ jobs:
         working-directory: test/cloudformation
         run: |
           echo "=========================================="
+          echo "Installing yq for YAML template parsing"
+          echo "=========================================="
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+
+          echo ""
+          echo "=========================================="
           echo "Waiting for all stacks to reach stable state"
           echo "=========================================="
           
