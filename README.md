@@ -22,10 +22,10 @@ On MacOS and Linux you can install via [Homebrew](https://brew.sh/):
 brew install udondan/software/cfn-teleport
 ```
 
-On Arch Linux you can install from [AUR](https://aur.archlinux.org/packages/cfn-teleport), e.g.:
+On Arch Linux you can install from [AUR](https://aur.archlinux.org/packages/cfn-teleport-bin), e.g.:
 
 ```bash
-yay -S cfn-teleport
+yay -S cfn-teleport-bin
 ```
 
 On Windows you can install via [Chocolatey](https://community.chocolatey.org/packages/cfn-teleport):

@@ -558,8 +558,8 @@ jobs:
 
       - name: Update PKGBUILD
         run: |
-          git clone "ssh://aur.archlinux.org/cfn-teleport.git" --depth=1
-          cd cfn-teleport
+          git clone "ssh://aur.archlinux.org/cfn-teleport-bin.git" --depth=1
+          cd cfn-teleport-bin
 
           VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -595,6 +595,41 @@ jobs:
           cat .SRCINFO
 
           echo "####################"
+          echo "##### Validating PKGBUILD #####"
+          
+          # Install namcap for validation
+          pacman -S --noconfirm --needed namcap
+          
+          # Run namcap validation
+          namcap PKGBUILD
+          namcap_exit=$?
+          
+          if [ $namcap_exit -ne 0 ]; then
+            echo "ERROR: namcap validation failed with exit code $namcap_exit"
+            echo "This indicates potential issues with the PKGBUILD."
+            echo "Review the warnings above before proceeding."
+            exit 1
+          fi
+          
+          # Verify sources are accessible (only for real releases, not test runs)
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "##### Verifying sources are downloadable #####"
+            chown -R foo:foo .
+            runuser -l foo -c "cd $PWD; makepkg --verifysource"
+            verify_exit=$?
+            chown -R root:root .
+            
+            if [ $verify_exit -ne 0 ]; then
+              echo "ERROR: Source verification failed with exit code $verify_exit"
+              echo "One or more source files could not be downloaded or verified."
+              exit 1
+            fi
+          else
+            echo "##### Skipping source verification for test run (v9.9.9 artifacts don't exist) #####"
+          fi
+          
+          echo "##### Validation passed #####"
+          echo "####################"
           git status
           git diff
           git config --global user.email "${EMAIL}"
@@ -611,13 +646,16 @@ jobs:
             # Maintainer: ${{ secrets.NAME }} <${{ secrets.EMAIL }}>
             # Maintainer: ${{ secrets.NAME2 }} <${{ secrets.EMAIL2 }}>
 
-            pkgname=cfn-teleport
+            pkgname=cfn-teleport-bin
             pkgver={{ version }}
             pkgrel=1
-            pkgdesc="A command-line tool which can move CloudFormation resources between stacks"
+            pkgdesc="A command-line tool for managing CloudFormation resources across and within stacks"
             arch=("aarch64" "arm" "armv7h" "i686" "x86_64")
             url="${{ github.server_url }}/${{ github.repository }}"
             license=("APACHE")
+            conflicts=("cfn-teleport")
+            provides=("cfn-teleport")
+            replaces=("cfn-teleport")
 
             # Source files
             source_aarch64=("${url}/releases/download/v${pkgver}/cfn-teleport-aarch64-unknown-linux-musl-v${pkgver}.tar.gz")
