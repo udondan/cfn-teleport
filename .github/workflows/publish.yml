@@ -98,30 +98,36 @@ jobs:
             # Update package lists to avoid 404 errors
             sudo apt-get update -qq
 
-            # Install common dependencies for aws-lc-sys cross-compilation
-            sudo apt-get install -qq cmake clang llvm-dev libclang-dev
+            # Install docker for cross tool (musl builds)
+            if [[ "${TARGET}" =~ ^.*-musl(eabihf?)$ ]]; then
+              # cross tool uses Docker, which should already be available on GitHub Actions
+              echo "Using cross tool for musl builds"
+            else
+              # Install common dependencies for aws-lc-sys cross-compilation
+              sudo apt-get install -qq cmake clang llvm-dev libclang-dev
 
-            # Install ARM cross-compilation tools only for ARM targets
-            # (gcc-multilib conflicts with crossbuild-essential-*)
-            if [[ "${TARGET}" =~ ^(arm|aarch64).*$ ]]; then
-              sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+              # Install ARM cross-compilation tools only for ARM targets
+              # (gcc-multilib conflicts with crossbuild-essential-*)
+              if [[ "${TARGET}" =~ ^(arm|aarch64).*$ ]]; then
+                sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+              fi
             fi
           fi
 
-          if [[ "${TARGET}" =~ ^.*-musl(eabihf?)$ ]]; then
-            sudo apt-get install musl-tools
-          fi
+      - name: Install cross for musl builds
+        if: contains(matrix.TARGET, 'musl')
+        run: cargo install cross --git https://github.com/cross-rs/cross
 
       - name: Install rust target
         run: rustup target add "${TARGET}"
 
-      - name: Run build
+      - name: Run build (musl with cross)
+        if: contains(matrix.TARGET, 'musl')
+        run: cross build --release --verbose --target "${TARGET}"
+
+      - name: Run build (non-musl)
+        if: ${{ !contains(matrix.TARGET, 'musl') }}
         run: cargo build --release --verbose --target "${TARGET}"
-        env:
-          # Set the target for cross-compilation linkers
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: ${{ matrix.TARGET == 'armv7-unknown-linux-musleabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
-          CARGO_TARGET_ARM_UNKNOWN_LINUX_MUSLEABIHF_LINKER: ${{ matrix.TARGET == 'arm-unknown-linux-musleabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER: ${{ matrix.TARGET == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-gcc' || '' }}
 
       - name: List target
         run: find ./target

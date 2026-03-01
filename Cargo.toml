@@ -38,9 +38,5 @@ features = [
 [dev-dependencies]
 tempfile = "3.26.0"
 
-# Enable bindgen feature for musl cross-compilation support
-[target.'cfg(target_env = "musl")'.dependencies]
-aws-lc-sys = { version = "*", features = ["bindgen"] }
-
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1.12"
