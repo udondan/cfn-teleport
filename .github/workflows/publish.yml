@@ -558,8 +558,8 @@ jobs:
 
       - name: Update PKGBUILD
         run: |
-          git clone "ssh://aur.archlinux.org/cfn-teleport.git" --depth=1
-          cd cfn-teleport
+          git clone "ssh://aur.archlinux.org/cfn-teleport-bin.git" --depth=1
+          cd cfn-teleport-bin
 
           VERSION="${GITHUB_REF_NAME}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -611,10 +611,10 @@ jobs:
             # Maintainer: ${{ secrets.NAME }} <${{ secrets.EMAIL }}>
             # Maintainer: ${{ secrets.NAME2 }} <${{ secrets.EMAIL2 }}>
 
-            pkgname=cfn-teleport
+            pkgname=cfn-teleport-bin
             pkgver={{ version }}
             pkgrel=1
-            pkgdesc="A command-line tool which can move CloudFormation resources between stacks"
+            pkgdesc="A command-line tool for managing CloudFormation resources across and within stacks"
             arch=("aarch64" "arm" "armv7h" "i686" "x86_64")
             url="${{ github.server_url }}/${{ github.repository }}"
             license=("APACHE")

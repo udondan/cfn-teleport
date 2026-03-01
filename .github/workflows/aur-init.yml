@@ -1,0 +1,102 @@
+---
+name: Initialize AUR -bin Package
+
+on:
+  pull_request:
+    branches:
+      - aur-init
+
+jobs:
+  init-aur-bin:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - name: Install dependencies
+        run: |
+          pacman -Sy --noconfirm --needed base-devel git openssh
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+          
+          cat > ~/.ssh/config <<EOF
+          Host aur.archlinux.org
+            User aur
+            IdentityFile ~/.ssh/id_ed25519
+            PreferredAuthentications publickey
+            StrictHostKeyChecking yes
+          EOF
+
+      - name: Configure git
+        run: |
+          git config --global user.email "${{ secrets.EMAIL }}"
+          git config --global user.name "udondan"
+
+      - name: Clone existing cfn-teleport AUR package
+        run: |
+          git clone ssh://aur@aur.archlinux.org/cfn-teleport.git /tmp/old
+          echo "Cloned existing package, files:"
+          ls -la /tmp/old/
+
+      - name: Clone new cfn-teleport-bin AUR package
+        run: |
+          git clone ssh://aur@aur.archlinux.org/cfn-teleport-bin.git /tmp/new
+          echo "Cloned new empty package"
+
+      - name: Copy and update files
+        run: |
+          cd /tmp/new
+          
+          # Copy files from old package
+          cp /tmp/old/PKGBUILD .
+          cp /tmp/old/.SRCINFO .
+          
+          # Also copy LICENSE if it exists
+          if [ -f /tmp/old/LICENSE ]; then
+            cp /tmp/old/LICENSE .
+          fi
+          
+          # Update pkgname in PKGBUILD
+          sed -i 's/^pkgname=cfn-teleport$/pkgname=cfn-teleport-bin/' PKGBUILD
+          
+          # Update pkgname and pkgbase in .SRCINFO
+          sed -i 's/^pkgbase = cfn-teleport$/pkgbase = cfn-teleport-bin/' .SRCINFO
+          sed -i 's/^pkgname = cfn-teleport$/pkgname = cfn-teleport-bin/' .SRCINFO
+          
+          echo "=== Updated PKGBUILD ==="
+          cat PKGBUILD
+          echo ""
+          echo "=== Updated .SRCINFO ==="
+          cat .SRCINFO
+
+      - name: Commit and push
+        run: |
+          cd /tmp/new
+          git add PKGBUILD .SRCINFO
+          if [ -f LICENSE ]; then
+            git add LICENSE
+          fi
+          
+          git status
+          git commit -m "Initial import from cfn-teleport package" \
+            -m "Renamed package to cfn-teleport-bin per AUR submission guidelines." \
+            -m "Package uses prebuilt binaries and must have -bin suffix."
+          
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "Pushing to AUR..."
+            git push
+          else
+            echo "Not a PR event, skipping push"
+          fi
+
+      - name: Print success message
+        run: |
+          echo "Successfully initialized cfn-teleport-bin AUR package"
+          echo "Next steps:"
+          echo "1. Submit merge request on AUR: cfn-teleport -> cfn-teleport-bin"
+          echo "2. Update main publish.yml workflow"
+          echo "3. Update README.md"
+          echo "4. Close this PR and delete aur-init branch"
