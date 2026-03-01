@@ -1329,47 +1329,19 @@ jobs:
           echo "Verifying all stacks match original templates"
           echo "=========================================="
 
+          # Source test helper functions
+          source test-helpers.sh
+
           ALL_MATCH=true
 
-          # Function to check if stack resources match original template
-          check_stack() {
-            local stack_name="$1"
-            local template_file="$2"
-
-            echo "Checking $stack_name..."
-
-            # Get deployed template resources
-            # Note: get-template with --output json returns a JSON-encoded string, so we use jq -r to extract it first
-            DEPLOYED_TEMPLATE=$(aws cloudformation get-template \
-              --stack-name "$stack_name" \
-              --query 'TemplateBody' \
-              --output json | jq -r '.')
-            echo "$DEPLOYED_TEMPLATE" | jq -S '.Resources | keys | sort' > /tmp/deployed-${stack_name}.json
-
-            # Get original template resources
-            jq -S '.Resources | keys | sort' "$template_file" > /tmp/original-${stack_name}.json
-
-            if diff -q /tmp/original-${stack_name}.json /tmp/deployed-${stack_name}.json > /dev/null 2>&1; then
-              echo "✅ $stack_name resources match original template"
-              return 0
-            else
-              echo "❌ $stack_name resources differ from original template"
-              echo "Expected resources:"
-              cat /tmp/original-${stack_name}.json
-              echo "Actual resources:"
-              cat /tmp/deployed-${stack_name}.json
-              return 1
-            fi
-          }
-
-          # Check all test stacks
-          check_stack "CfnTeleportRefactorTest1" "CfnTeleportRefactorTest1.json" || ALL_MATCH=false
-          check_stack "CfnTeleportRefactorTest2" "CfnTeleportRefactorTest2.yaml" || ALL_MATCH=false
-          check_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
-          check_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
-          check_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
-          check_stack "CfnTeleportWindowsTest1" "CfnTeleportWindowsTest1.json" || ALL_MATCH=false
-          check_stack "CfnTeleportWindowsTest2" "CfnTeleportWindowsTest2.yaml" || ALL_MATCH=false
+          # Check all test stacks using verify_stack from test-helpers.sh
+          verify_stack "CfnTeleportRefactorTest1" "CfnTeleportRefactorTest1.json" || ALL_MATCH=false
+          verify_stack "CfnTeleportRefactorTest2" "CfnTeleportRefactorTest2.yaml" || ALL_MATCH=false
+          verify_stack "CfnTeleportImportTest1" "CfnTeleportImportTest1.json" || ALL_MATCH=false
+          verify_stack "CfnTeleportImportTest2" "CfnTeleportImportTest2.yaml" || ALL_MATCH=false
+          verify_stack "CfnTeleportRenameTest1" "CfnTeleportRenameTest1.json" || ALL_MATCH=false
+          verify_stack "CfnTeleportWindowsTest1" "CfnTeleportWindowsTest1.json" || ALL_MATCH=false
+          verify_stack "CfnTeleportWindowsTest2" "CfnTeleportWindowsTest2.yaml" || ALL_MATCH=false
 
           if [ "$ALL_MATCH" = "true" ]; then
             echo ""
