@@ -221,8 +221,8 @@ jobs:
           # Linux i686
           - target: i686-unknown-linux-musl
             os: ubuntu-latest
-            test_image: i386/ubuntu:22.04
-            distro: Ubuntu 22.04 i386
+            test_image: i386/debian:12
+            distro: Debian 12 i386
           - target: i686-unknown-linux-musl
             os: ubuntu-latest
             test_image: i386/alpine:latest
