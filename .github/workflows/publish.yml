@@ -115,15 +115,9 @@ jobs:
       - name: Install rust target
         run: rustup target add "${TARGET}"
 
-      - name: Install bindgen-cli for cross-compilation
-        if: startsWith(matrix.TARGET, 'arm')
-        run: cargo install --force --locked bindgen-cli
-
       - name: Run build
         run: cargo build --release --verbose --target "${TARGET}"
         env:
-          # Enable external bindgen for aws-lc-sys when cross-compiling ARM targets
-          AWS_LC_SYS_EXTERNAL_BINDGEN: ${{ startsWith(matrix.TARGET, 'arm') && '1' || '' }}
           # Set the target for cross-compilation linkers
           CARGO_TARGET_ARMV7_UNKNOWN_LINUX_MUSLEABIHF_LINKER: ${{ matrix.TARGET == 'armv7-unknown-linux-musleabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
           CARGO_TARGET_ARM_UNKNOWN_LINUX_MUSLEABIHF_LINKER: ${{ matrix.TARGET == 'arm-unknown-linux-musleabihf' && 'arm-linux-gnueabihf-gcc' || '' }}
