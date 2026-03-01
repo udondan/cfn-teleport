@@ -594,6 +594,7 @@ version = "0.47.0"
 dependencies = [
  "atty",
  "aws-config",
+ "aws-lc-sys",
  "aws-sdk-cloudformation",
  "clap",
  "console",
