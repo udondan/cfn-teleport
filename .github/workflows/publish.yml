@@ -261,8 +261,8 @@ jobs:
           
           # macOS Intel
           - target: x86_64-apple-darwin
-            os: macos-12  # Intel runner
-            distro: macOS 12 Intel
+            os: macos-15-intel  # Intel runner
+            distro: macOS 15 Intel
           
           # macOS Apple Silicon (native ARM + x86_64 under Rosetta)
           - target: x86_64-apple-darwin
@@ -273,9 +273,6 @@ jobs:
             distro: macOS 14 ARM
           
           # Windows MSVC
-          - target: x86_64-pc-windows-msvc
-            os: windows-2019
-            distro: Windows Server 2019
           - target: x86_64-pc-windows-msvc
             os: windows-2022
             distro: Windows Server 2022
