@@ -683,12 +683,7 @@ jobs:
 
       - name: Generate SHA256SUMS.txt
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            VERSION="v9.9.9"
-          fi
-          
-          echo "Generating checksums for version ${VERSION}..."
+          echo "Generating checksums..."
           cd artifacts
           sha256sum cfn-teleport-* | sort > ../SHA256SUMS.txt
           cd ..
@@ -711,8 +706,16 @@ jobs:
 
       - name: Import GPG key
         run: |
-          echo "Importing GPG key..."
-          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "Importing GPG key F111A9BDD62F384A..."
+          
+          # Check if GPG_PRIVATE_KEY is empty
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "ERROR: GPG_PRIVATE_KEY secret is not set or empty"
+            exit 1
+          fi
+          
+          # Use printf to avoid newline issues with echo
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
           
           # Verify key was imported
           if ! gpg --list-secret-keys F111A9BDD62F384A > /dev/null 2>&1; then
@@ -727,8 +730,10 @@ jobs:
       - name: Sign SHA256SUMS.txt
         run: |
           echo "Signing SHA256SUMS.txt..."
-          gpg --batch --yes --pinentry-mode loopback \
-              --passphrase "$GPG_PASSPHRASE" \
+          
+          # Use --passphrase-fd 0 to read passphrase from stdin (more secure)
+          printf '%s' "$GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 \
               --local-user F111A9BDD62F384A \
               --detach-sign --armor SHA256SUMS.txt
           
@@ -760,7 +765,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "Uploading checksums to release ${GITHUB_REF_NAME}..."
-            gh release upload "${GITHUB_REF_NAME}" SHA256SUMS.txt SHA256SUMS.txt.asc
+            # Use --clobber to allow re-running without "already exists" errors
+            gh release upload "${GITHUB_REF_NAME}" SHA256SUMS.txt SHA256SUMS.txt.asc --clobber
             echo "✅ Files uploaded to release"
           else
             echo "Pull request detected - skipping upload"
