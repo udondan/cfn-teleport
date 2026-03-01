@@ -653,6 +653,136 @@ jobs:
               install -Dm755 "${srcdir}/cfn-teleport" "${pkgdir}/usr/bin/cfn-teleport"
             }
 
+  checksums-publish:
+    needs: test-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Validate artifacts
+        run: |
+          echo "Validating artifacts..."
+          ARTIFACT_COUNT=$(find artifacts -type f | wc -l)
+          echo "Found $ARTIFACT_COUNT artifacts"
+          
+          if [ "$ARTIFACT_COUNT" != "10" ]; then
+            echo "ERROR: Expected 10 artifacts, found $ARTIFACT_COUNT"
+            echo "Listing found artifacts:"
+            find artifacts -type f
+            exit 1
+          fi
+          
+          echo "✅ Artifact count validated"
+          echo "Artifacts:"
+          ls -lh artifacts/
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          echo "Generating checksums..."
+          cd artifacts
+          sha256sum cfn-teleport-* | sort > ../SHA256SUMS.txt
+          cd ..
+          
+          # Validate checksum file
+          if [ ! -s SHA256SUMS.txt ]; then
+            echo "ERROR: SHA256SUMS.txt is empty"
+            exit 1
+          fi
+          
+          LINE_COUNT=$(wc -l < SHA256SUMS.txt)
+          if [ "$LINE_COUNT" != "10" ]; then
+            echo "ERROR: Expected 10 lines in SHA256SUMS.txt, found $LINE_COUNT"
+            exit 1
+          fi
+          
+          echo "✅ SHA256SUMS.txt generated successfully"
+          echo "Content:"
+          cat SHA256SUMS.txt
+
+      - name: Import GPG key
+        run: |
+          echo "Importing GPG key F111A9BDD62F384A..."
+          
+          # Check if GPG_PRIVATE_KEY is empty
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "ERROR: GPG_PRIVATE_KEY secret is not set or empty"
+            exit 1
+          fi
+          
+          # Use printf to avoid newline issues with echo
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          
+          # Verify key was imported
+          if ! gpg --list-secret-keys F111A9BDD62F384A > /dev/null 2>&1; then
+            echo "ERROR: Failed to import GPG key F111A9BDD62F384A"
+            exit 1
+          fi
+          
+          echo "✅ GPG key imported successfully"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Sign SHA256SUMS.txt
+        run: |
+          echo "Signing SHA256SUMS.txt..."
+          
+          # Use --passphrase-fd 0 to read passphrase from stdin (more secure)
+          printf '%s' "$GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 \
+              --local-user F111A9BDD62F384A \
+              --detach-sign --armor SHA256SUMS.txt
+          
+          # Verify signature file was created
+          if [ ! -f SHA256SUMS.txt.asc ]; then
+            echo "ERROR: Signature file SHA256SUMS.txt.asc was not created"
+            exit 1
+          fi
+          
+          echo "✅ Signature created successfully"
+          echo "Signature file:"
+          ls -lh SHA256SUMS.txt.asc
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Verify signature
+        run: |
+          echo "Verifying signature..."
+          gpg --verify SHA256SUMS.txt.asc SHA256SUMS.txt
+          
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Signature verification failed"
+            exit 1
+          fi
+          
+          echo "✅ Signature verified successfully"
+
+      - name: Upload to release
+        run: |
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "Uploading checksums to release ${GITHUB_REF_NAME}..."
+            # Use --clobber to allow re-running without "already exists" errors
+            gh release upload "${GITHUB_REF_NAME}" SHA256SUMS.txt SHA256SUMS.txt.asc --clobber
+            echo "✅ Files uploaded to release"
+          else
+            echo "Pull request detected - skipping upload"
+            echo ""
+            echo "Generated files for review:"
+            ls -lh SHA256SUMS.txt SHA256SUMS.txt.asc
+            echo ""
+            echo "SHA256SUMS.txt content:"
+            cat SHA256SUMS.txt
+            echo ""
+            echo "SHA256SUMS.txt.asc content (first 15 lines):"
+            head -15 SHA256SUMS.txt.asc
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+
 #  chocolatey-publish:
 #    needs: build
 #    runs-on: windows-latest
