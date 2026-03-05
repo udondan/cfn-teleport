@@ -294,7 +294,7 @@ jobs:
       
       - name: Set up QEMU for ARM emulation (Linux only)
         if: runner.os == 'Linux' && matrix.platform != ''
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: ${{ matrix.platform }}
       
