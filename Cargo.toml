@@ -16,7 +16,7 @@ publish = true
 atty = "0.2.14"
 aws-config = "1.8.15"
 aws-sdk-cloudformation = "1.109.0"
-clap = { version = "4.5.61", features = ["derive"] }
+clap = { version = "4.6.0", features = ["derive"] }
 console = "0.16.2"
 dialoguer = "0.12.0"
 indexmap = { version = "2.13.0", features = ["serde"] }
