@@ -156,9 +156,9 @@ dependencies = [
 
 [[package]]
 name = "aws-lc-sys"
-version = "0.39.0"
+version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fa7e52a4c5c547c741610a2c6f123f3881e409b714cd27e6798ef020c514f0a"
+checksum = "f50037ee5e1e41e7b8f9d161680a725bd1626cb6f8c7e901f91f942850852fe7"
 dependencies = [
  "bindgen",
  "cc",
@@ -599,7 +599,7 @@ version = "0.49.0"
 dependencies = [
  "atty",
  "aws-config",
- "aws-lc-sys 0.39.0",
+ "aws-lc-sys 0.40.0",
  "aws-sdk-cloudformation",
  "clap",
  "console",
