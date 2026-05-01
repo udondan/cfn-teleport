@@ -1,4 +1,4 @@
-pub static SUPPORTED_RESOURCE_TYPES: [&str; 1382] = [
+pub static SUPPORTED_RESOURCE_TYPES: [&str; 1381] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -1298,7 +1298,6 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1382] = [
     "AWS::Shield::ProtectionGroup",
     "AWS::Signer::ProfilePermission",
     "AWS::Signer::SigningProfile",
-    "AWS::SimSpaceWeaver::Simulation",
     "AWS::StepFunctions::Activity",
     "AWS::StepFunctions::StateMachine",
     "AWS::StepFunctions::StateMachineAlias",
