@@ -1,4 +1,4 @@
-pub static SUPPORTED_RESOURCE_TYPES: [&str; 1381] = [
+pub static SUPPORTED_RESOURCE_TYPES: [&str; 1377] = [
     "AWS::ACMPCA::Certificate",
     "AWS::ACMPCA::CertificateAuthority",
     "AWS::ACMPCA::CertificateAuthorityActivation",
@@ -742,10 +742,6 @@ pub static SUPPORTED_RESOURCE_TYPES: [&str; 1381] = [
     "AWS::IoT::ThingType",
     "AWS::IoT::TopicRule",
     "AWS::IoT::TopicRuleDestination",
-    "AWS::IoTAnalytics::Channel",
-    "AWS::IoTAnalytics::Dataset",
-    "AWS::IoTAnalytics::Datastore",
-    "AWS::IoTAnalytics::Pipeline",
     "AWS::IoTCoreDeviceAdvisor::SuiteDefinition",
     "AWS::IoTEvents::AlarmModel",
     "AWS::IoTEvents::DetectorModel",
