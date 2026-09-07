@@ -1520,7 +1520,7 @@ fn export_templates(
 
 async fn get_stacks(
     client: &cloudformation::Client,
-) -> Result<Vec<cloudformation::types::StackSummary>, cloudformation::Error> {
+) -> Result<Vec<cloudformation::types::StackSummary>, Box<cloudformation::Error>> {
     let mut stacks = Vec::new();
     let mut token = None;
 
@@ -1557,7 +1557,8 @@ async fn get_stacks(
         let resp = query
             .set_stack_status_filter(Some(stack_filter.clone()))
             .send()
-            .await?;
+            .await
+            .map_err(|e| Box::new(cloudformation::Error::from(e)))?;
 
         let new_stacks = resp.stack_summaries().to_vec();
         stacks.append(&mut new_stacks.clone());
@@ -1611,7 +1612,7 @@ fn select_stack<'a>(prompt: &str, items: &'a [&str]) -> Result<&'a str, Box<dyn 
 async fn get_resources(
     client: &cloudformation::Client,
     stack_name: &str,
-) -> Result<Vec<cloudformation::types::StackResourceSummary>, cloudformation::Error> {
+) -> Result<Vec<cloudformation::types::StackResourceSummary>, Box<dyn Error>> {
     let resp = client
         .list_stack_resources()
         .stack_name(stack_name)
@@ -2450,7 +2451,7 @@ fn add_resources(
 async fn validate_template(
     client: &cloudformation::Client,
     template: serde_json::Value,
-) -> Result<(), cloudformation::Error> {
+) -> Result<(), Box<dyn Error>> {
     match client
         .validate_template()
         .template_body(serde_json::to_string(&template).unwrap())
@@ -2997,7 +2998,7 @@ async fn wait_for_stack_update_completion(
 async fn get_resource_identifier_mapping(
     client: &cloudformation::Client,
     template_body: &str,
-) -> Result<HashMap<String, String>, cloudformation::Error> {
+) -> Result<HashMap<String, String>, Box<dyn Error>> {
     match client
         .get_template_summary()
         .template_body(template_body)
@@ -3079,7 +3080,7 @@ async fn execute_changeset(
     client: &cloudformation::Client,
     stack_name: &str,
     change_set_name: &str,
-) -> Result<(), cloudformation::Error> {
+) -> Result<(), Box<dyn Error>> {
     match client
         .execute_change_set()
         .stack_name(stack_name)
