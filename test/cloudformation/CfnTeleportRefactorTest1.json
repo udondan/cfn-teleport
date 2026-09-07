@@ -38,10 +38,7 @@
             "KeyType": "HASH"
           }
         ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 5,
-          "WriteCapacityUnits": 5
-        },
+        "BillingMode": "PAY_PER_REQUEST",
         "TableName": "cfn-teleport-refactor-standalone",
         "Tags": [
           {
@@ -100,10 +97,7 @@
             "KeyType": "HASH"
           }
         ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 5,
-          "WriteCapacityUnits": 5
-        },
+        "BillingMode": "PAY_PER_REQUEST",
         "TableName": "cfn-teleport-refactor-test",
         "Tags": [
           {
@@ -130,10 +124,7 @@
             "KeyType": "HASH"
           }
         ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 5,
-          "WriteCapacityUnits": 5
-        },
+        "BillingMode": "PAY_PER_REQUEST",
         "TableName": {
           "Ref": "ParameterTableName"
         },

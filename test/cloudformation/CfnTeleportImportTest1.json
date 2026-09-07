@@ -37,10 +37,7 @@
             "KeyType": "HASH"
           }
         ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 5,
-          "WriteCapacityUnits": 5
-        },
+        "BillingMode": "PAY_PER_REQUEST",
         "TableName": "cfn-teleport-standalone",
         "Tags": [
           {
@@ -99,10 +96,7 @@
             "KeyType": "HASH"
           }
         ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 5,
-          "WriteCapacityUnits": 5
-        },
+        "BillingMode": "PAY_PER_REQUEST",
         "TableName": "cfn-teleport-import-test",
         "Tags": [
           {
