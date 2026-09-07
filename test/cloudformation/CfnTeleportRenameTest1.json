@@ -38,10 +38,7 @@
             "KeyType": "HASH"
           }
         ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 5,
-          "WriteCapacityUnits": 5
-        },
+        "BillingMode": "PAY_PER_REQUEST",
         "TableName": "cfn-teleport-rename-test",
         "Tags": [
           {
@@ -100,10 +97,7 @@
             "KeyType": "HASH"
           }
         ],
-        "ProvisionedThroughput": {
-          "ReadCapacityUnits": 5,
-          "WriteCapacityUnits": 5
-        },
+        "BillingMode": "PAY_PER_REQUEST",
         "TableName": "cfn-teleport-dependent-table",
         "Tags": [
           {
