@@ -801,10 +801,15 @@ jobs:
           STACK1: CfnTeleportRenameTest1
 
   # Template I/O tests (export, file input, migration spec)
+  # Runs after test-refactor and test-import: all three move resources out of
+  # CfnTeleportRefactorTest1 and CfnTeleportImportTest1, so running them in
+  # parallel makes them see each other's intermediate state.
   test-template-io:
     needs:
       - build
       - prepare-stacks
+      - test-refactor
+      - test-import
     runs-on: ubuntu-latest
     permissions:
       id-token: write
