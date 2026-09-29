@@ -31,7 +31,6 @@ jobs:
               - Cargo.toml
               - Cargo.lock
               - .github/workflows/pr-test.yml
-              - .github/scripts/wait-for-turn.sh
 
   # Build Rust binary (lint, test, build)
   build:
@@ -278,18 +277,16 @@ jobs:
     needs: changes
     if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 180
     permissions:
       actions: read
-      contents: read
     steps:
-      - uses: actions/checkout@v7
-        with:
-          sparse-checkout: .github/scripts
       - name: Wait for earlier runs to finish
-        run: .github/scripts/wait-for-turn.sh
-        env:
-          GH_TOKEN: ${{ github.token }}
+        uses: softprops/turnstyle@v3
+        with:
+          same-branch-only: false
+          poll-interval-seconds: 30
+          abort-after-seconds: 10800
+          retries: 3
 
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
