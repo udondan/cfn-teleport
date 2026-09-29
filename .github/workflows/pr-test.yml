@@ -21,27 +21,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      src: ${{ steps.changes.outputs.src }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v4
-        id: changes
-        with:
-          filters: |
-            src:
-              - src/**
-              - test/**
-              - Cargo.toml
-              - Cargo.lock
-              - .github/workflows/pr-test.yml
-
   # Build Rust binary (lint, test, build)
   build:
-    needs: changes
-    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -97,8 +78,6 @@ jobs:
 
   # Build Windows binary and validate embedded metadata
   build-windows:
-    needs: changes
-    if: needs.changes.outputs.src == 'true'
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -280,20 +259,14 @@ jobs:
   # Wait until no earlier run of this workflow is active. Build jobs run in
   # parallel; only the AWS jobs (all downstream of prepare-stacks) wait.
   wait-for-turn:
-    needs: changes
-    if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     permissions:
       actions: read
       contents: read
     steps:
       - name: Wait for earlier runs to finish
-        uses: softprops/turnstyle@3805450be63b8c80577dc253e8c17e9132036df4 # v3.3.3
-        with:
-          same-branch-only: false
-          poll-interval-seconds: 30
-          abort-after-seconds: 10800
-          retries: 3
+        uses: udondan/wait-for-turn@acd6200e311500d2896ccdda6cc7834f895d8044 # v1.0.0
 
       # While this run waited, another PR may have been merged. Branch
       # protection requires PRs to be up to date, so testing an outdated
@@ -313,10 +286,7 @@ jobs:
 
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
-    needs:
-      - changes
-      - wait-for-turn
-    if: needs.changes.outputs.src == 'true'
+    needs: wait-for-turn
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1480,12 +1450,18 @@ jobs:
           echo "=========================================="
           make test-clean-all
 
+  # The only required status check. Every job must have run and succeeded:
+  # a skipped job (for example after a failed prepare-stacks or wait-for-turn)
+  # must never let a PR become mergeable, least of all through automerge.
   report-status:
     name: success
     if: always()
     runs-on: ubuntu-latest
     needs:
+      - build
+      - build-windows
       - wait-for-turn
+      - prepare-stacks
       - test-refactor
       - test-import
       - test-rename
@@ -1493,32 +1469,14 @@ jobs:
       - test-windows
       - verify-state
     steps:
-      - name: Check test results
+      - name: Check that all jobs succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
         run: |
-          # A timed-out wait skips all tests, which must not count as success
-          if [ "${{ needs.wait-for-turn.result }}" != "success" ] && [ "${{ needs.wait-for-turn.result }}" != "skipped" ]; then
-            echo "wait-for-turn failed: ${{ needs.wait-for-turn.result }}"
-            exit 1
-          fi
-          # Accept both "success" and "skipped" as valid outcomes
-          if [ "${{ needs.test-refactor.result }}" != "success" ] && [ "${{ needs.test-refactor.result }}" != "skipped" ]; then
-            echo "test-refactor failed: ${{ needs.test-refactor.result }}"
-            exit 1
-          fi
-          if [ "${{ needs.test-import.result }}" != "success" ] && [ "${{ needs.test-import.result }}" != "skipped" ]; then
-            echo "test-import failed: ${{ needs.test-import.result }}"
-            exit 1
-          fi
-          if [ "${{ needs.test-rename.result }}" != "success" ] && [ "${{ needs.test-rename.result }}" != "skipped" ]; then
-            echo "test-rename failed: ${{ needs.test-rename.result }}"
-            exit 1
-          fi
-          if [ "${{ needs.test-template-io.result }}" != "success" ] && [ "${{ needs.test-template-io.result }}" != "skipped" ]; then
-            echo "test-template-io failed: ${{ needs.test-template-io.result }}"
-            exit 1
-          fi
-          if [ "${{ needs.test-windows.result }}" != "success" ] && [ "${{ needs.test-windows.result }}" != "skipped" ]; then
-            echo "test-windows failed: ${{ needs.test-windows.result }}"
+          failed=$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"')
+          if [ -n "$failed" ]; then
+            echo "::error::Not all jobs succeeded:"
+            echo "$failed"
             exit 1
           fi
           echo 'Success'
