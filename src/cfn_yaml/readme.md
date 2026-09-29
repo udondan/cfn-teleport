@@ -56,7 +56,7 @@ BucketName: !Ref MyParameter
 QueueName: !Sub '${AWS::StackName}-queue'
 ```
 
-**Serialization**: When templates are serialized back to YAML (using `serde_yml`), the short-form tags are converted to long-form:
+**Serialization**: When templates are serialized back to YAML (by `emitter.rs`), the short-form tags are converted to long-form:
 ```yaml
 BucketName:
   Ref: MyParameter
@@ -66,7 +66,7 @@ QueueName:
 
 **Why this happens**: 
 - This module only handles **parsing** (YAML → JSON)
-- Serialization (JSON → YAML) is done by `serde_yml`, which doesn't support CloudFormation tags
+- Serialization (JSON → YAML) is done by `emitter.rs`, which writes intrinsic functions in long form
 - The internal representation stores intrinsic functions as JSON objects: `!Ref X` → `{"Ref": "X"}`
 - When serialized, these become nested YAML structures, not tags
 
