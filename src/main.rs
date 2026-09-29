@@ -60,7 +60,7 @@ impl Template {
     fn to_string(&self) -> Result<String, Box<dyn Error>> {
         match self.format {
             TemplateFormat::Json => Ok(serde_json::to_string(&self.content)?),
-            TemplateFormat::Yaml => Ok(serde_yml::to_string(&self.content)?),
+            TemplateFormat::Yaml => Ok(cfn_yaml::emitter::to_yaml_string(&self.content)),
         }
     }
 }
@@ -1137,18 +1137,12 @@ fn read_template_from_file(path: &Path) -> Result<Template, Box<dyn Error>> {
                     }
                     Ok(Template::new(parsed, TemplateFormat::Yaml))
                 }
-                Err(_cf_yaml_err) => {
-                    // If CF parser fails, try standard YAML parser as fallback
-                    let parsed: serde_json::Value =
-                        serde_yml::from_str(&contents).map_err(|yaml_err| {
-                            format!(
-                                "Failed to parse template file {} as JSON or YAML. YAML error: {}",
-                                path.display(),
-                                yaml_err
-                            )
-                        })?;
-                    Ok(Template::new(parsed, TemplateFormat::Yaml))
-                }
+                Err(yaml_err) => Err(format!(
+                    "Failed to parse template file {} as JSON or YAML. YAML error: {}",
+                    path.display(),
+                    yaml_err
+                )
+                .into()),
             }
         }
     }
@@ -1995,17 +1989,11 @@ async fn get_template(
                     }
                     Ok(Template::new(parsed, TemplateFormat::Yaml))
                 }
-                Err(_cf_yaml_err) => {
-                    // If CF parser fails, try standard YAML parser as fallback
-                    let parsed: serde_json::Value =
-                        serde_yml::from_str(template_str).map_err(|yaml_err| {
-                            format!(
-                                "Failed to parse template as JSON or YAML. YAML error: {}",
-                                yaml_err
-                            )
-                        })?;
-                    Ok(Template::new(parsed, TemplateFormat::Yaml))
-                }
+                Err(yaml_err) => Err(format!(
+                    "Failed to parse template as JSON or YAML. YAML error: {}",
+                    yaml_err
+                )
+                .into()),
             }
         }
     }
@@ -3349,7 +3337,7 @@ Resources:
         assert!(json_result.is_err());
 
         // YAML parsing should work
-        let yaml_result = serde_yml::from_str::<serde_json::Value>(yaml_template);
+        let yaml_result = cfn_yaml::parse_yaml_to_json(yaml_template);
         assert!(yaml_result.is_ok());
         let parsed = yaml_result.unwrap();
         assert_eq!(
@@ -3379,7 +3367,7 @@ Resources:
         assert!(json_result.is_err());
 
         // Fallback to YAML (should succeed)
-        let yaml_result = serde_yml::from_str::<serde_json::Value>(yaml_template);
+        let yaml_result = cfn_yaml::parse_yaml_to_json(yaml_template);
         assert!(yaml_result.is_ok());
     }
 
@@ -3405,7 +3393,7 @@ Resources:
 "#;
 
         // YAML parser should handle basic YAML structure
-        let result = serde_yml::from_str::<serde_json::Value>(yaml_template);
+        let result = cfn_yaml::parse_yaml_to_json(yaml_template);
         assert!(result.is_ok());
         let parsed = result.unwrap();
         assert!(parsed["Resources"]["MyBucket"].is_object());
@@ -3435,10 +3423,6 @@ Resources:
     Properties:
       RoleName: !GetAtt MyBucket.Arn
 "#;
-
-        // Standard YAML parser (serde_yml) should fail with intrinsic function tags
-        let serde_result = serde_yml::from_str::<serde_json::Value>(yaml_template);
-        assert!(serde_result.is_err());
 
         // Our cfn_yaml parser should handle CloudFormation tags
         let cf_result = cfn_yaml::parse_yaml_to_json(yaml_template);
@@ -3517,7 +3501,7 @@ Resources:
         assert!(output.contains("Resources:"));
 
         // Should be valid YAML
-        let reparsed: Result<serde_json::Value, _> = serde_yml::from_str(&output);
+        let reparsed = cfn_yaml::parse_yaml_to_json(&output);
         assert!(reparsed.is_ok());
     }
 
@@ -3530,7 +3514,7 @@ Resources:
         let valid_template = Template::new(json!({"key": "value"}), TemplateFormat::Json);
         assert!(valid_template.to_string().is_ok());
 
-        // Note: It's hard to trigger serialization errors with serde_json/serde_yml
+        // Note: It's hard to trigger serialization errors with serde_json and the YAML emitter
         // as they can serialize any valid JSON value, but we've verified the
         // error path exists by returning Result instead of unwrapping
     }

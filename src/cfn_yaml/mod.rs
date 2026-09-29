@@ -9,6 +9,7 @@
 #![allow(dead_code)]
 
 mod cstr;
+pub(crate) mod emitter;
 mod errors;
 mod event;
 pub(crate) mod loader;
