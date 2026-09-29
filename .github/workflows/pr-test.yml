@@ -2,9 +2,15 @@
 name: Test
 
 # The AWS test jobs share CloudFormation test stacks, so only one run may use
-# them at a time. The wait-for-turn job queues runs in start order. A
-# workflow-level concurrency group is not used because GitHub keeps only one
-# pending run per group and cancels the others.
+# them at a time. The wait-for-turn job queues runs across branches in start
+# order. A single workflow-wide concurrency group is not used for this because
+# GitHub keeps only one pending run per group and cancels the others.
+#
+# Per branch, a concurrency group drops outdated pending runs when a newer
+# commit arrives. A running run is never cancelled, so its cleanup always runs.
+concurrency:
+  group: pr-test-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
 
 on:
   pull_request:
