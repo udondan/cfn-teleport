@@ -1,11 +1,10 @@
 ---
 name: Test
 
-# Use workflow-wide concurrency (not per-branch) to prevent race conditions
-# on shared CloudFormation test stacks. Multiple PRs will queue sequentially.
-concurrency:
-  group: pr-test
-  cancel-in-progress: false # Ensure cleanup always runs
+# The AWS test jobs share CloudFormation test stacks, so only one run may use
+# them at a time. The wait-for-turn job queues runs in start order. A
+# workflow-level concurrency group is not used because GitHub keeps only one
+# pending run per group and cancels the others.
 
 on:
   pull_request:
@@ -32,6 +31,7 @@ jobs:
               - Cargo.toml
               - Cargo.lock
               - .github/workflows/pr-test.yml
+              - .github/scripts/wait-for-turn.sh
 
   # Build Rust binary (lint, test, build)
   build:
@@ -272,9 +272,30 @@ jobs:
           path: target/release/cfn-teleport.exe
           retention-days: 1
 
+  # Wait until no earlier run of this workflow is active. Build jobs run in
+  # parallel; only the AWS jobs (all downstream of prepare-stacks) wait.
+  wait-for-turn:
+    needs: changes
+    if: needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: Wait for earlier runs to finish
+        run: .github/scripts/wait-for-turn.sh
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
-    needs: changes
+    needs:
+      - changes
+      - wait-for-turn
     if: needs.changes.outputs.src == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -1223,12 +1244,14 @@ jobs:
   # Verify stack template formats and resource state
   verify-state:
     needs:
+      - wait-for-turn
       - test-windows
       - test-refactor
       - test-import
       - test-rename
       - test-template-io
-    if: always()
+    # Only touch the shared stacks when this run holds the turn
+    if: always() && needs.wait-for-turn.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1369,8 +1392,9 @@ jobs:
   # Delete stacks in parallel (only if verification failed)
   delete-stacks:
     needs:
+      - wait-for-turn
       - verify-state
-    if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
+    if: always() && needs.wait-for-turn.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1406,8 +1430,10 @@ jobs:
   # Cleanup remaining resources (runs after parallel stack deletion)
   cleanup-resources:
     needs:
+      - wait-for-turn
+      - verify-state
       - delete-stacks
-    if: always() && needs.prepare-stacks.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
+    if: always() && needs.wait-for-turn.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1434,6 +1460,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     needs:
+      - wait-for-turn
       - test-refactor
       - test-import
       - test-rename
@@ -1443,6 +1470,11 @@ jobs:
     steps:
       - name: Check test results
         run: |
+          # A timed-out wait skips all tests, which must not count as success
+          if [ "${{ needs.wait-for-turn.result }}" != "success" ] && [ "${{ needs.wait-for-turn.result }}" != "skipped" ]; then
+            echo "wait-for-turn failed: ${{ needs.wait-for-turn.result }}"
+            exit 1
+          fi
           # Accept both "success" and "skipped" as valid outcomes
           if [ "${{ needs.test-refactor.result }}" != "success" ] && [ "${{ needs.test-refactor.result }}" != "skipped" ]; then
             echo "test-refactor failed: ${{ needs.test-refactor.result }}"
