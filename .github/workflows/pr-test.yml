@@ -281,7 +281,7 @@ jobs:
       actions: read
     steps:
       - name: Wait for earlier runs to finish
-        uses: softprops/turnstyle@v3
+        uses: softprops/turnstyle@3805450be63b8c80577dc253e8c17e9132036df4 # v3.3.3
         with:
           same-branch-only: false
           poll-interval-seconds: 30
