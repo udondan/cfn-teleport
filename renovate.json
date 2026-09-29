@@ -1,27 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":semanticCommitTypeAll(chore)"],
-  "mode": "full",
-  "semanticCommits": "enabled",
-  "dependencyDashboard": true,
-  "labels": ["renovate"],
-  "ignorePaths": [
-    "**/node_modules/**",
-    "**/bower_components/**",
-    "**/vendor/**",
-    "**/examples/**",
-    "**/__tests__/**",
-    "**/__fixtures__/**"
-  ],
-  "packageRules": [
-    {
-      "matchUpdateTypes": ["minor", "patch"],
-      "automerge": true
-    },
-    {
-      "matchManagers": ["cargo"],
-      "rangeStrategy": "bump"
-    }
-  ],
-  "rebaseWhen": "behind-base-branch"
+  "extends": ["github>udondan/renovate-config"]
 }
