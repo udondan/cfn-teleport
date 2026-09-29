@@ -3,7 +3,7 @@
   "extends": ["config:recommended", ":semanticCommitTypeAll(chore)"],
   "mode": "full",
   "semanticCommits": "enabled",
-  "dependencyDashboard": false,
+  "dependencyDashboard": true,
   "prConcurrentLimit": 1,
   "prHourlyLimit": 1,
   "ignorePaths": [
