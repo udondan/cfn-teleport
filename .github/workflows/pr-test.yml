@@ -63,7 +63,7 @@ jobs:
           cargo clippy --version
 
       - name: Rust dependency cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: target
           key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
@@ -116,7 +116,7 @@ jobs:
           rustc --version
 
       - name: Rust dependency cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: target
           key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
