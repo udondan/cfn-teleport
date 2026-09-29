@@ -265,32 +265,8 @@ jobs:
       actions: read
       contents: read
     steps:
-      # The status filter of the list-runs API (used by softprops/turnstyle)
-      # does not reliably return running runs, so the unfiltered list is used.
-      # Runs are queued by start time; a re-run counts from its new start.
       - name: Wait for earlier runs to finish
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          runs_url="repos/$GITHUB_REPOSITORY/actions/workflows/pr-test.yml/runs?per_page=100"
-          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
-          echo "This run started at $started."
-          while true; do
-            if ! earlier=$(gh api "$runs_url" --jq "[.workflow_runs[]
-                | select(.id != $GITHUB_RUN_ID and .status != \"completed\")
-                | select(.run_started_at < \"$started\" or (.run_started_at == \"$started\" and .id < $GITHUB_RUN_ID))
-                | .html_url] | join(\" \")"); then
-              echo "Listing runs failed, retrying."
-              sleep 30
-              continue
-            fi
-            if [ -z "$earlier" ]; then
-              echo "No earlier run is active."
-              break
-            fi
-            echo "Waiting for $earlier"
-            sleep 30
-          done
+        uses: udondan/wait-for-turn@acd6200e311500d2896ccdda6cc7834f895d8044 # v1.0.0
 
       # While this run waited, another PR may have been merged. Branch
       # protection requires PRs to be up to date, so testing an outdated
