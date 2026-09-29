@@ -260,17 +260,37 @@ jobs:
   # parallel; only the AWS jobs (all downstream of prepare-stacks) wait.
   wait-for-turn:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     permissions:
       actions: read
       contents: read
     steps:
+      # The status filter of the list-runs API (used by softprops/turnstyle)
+      # does not reliably return running runs, so the unfiltered list is used.
+      # Runs are queued by start time; a re-run counts from its new start.
       - name: Wait for earlier runs to finish
-        uses: softprops/turnstyle@3805450be63b8c80577dc253e8c17e9132036df4 # v3.3.3
-        with:
-          same-branch-only: false
-          poll-interval-seconds: 30
-          abort-after-seconds: 10800
-          retries: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs_url="repos/$GITHUB_REPOSITORY/actions/workflows/pr-test.yml/runs?per_page=100"
+          started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          echo "This run started at $started."
+          while true; do
+            if ! earlier=$(gh api "$runs_url" --jq "[.workflow_runs[]
+                | select(.id != $GITHUB_RUN_ID and .status != \"completed\")
+                | select(.run_started_at < \"$started\" or (.run_started_at == \"$started\" and .id < $GITHUB_RUN_ID))
+                | .html_url] | join(\" \")"); then
+              echo "Listing runs failed, retrying."
+              sleep 30
+              continue
+            fi
+            if [ -z "$earlier" ]; then
+              echo "No earlier run is active."
+              break
+            fi
+            echo "Waiting for $earlier"
+            sleep 30
+          done
 
       # While this run waited, another PR may have been merged. Branch
       # protection requires PRs to be up to date, so testing an outdated
