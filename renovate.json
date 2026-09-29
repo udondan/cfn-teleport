@@ -1,10 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":semanticCommitTypeAll(chore)"],
-  "mode": "full",
-  "semanticCommits": "enabled",
-  "dependencyDashboard": true,
-  "labels": ["renovate"],
+  "extends": ["github>udondan/renovate-config"],
+  "minimumReleaseAge": null,
+  "automerge": false,
   "ignorePaths": [
     "**/node_modules/**",
     "**/bower_components/**",
@@ -22,6 +20,5 @@
       "matchManagers": ["cargo"],
       "rangeStrategy": "bump"
     }
-  ],
-  "rebaseWhen": "behind-base-branch"
+  ]
 }
