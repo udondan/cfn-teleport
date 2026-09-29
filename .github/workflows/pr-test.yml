@@ -256,33 +256,28 @@ jobs:
           path: target/release/cfn-teleport.exe
           retention-days: 1
 
-  # Wait until no earlier run of this workflow is active. Build jobs run in
+  # Only one run at a time may use the AWS test stacks. Build jobs run in
   # parallel; only the AWS jobs (all downstream of prepare-stacks) wait.
   wait-for-turn:
     runs-on: ubuntu-latest
     timeout-minutes: 180
     permissions:
       actions: read
-      contents: read
+      contents: write # lock refs under refs/wait-for-turn/
+      pull-requests: read # labels for label-weights
     steps:
-      - name: Wait for earlier runs to finish
-        uses: udondan/wait-for-turn@acd6200e311500d2896ccdda6cc7834f895d8044 # v1.0.0
-
-      # While this run waited, another PR may have been merged. Branch
-      # protection requires PRs to be up to date, so testing an outdated
-      # branch is wasted time: it has to be updated and tested again anyway.
-      - name: Skip tests if the branch is behind the base branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASE_REF: ${{ github.event.pull_request.base.ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          behind=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BASE_REF...$HEAD_SHA" --jq .behind_by)
-          if [ "$behind" -gt 0 ]; then
-            echo "::error::Branch is $behind commit(s) behind $BASE_REF. Update the branch to run the tests."
-            exit 1
-          fi
-          echo "Branch is up to date with $BASE_REF."
+      # Queue order: manual PRs first, then Renovate updates, then the
+      # release-please PR, which is updated after every merge to main anyway.
+      # Fails right away if the branch is behind main. Branch protection
+      # requires PRs to be up to date, so testing an outdated branch is wasted
+      # time: it has to be updated and tested again.
+      - name: Wait for turn
+        uses: udondan/wait-for-turn@b59193741134a6ea4f9090622f9e0510a2e6733a # v1.2.0
+        with:
+          require-up-to-date: true
+          label-weights: |
+            autorelease: pending=-10
+            renovate=-5
 
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
