@@ -5,12 +5,6 @@ name: Test
 # them at a time. The wait-for-turn job queues runs across branches in start
 # order. A single workflow-wide concurrency group is not used for this because
 # GitHub keeps only one pending run per group and cancels the others.
-#
-# Per branch, a concurrency group drops outdated pending runs when a newer
-# commit arrives. A running run is never cancelled, so its cleanup always runs.
-concurrency:
-  group: pr-test-${{ github.head_ref || github.ref }}
-  cancel-in-progress: false
 
 on:
   pull_request:
@@ -265,6 +259,12 @@ jobs:
       actions: read
       contents: write # lock refs under refs/wait-for-turn/
       pull-requests: read # labels for label-weights
+    # A new commit on the branch cancels the waiting of the outdated run, so the
+    # new run doesn't queue behind it. Once a run has the turn, this job is
+    # done: AWS jobs that already run are never cancelled and always clean up.
+    concurrency:
+      group: pr-test-wait-${{ github.head_ref || github.ref }}
+      cancel-in-progress: true
     steps:
       # Queue order: manual PRs first, then Renovate updates, then the
       # release-please PR, which is updated after every merge to main anyway.
