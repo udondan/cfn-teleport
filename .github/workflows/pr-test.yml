@@ -285,6 +285,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
+      contents: read
     steps:
       - name: Wait for earlier runs to finish
         uses: softprops/turnstyle@3805450be63b8c80577dc253e8c17e9132036df4 # v3.3.3
@@ -293,6 +294,22 @@ jobs:
           poll-interval-seconds: 30
           abort-after-seconds: 10800
           retries: 3
+
+      # While this run waited, another PR may have been merged. Branch
+      # protection requires PRs to be up to date, so testing an outdated
+      # branch is wasted time: it has to be updated and tested again anyway.
+      - name: Skip tests if the branch is behind the base branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          behind=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BASE_REF...$HEAD_SHA" --jq .behind_by)
+          if [ "$behind" -gt 0 ]; then
+            echo "::error::Branch is $behind commit(s) behind $BASE_REF. Update the branch to run the tests."
+            exit 1
+          fi
+          echo "Branch is up to date with $BASE_REF."
 
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
