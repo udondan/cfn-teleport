@@ -60,7 +60,7 @@ impl Template {
     fn to_string(&self) -> Result<String, Box<dyn Error>> {
         match self.format {
             TemplateFormat::Json => Ok(serde_json::to_string(&self.content)?),
-            TemplateFormat::Yaml => Ok(cfn_yaml::emitter::to_yaml_string(&self.content)),
+            TemplateFormat::Yaml => Ok(cfn_yaml::emitter::to_yaml_string(&self.content)?),
         }
     }
 }
