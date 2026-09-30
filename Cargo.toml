@@ -1,0 +1,45 @@
+[package]
+name = "cfn-teleport"
+version = "0.52.0"
+edition = "2021"
+description = "Moves CloudFormation resources between stacks"
+license = "Apache-2.0"
+homepage = "https://github.com/udondan/cfn-teleport/"
+repository = "https://github.com/udondan/cfn-teleport/"
+authors = ["Daniel Schroeder"]
+readme = "README.md"
+keywords = ["aws", "cfn", "CloudFormation", "migration", "resources"]
+categories = ["command-line-utilities"]
+publish = true
+
+[dependencies]
+atty = "0.2.14"
+aws-config = "1.12.0"
+aws-sdk-cloudformation = "1.129.0"
+clap = { version = "4.6.7", features = ["derive"] }
+console = "0.16.6"
+dialoguer = "0.12.0"
+indexmap = { version = "2.14.2", features = ["serde"] }
+lazy_static = "1.5.0"
+serde_json = "1.0.151"
+spinach = "3.2.0"
+tokio = { version = "1.53.1", features = ["full"] }
+unsafe-libyaml = "0.2.11"
+proc-macro2 = "1.0.107"                               # override indirect dependency
+
+[dependencies.uuid]
+version = "1.26.1"
+features = [
+    "v4",       # Lets you generate random UUIDs
+    "fast-rng", # Use a faster (but still sufficiently random) RNG
+]
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+# Enable bindgen feature for musl cross-compilation with cross tool
+[target.'cfg(target_env = "musl")'.dependencies]
+aws-lc-sys = { version = "0.45.0", features = ["bindgen"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1.12"

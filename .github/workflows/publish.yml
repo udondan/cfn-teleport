@@ -1,0 +1,1012 @@
+---
+# Based on https://github.com/nicolas-van/rust-cross-compile-example - Thanks!
+
+name: Publish
+
+# release-please creates the GitHub release as a draft (see
+# release-please-config.json). Releases in this repository are immutable once
+# published, so all binaries and checksums are attached while the release is
+# still a draft, and the release is published afterwards. Draft releases never
+# trigger `release` events, therefore release-please.yml calls this workflow.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag of the draft release to attach the binaries to and publish
+        type: string
+        required: true
+      ref:
+        description: Commit to build
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of an existing draft release to attach the binaries to and publish (leave empty to only build)
+        type: string
+        required: false
+        default: ""
+      ref:
+        description: Commit to build (defaults to the tag, or the default branch when no tag is given)
+        type: string
+        required: false
+        default: ""
+  pull_request: # for testing, when we change the workflow
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish.yml
+
+env:
+  CARGO_TERM_COLOR: always
+  # Empty for pull requests and builds without a release: nothing is uploaded
+  # or published then.
+  TAG: ${{ inputs.tag }}
+
+defaults:
+  run:
+    # necessary for windows
+    shell: bash
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 64-bit version of the x86 architecture for Linux-based systems with musl libc
+          - TARGET: x86_64-unknown-linux-musl
+            OS: ubuntu-latest
+
+          # 64-bit version of the ARM architecture for Linux-based systems with musl libc
+          - TARGET: aarch64-unknown-linux-musl # tested on aws t4g.nano in alpine container
+            OS: ubuntu-latest
+
+          # 32-bit version of the ARM architecture for Linux-based systems with musl libc and hardware floating-point support
+          - TARGET: armv7-unknown-linux-musleabihf # raspberry pi 2-3-4
+            OS: ubuntu-latest
+
+          # 32-bit version of the ARM architecture for Linux-based systems with musl libc and hardware floating-point support
+          - TARGET: arm-unknown-linux-musleabihf # raspberry pi 0-1
+            OS: ubuntu-latest
+
+          # 64-bit version of the x86 architecture for macOS
+          - TARGET: x86_64-apple-darwin
+            OS: macos-latest
+
+          # 64-bit version of the ARM architecture for macOS
+          - TARGET: aarch64-apple-darwin
+            OS: macos-latest
+
+          # 64-bit version of the x86 architecture for Windows-based systems with the Microsoft Visual C++ (MSVC) runtime
+          - TARGET: x86_64-pc-windows-msvc
+            OS: windows-latest
+
+          # 64-bit version of the x86 architecture for Windows-based systems with the GNU C Library (glibc) and GNU Compiler Collection (GCC)
+          - TARGET: x86_64-pc-windows-gnu
+            OS: windows-latest
+
+          # 32-bit version of the x86 architecture for Windows-based systems with the Microsoft Visual C++ (MSVC) runtime
+          - TARGET: i686-pc-windows-msvc
+            OS: windows-latest
+
+          # 32-bit version of the x86 architecture for Linux-based systems with musl libc
+          - TARGET: i686-unknown-linux-musl
+            OS: ubuntu-latest
+
+    runs-on: ${{ matrix.OS }}
+    env:
+      NAME: cfn-teleport
+      TARGET: ${{ matrix.TARGET }}
+      OS: ${{ matrix.OS }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || inputs.tag }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Dependency cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ./target
+          key: ${{ runner.os }}-${{ matrix.TARGET }}-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.TARGET }}-target-
+
+      - name: Install and configure dependencies
+        run: |
+          # dependencies are only needed on ubuntu as that's the only place where
+          # we make cross-compilation
+          if [[ "${OS}" =~ ^ubuntu.*$ ]]; then
+            # Update package lists to avoid 404 errors
+            sudo apt-get update -qq
+
+            # Install docker for cross tool (musl builds)
+            if [[ "${TARGET}" =~ ^.*-musl(eabihf?)$ ]]; then
+              # cross tool uses Docker, which should already be available on GitHub Actions
+              echo "Using cross tool for musl builds"
+            else
+              # Install common dependencies for aws-lc-sys cross-compilation
+              sudo apt-get install -qq cmake clang llvm-dev libclang-dev
+
+              # Install ARM cross-compilation tools only for ARM targets
+              # (gcc-multilib conflicts with crossbuild-essential-*)
+              if [[ "${TARGET}" =~ ^(arm|aarch64).*$ ]]; then
+                sudo apt-get install -qq crossbuild-essential-arm64 crossbuild-essential-armhf
+              fi
+            fi
+          fi
+
+      - name: Install cross for musl builds
+        if: contains(matrix.TARGET, 'musl')
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Install rust target
+        run: rustup target add "${TARGET}"
+
+      - name: Run build (musl with cross)
+        if: contains(matrix.TARGET, 'musl')
+        run: cross build --release --verbose --target "${TARGET}"
+
+      - name: Run build (non-musl)
+        if: ${{ !contains(matrix.TARGET, 'musl') }}
+        run: cargo build --release --verbose --target "${TARGET}"
+
+      - name: List target
+        run: find ./target
+
+      - name: Compress
+        id: compress
+        run: |
+          mkdir -p ./artifacts
+
+          VERSION="${TAG}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+
+          if [[ $OS =~ ^windows.*$ ]]; then
+              SRC=$NAME.exe
+              ARTIFACT="./artifacts/${NAME}-${TARGET}-${VERSION}.exe"
+          elif [[ $OS =~ ^macos.*$ ]]; then
+              SRC=$NAME
+              ARTIFACT="./artifacts/${NAME}-${TARGET}-${VERSION}.dmg"
+          else
+              SRC=$NAME
+              ARTIFACT="./artifacts/${NAME}-${TARGET}-${VERSION}.tar.gz"
+          fi
+
+          mv "./target/$TARGET/release/${SRC}" "./${SRC}"
+
+          if [[ $OS =~ ^windows.*$ ]]; then
+              # there is no reduction in size for the exe
+              # tar.exe -a -c -f "${ARTIFACT}" "${SRC}"
+              mv "./${SRC}" "${ARTIFACT}"
+          elif [[ $OS =~ ^macos.*$ ]]; then
+              mkdir -p dmg
+              cp "./${SRC}" dmg
+              hdiutil create cfn-teleport.dmg -ov -volname "cfn-teleport" -fs HFS+ -srcfolder "dmg"
+              hdiutil convert cfn-teleport.dmg -format UDZO -o "${ARTIFACT}"
+          else
+              tar -czf "${ARTIFACT}" "${SRC}"
+          fi
+
+          if [[ ! $OS =~ ^windows.*$ ]]; then
+            ls -lh "${SRC}" "${ARTIFACT}"
+          fi
+
+          echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_OUTPUT
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-${{ matrix.TARGET }}
+          path: |
+            ./artifacts
+
+      - name: Attach artifact to draft release
+        run: |
+          if [[ -n "${TAG}" ]]; then
+            if [[ "$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft --jq .isDraft)" != "true" ]]; then
+              echo "::error::Release ${TAG} is already published; assets cannot be added to an immutable release."
+              exit 1
+            fi
+            gh release upload "${TAG}" "${ARTIFACT}" --clobber --repo "${GITHUB_REPOSITORY}"
+          else
+            echo "Not uploading artifact because there is no release"
+            ls -l "${ARTIFACT}"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+          ARTIFACT: ${{ steps.compress.outputs.ARTIFACT }}
+
+  test-binaries:
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true  # Abort on first failure
+      matrix:
+        include:
+          # Linux x86_64 - test on multiple distros (most common)
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: ubuntu:22.04
+            distro: Ubuntu 22.04
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: ubuntu:24.04
+            distro: Ubuntu 24.04
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: debian:12
+            distro: Debian 12
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: alpine:latest
+            distro: Alpine Linux
+          
+          # Linux i686
+          - target: i686-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: i386/debian:12
+            distro: Debian 12 i386
+          - target: i686-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: i386/alpine:latest
+            distro: Alpine Linux i386
+          
+          # Linux ARM64
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: ubuntu:22.04
+            distro: Ubuntu 22.04 ARM64
+            platform: linux/arm64
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            test_image: alpine:latest
+            distro: Alpine Linux ARM64
+            platform: linux/arm64
+          
+          # Linux ARMv7
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-latest
+            test_image: arm32v7/ubuntu:22.04
+            distro: Ubuntu 22.04 ARMv7
+            platform: linux/arm/v7
+          - target: armv7-unknown-linux-musleabihf
+            os: ubuntu-latest
+            test_image: arm32v7/alpine:latest
+            distro: Alpine Linux ARMv7
+            platform: linux/arm/v7
+          
+          # Linux ARM
+          - target: arm-unknown-linux-musleabihf
+            os: ubuntu-latest
+            test_image: arm32v6/alpine:latest
+            distro: Alpine Linux ARM v6
+            platform: linux/arm/v6
+          
+          # macOS Intel
+          - target: x86_64-apple-darwin
+            os: macos-15-intel  # Intel runner
+            distro: macOS 15 Intel
+          
+          # macOS Apple Silicon (native ARM + x86_64 under Rosetta)
+          - target: x86_64-apple-darwin
+            os: macos-14  # ARM runner, runs x86_64 via Rosetta 2
+            distro: macOS 14 ARM (Rosetta x86_64)
+          - target: aarch64-apple-darwin
+            os: macos-14  # ARM runner
+            distro: macOS 14 ARM
+          
+          # Windows MSVC
+          - target: x86_64-pc-windows-msvc
+            os: windows-2022
+            distro: Windows Server 2022
+          - target: i686-pc-windows-msvc
+            os: windows-2022
+            distro: Windows Server 2022 32-bit
+          
+          # Windows GNU
+          - target: x86_64-pc-windows-gnu
+            os: windows-2022
+            distro: Windows Server 2022 (GNU)
+    
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: artifacts-${{ matrix.target }}
+          path: artifacts
+      
+      - name: Set up QEMU for ARM emulation (Linux only)
+        if: runner.os == 'Linux' && matrix.platform != ''
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: ${{ matrix.platform }}
+      
+      - name: Extract and test binary (Linux in Docker)
+        if: runner.os == 'Linux'
+        run: |
+          VERSION="${TAG}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+          
+          TARBALL="artifacts/cfn-teleport-${{ matrix.target }}-${VERSION}.tar.gz"
+          tar -xzf "${TARBALL}"
+          chmod +x cfn-teleport
+          
+          echo "Testing binary in ${{ matrix.distro }}..."
+          docker run --rm \
+            ${{ matrix.platform && format('--platform {0}', matrix.platform) || '' }} \
+            -v "$PWD/cfn-teleport:/usr/local/bin/cfn-teleport:ro" \
+            ${{ matrix.test_image }} \
+            sh -c '
+              set -e
+              echo "=== Testing cfn-teleport ==="
+              echo "Distribution: ${{ matrix.distro }}"
+              echo ""
+              
+              echo "1. Version check:"
+              /usr/local/bin/cfn-teleport --version
+              
+              echo ""
+              echo "2. Help output:"
+              /usr/local/bin/cfn-teleport --help > /tmp/help.txt
+              head -10 /tmp/help.txt
+              
+              echo ""
+              echo "3. Binary information:"
+              file /usr/local/bin/cfn-teleport 2>/dev/null || echo "file command not available"
+              
+              echo ""
+              echo "✅ All tests passed for ${{ matrix.distro }}"
+            '
+      
+      - name: Extract and test binary (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          VERSION="${TAG}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+          
+          hdiutil attach "artifacts/cfn-teleport-${{ matrix.target }}-${VERSION}.dmg"
+          cp "/Volumes/cfn-teleport/cfn-teleport" ./cfn-teleport
+          hdiutil detach "/Volumes/cfn-teleport"
+          chmod +x cfn-teleport
+          
+          echo "=== Testing cfn-teleport on ${{ matrix.distro }} ==="
+          
+          echo "1. Version check:"
+          ./cfn-teleport --version
+          
+          echo ""
+          echo "2. Help output:"
+          ./cfn-teleport --help | head -10
+          
+          echo ""
+          echo "3. Binary information:"
+          file cfn-teleport
+          
+          echo ""
+          echo "✅ All tests passed for ${{ matrix.distro }}"
+      
+      - name: Extract and test binary (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          VERSION="${TAG}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+          
+          BINARY="artifacts/cfn-teleport-${{ matrix.target }}-${VERSION}.exe"
+          chmod +x "${BINARY}"
+          
+          echo "=== Testing cfn-teleport on ${{ matrix.distro }} ==="
+          
+          echo "1. Version check:"
+          "${BINARY}" --version
+          
+          echo ""
+          echo "2. Help output:"
+          "${BINARY}" --help | head -10
+          
+          echo ""
+          echo "✅ All tests passed for ${{ matrix.distro }}"
+
+  cargo-publish:
+    needs: finalize-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || inputs.tag }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Dependency cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ./target
+          key: ubuntu-latest-x86_64-unknown-linux-musl-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ubuntu-latest-x86_64-unknown-linux-musl-target-
+
+      - name: Publish to crates.io
+        run: |
+          if [[ -n "${TAG}" ]]; then
+            cargo publish
+          else
+            cargo publish --dry-run
+          fi
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  homebrew-publish:
+    needs: finalize-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: udondan/homebrew-software
+          token: ${{ secrets.OVERRIDE_TOKEN }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Update homebrew formula
+        run: |
+          VERSION="${TAG}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+
+          AARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
+          AINTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
+          LARM32=($(shasum -a 256 artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz))
+          LARM64=($(shasum -a 256 artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz))
+          LINTEL32=($(shasum -a 256 artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz))
+          LINTEL64=($(shasum -a 256 artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz))
+
+          echo "${TEMPLATE}" | sed \
+            -e "s!{{ version }}!${VERSION:1}!g" \
+            -e "s!{{ a_intel_file }}!$(basename ${AINTEL[1]})!g" \
+            -e "s!{{ a_intel_sha }}!${AINTEL[0]}!g" \
+            -e "s!{{ a_arm_file }}!$(basename ${AARM[1]})!g" \
+            -e "s!{{ a_arm_sha }}!${AARM[0]}!g" \
+            -e "s!{{ l_intel32_file }}!$(basename ${LINTEL32[1]})!g" \
+            -e "s!{{ l_intel32_sha }}!${LINTEL32[0]}!g" \
+            -e "s!{{ l_intel64_file }}!$(basename ${LINTEL64[1]})!g" \
+            -e "s!{{ l_intel64_sha }}!${LINTEL64[0]}!g" \
+            -e "s!{{ l_arm32_file }}!$(basename ${LARM32[1]})!g" \
+            -e "s!{{ l_arm32_sha }}!${LARM32[0]}!g" \
+            -e "s!{{ l_arm64_file }}!$(basename ${LARM64[1]})!g" \
+            -e "s!{{ l_arm64_sha }}!${LARM64[0]}!g" \
+            > cfn-teleport.rb
+          cat cfn-teleport.rb
+
+          rm -rf artifacts
+          git diff
+          git add cfn-teleport.rb
+          git status
+          git config --global user.email "${EMAIL}"
+          git config --global user.name "udondan"
+          git commit -m "Release ${VERSION:1}"
+
+          if [[ -n "${TAG}" ]]; then
+            git push
+          fi
+        env:
+          EMAIL: ${{ secrets.EMAIL }}
+          NAME: ${{ secrets.NAME }}
+          TEMPLATE: |
+            # typed: false
+            # frozen_string_literal: true
+
+            class CfnTeleport < Formula
+              desc "A command line-tool which can move CloudFormation resources between stacks"
+              homepage "${{ github.server_url }}/${{ github.repository }}"
+              version "{{ version }}"
+              license "Apache-2.0"
+
+              if OS.mac?
+                if Hardware::CPU.intel?
+                  url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ a_intel_file }}"
+                  sha256 "{{ a_intel_sha }}"
+                elsif Hardware::CPU.arm?
+                  url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ a_arm_file }}"
+                  sha256 "{{ a_arm_sha }}"
+                end
+              elsif OS.linux?
+                if Hardware::CPU.arm?
+                  if Hardware::CPU.is_64_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_arm64_file }}"
+                    sha256 "{{ l_arm64_sha }}"
+                  elsif Hardware::CPU.is_32_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_arm32_file }}"
+                    sha256 "{{ l_arm32_sha }}"
+                  end
+                elsif Hardware::CPU.intel?
+                  if Hardware::CPU.is_64_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_intel64_file }}"
+                    sha256 "{{ l_intel64_sha }}"
+                  elsif Hardware::CPU.is_32_bit?
+                    url "${{ github.server_url }}/${{ github.repository }}/releases/download/v{{ version }}/{{ l_intel32_file }}"
+                    sha256 "{{ l_intel32_sha }}"
+                  end
+                end
+              end
+
+              def install
+                bin.install "cfn-teleport"
+              end
+            end
+
+  aur-publish:
+    needs: finalize-release
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Install and configure requirements
+        run: |
+          pacman -Sy --noconfirm --needed base-devel git openssh
+
+          mkdir /home/foo
+          useradd foo -d /home/foo
+          chown foo:foo /home/foo
+          echo "foo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/foo
+
+          mkdir -p ~/.ssh/tmp
+          echo "${SSH_CONF}" > /etc/ssh/ssh_config
+          echo "${{ secrets.AUR_SSH_KEY }}" > /etc/ssh/id_ed25519
+          chmod 600 /etc/ssh/id_ed25519
+          ssh-keyscan aur.archlinux.org >> /etc/ssh/ssh_known_hosts
+        env:
+          SSH_CONF: |
+            Host aur.archlinux.org
+              User aur
+              IdentityFile /etc/ssh/id_ed25519
+              PreferredAuthentications publickey
+              StrictHostKeyChecking yes
+
+      - name: Update PKGBUILD
+        run: |
+          git clone "ssh://aur.archlinux.org/cfn-teleport-bin.git" --depth=1
+          cd cfn-teleport-bin
+
+          VERSION="${TAG}"
+          if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            VERSION="v9.9.9"
+          fi
+
+          ARM=($(sha256sum ../artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz))
+          X86_64=($(sha256sum ../artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz))
+          AARCH64=($(sha256sum ../artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz))
+          ARMV7H=($(sha256sum ../artifacts/cfn-teleport-armv7-unknown-linux-musleabihf-${VERSION}.tar.gz))
+          I686=($(sha256sum ../artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz))
+
+          echo "${TEMPLATE}" | sed \
+            -e "s!{{ version }}!${VERSION:1}!g" \
+            -e "s!{{ arm_file }}!$(basename ${ARM[1]})!g" \
+            -e "s!{{ arm_sha }}!${ARM[0]}!g" \
+            -e "s!{{ x86_64_file }}!$(basename ${X86_64[1]})!g" \
+            -e "s!{{ x86_64_sha }}!${X86_64[0]}!g" \
+            -e "s!{{ aarch64_file }}!$(basename ${AARCH64[1]})!g" \
+            -e "s!{{ aarch64_sha }}!${AARCH64[0]}!g" \
+            -e "s!{{ armv7h_file }}!$(basename ${ARMV7H[1]})!g" \
+            -e "s!{{ armv7h_sha }}!${ARMV7H[0]}!g" \
+            -e "s!{{ i686_file }}!$(basename ${I686[1]})!g" \
+            -e "s!{{ i686_sha }}!${I686[0]}!g" \
+            > PKGBUILD
+          echo "##### PKGBUILD #####"
+          cat PKGBUILD
+
+          chown -R foo:foo .
+          runuser -l foo -c "cd $PWD;makepkg --printsrcinfo > .SRCINFO"
+          chown -R root:root .
+          echo "##### .SRCINFO #####"
+          cat .SRCINFO
+
+          echo "####################"
+          echo "##### Validating PKGBUILD #####"
+          
+          # Install namcap for validation
+          pacman -S --noconfirm --needed namcap
+          
+          # Run namcap validation
+          namcap PKGBUILD
+          namcap_exit=$?
+          
+          if [ $namcap_exit -ne 0 ]; then
+            echo "ERROR: namcap validation failed with exit code $namcap_exit"
+            echo "This indicates potential issues with the PKGBUILD."
+            echo "Review the warnings above before proceeding."
+            exit 1
+          fi
+          
+          # Verify sources are accessible (only for real releases, not test runs)
+          if [[ -n "${TAG}" ]]; then
+            echo "##### Verifying sources are downloadable #####"
+            chown -R foo:foo .
+            runuser -l foo -c "cd $PWD; makepkg --verifysource"
+            verify_exit=$?
+            chown -R root:root .
+            
+            if [ $verify_exit -ne 0 ]; then
+              echo "ERROR: Source verification failed with exit code $verify_exit"
+              echo "One or more source files could not be downloaded or verified."
+              exit 1
+            fi
+          else
+            echo "##### Skipping source verification for test run (v9.9.9 artifacts don't exist) #####"
+          fi
+          
+          echo "##### Validation passed #####"
+          echo "####################"
+          git status
+          git diff
+          git config --global user.email "${EMAIL}"
+          git config --global user.name "udondan"
+          git commit -am "Release ${VERSION:1}"
+
+          if [[ -n "${TAG}" ]]; then
+            git push
+          fi
+        env:
+          EMAIL: ${{ secrets.EMAIL }}
+          NAME: ${{ secrets.NAME }}
+          TEMPLATE: |
+            # Maintainer: ${{ secrets.NAME }} <${{ secrets.EMAIL }}>
+            # Maintainer: ${{ secrets.NAME2 }} <${{ secrets.EMAIL2 }}>
+
+            pkgname=cfn-teleport-bin
+            pkgver={{ version }}
+            pkgrel=1
+            pkgdesc="A command-line tool for managing CloudFormation resources across and within stacks"
+            arch=("aarch64" "arm" "armv7h" "i686" "x86_64")
+            url="${{ github.server_url }}/${{ github.repository }}"
+            license=("APACHE")
+            conflicts=("cfn-teleport")
+            provides=("cfn-teleport")
+            replaces=("cfn-teleport")
+
+            # Source files
+            source_aarch64=("${url}/releases/download/v${pkgver}/cfn-teleport-aarch64-unknown-linux-musl-v${pkgver}.tar.gz")
+            source_arm=("${url}/releases/download/v${pkgver}/cfn-teleport-arm-unknown-linux-musleabihf-v${pkgver}.tar.gz")
+            source_armv7h=("${url}/releases/download/v${pkgver}/cfn-teleport-armv7-unknown-linux-musleabihf-v${pkgver}.tar.gz")
+            source_i686=("${url}/releases/download/v${pkgver}/cfn-teleport-i686-unknown-linux-musl-v${pkgver}.tar.gz")
+            source_x86_64=("${url}/releases/download/v${pkgver}/cfn-teleport-x86_64-unknown-linux-musl-v${pkgver}.tar.gz")
+
+            # Checksums
+            sha256sums_aarch64=("{{ aarch64_sha }}")
+            sha256sums_arm=("{{ arm_sha }}")
+            sha256sums_armv7h=("{{ armv7h_sha }}")
+            sha256sums_i686=("{{ i686_sha }}")
+            sha256sums_x86_64=("{{ x86_64_sha }}")
+
+            # Build function
+            build() {
+              return 0
+            }
+
+            # Package functions
+            package() {
+              # Extract the package based on the current architecture
+              case "$CARCH" in
+                'aarch64') tar -xzf "${srcdir}/cfn-teleport-aarch64-unknown-linux-musl-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'arm')     tar -xzf "${srcdir}/cfn-teleport-arm-unknown-linux-musleabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'armv7h')  tar -xzf "${srcdir}/cfn-teleport-armv7-unknown-linux-musleabihf-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'i686')    tar -xzf "${srcdir}/cfn-teleport-i686-unknown-linux-musl-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+                'x86_64')  tar -xzf "${srcdir}/cfn-teleport-x86_64-unknown-linux-musl-v${pkgver}.tar.gz" -C "${srcdir}/" ;;
+              esac
+
+              # Move the binary to /usr/bin
+              install -Dm755 "${srcdir}/cfn-teleport" "${pkgdir}/usr/bin/cfn-teleport"
+            }
+
+  checksums-publish:
+    needs: test-binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Validate artifacts
+        run: |
+          echo "Validating artifacts..."
+          ARTIFACT_COUNT=$(find artifacts -type f | wc -l)
+          echo "Found $ARTIFACT_COUNT artifacts"
+          
+          if [ "$ARTIFACT_COUNT" != "10" ]; then
+            echo "ERROR: Expected 10 artifacts, found $ARTIFACT_COUNT"
+            echo "Listing found artifacts:"
+            find artifacts -type f
+            exit 1
+          fi
+          
+          echo "✅ Artifact count validated"
+          echo "Artifacts:"
+          ls -lh artifacts/
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          echo "Generating checksums..."
+          cd artifacts
+          sha256sum cfn-teleport-* | sort > ../SHA256SUMS.txt
+          cd ..
+          
+          # Validate checksum file
+          if [ ! -s SHA256SUMS.txt ]; then
+            echo "ERROR: SHA256SUMS.txt is empty"
+            exit 1
+          fi
+          
+          LINE_COUNT=$(wc -l < SHA256SUMS.txt)
+          if [ "$LINE_COUNT" != "10" ]; then
+            echo "ERROR: Expected 10 lines in SHA256SUMS.txt, found $LINE_COUNT"
+            exit 1
+          fi
+          
+          echo "✅ SHA256SUMS.txt generated successfully"
+          echo "Content:"
+          cat SHA256SUMS.txt
+
+      - name: Import GPG key
+        run: |
+          echo "Importing GPG key F111A9BDD62F384A..."
+          
+          # Check if GPG_PRIVATE_KEY is empty
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "ERROR: GPG_PRIVATE_KEY secret is not set or empty"
+            exit 1
+          fi
+          
+          # Use printf to avoid newline issues with echo
+          printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          
+          # Verify key was imported
+          if ! gpg --list-secret-keys F111A9BDD62F384A > /dev/null 2>&1; then
+            echo "ERROR: Failed to import GPG key F111A9BDD62F384A"
+            exit 1
+          fi
+          
+          echo "✅ GPG key imported successfully"
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+
+      - name: Sign SHA256SUMS.txt
+        run: |
+          echo "Signing SHA256SUMS.txt..."
+          
+          # Use --passphrase-fd 0 to read passphrase from stdin (more secure)
+          printf '%s' "$GPG_PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback \
+              --passphrase-fd 0 \
+              --local-user F111A9BDD62F384A \
+              --detach-sign --armor SHA256SUMS.txt
+          
+          # Verify signature file was created
+          if [ ! -f SHA256SUMS.txt.asc ]; then
+            echo "ERROR: Signature file SHA256SUMS.txt.asc was not created"
+            exit 1
+          fi
+          
+          echo "✅ Signature created successfully"
+          echo "Signature file:"
+          ls -lh SHA256SUMS.txt.asc
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Verify signature
+        run: |
+          echo "Verifying signature..."
+          gpg --verify SHA256SUMS.txt.asc SHA256SUMS.txt
+          
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Signature verification failed"
+            exit 1
+          fi
+          
+          echo "✅ Signature verified successfully"
+
+      - name: Upload to draft release
+        run: |
+          if [[ -n "${TAG}" ]]; then
+            echo "Uploading checksums to release ${TAG}..."
+            # Use --clobber to allow re-running without "already exists" errors
+            gh release upload "${TAG}" SHA256SUMS.txt SHA256SUMS.txt.asc --clobber --repo "${GITHUB_REPOSITORY}"
+            echo "✅ Files uploaded to release"
+          else
+            echo "No release - skipping upload"
+            echo ""
+            echo "Generated files for review:"
+            ls -lh SHA256SUMS.txt SHA256SUMS.txt.asc
+            echo ""
+            echo "SHA256SUMS.txt content:"
+            cat SHA256SUMS.txt
+            echo ""
+            echo "SHA256SUMS.txt.asc content (first 15 lines):"
+            head -15 SHA256SUMS.txt.asc
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+
+  # All assets are attached now. Publishing makes the release immutable and its
+  # downloads public, which Homebrew and AUR point to.
+  finalize-release:
+    needs:
+      - build
+      - checksums-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        run: |
+          if [[ -n "${TAG}" ]]; then
+            gh release edit "${TAG}" --draft=false --latest --repo "${GITHUB_REPOSITORY}"
+          else
+            echo "No release - nothing to publish"
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+
+#  chocolatey-publish:
+#    needs: build
+#    runs-on: windows-latest
+#    defaults:
+#      run:
+#        shell: powershell
+#    steps:
+#      - name: Checkout code
+#        uses: actions/checkout@v4
+#        with:
+#          persist-credentials: false
+#          fetch-depth: 0
+#
+#      - uses: actions/download-artifact@v3
+#        with:
+#          name: artifacts
+#          path: artifacts
+#
+#      - name: Generate chocolatey package
+#        run: |
+#          if (-not $Env:NUSPEC) {
+#            Write-Error "NUSPEC variable not set"
+#            exit 1
+#          }
+#
+#          $markdown = Get-Content -Path "CHANGELOG.md" -Raw
+#          $startIndex = $markdown.IndexOf("## [", 0)
+#          $endIndex = $markdown.IndexOf("## [", $startIndex + 1)
+#          $releaseNotes = $markdown.Substring($startIndex, $endIndex - $startIndex)
+#
+#          $nuspec = $Env:NUSPEC
+#          $installScript = $Env:INSTALL_SCRIPT
+#
+#          $version = $Env:GITHUB_REF_NAME -replace '^v', ''
+#          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+#            $version = '9.9.9'
+#          }
+#
+#          # Get the file paths
+#          $url32File = "${{ github.workspace }}/artifacts/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
+#          $url64File = "${{ github.workspace }}/artifacts/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
+#
+#          # Get the SHA256 hashes
+#          $sha32 = Get-FileHash $url32File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+#          $sha64 = Get-FileHash $url64File -Algorithm SHA256 | Select-Object -ExpandProperty Hash
+#
+#          # Build the URLs
+#          $url32 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-i686-pc-windows-msvc-v{0}.exe" -f $version
+#          $url64 = "https://github.com/udondan/cfn-teleport/releases/download/v{0}/cfn-teleport-x86_64-pc-windows-msvc-v{0}.exe" -f $version
+#
+#          # Replace the placeholders in the nuspec and script files
+#          $nuspecContent = $nuspec.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version).Replace('{{ release_notes }}', $releaseNotes)
+#          $installScriptContent = $installScript.Replace('{{ url32 }}', $url32).Replace('{{ sha32 }}', $sha32).Replace('{{ url64 }}', $url64).Replace('{{ sha64 }}', $sha64).Replace('{{ version }}', $version)
+#
+#          # Write nuspec and script files
+#          $nuspecPath = "${{ github.workspace }}/cfn-teleport.nuspec"
+#          Set-Content -Path $nuspecPath -Value $nuspecContent
+#
+#          $toolsDir = "${{ github.workspace }}/tools"
+#          New-Item -ItemType Directory -Force -Path $toolsDir
+#          $installScriptPath = "${{ github.workspace }}/tools/chocolateyInstall.ps1"
+#          Set-Content -Path $installScriptPath -Value $installScriptContent
+#
+#          # Output file content
+#          echo "#### cfn-teleport.nuspec ####"
+#          echo "$nuspecContent"
+#          echo "#### chocolateyInstall.ps1 ####"
+#          echo "$installScriptContent"
+#
+#          # Create package
+#          echo "Creating package..."
+#          choco pack $nuspecPath
+#
+#          if ("${{ github.event_name }}" -ne "pull_request") {
+#            # Test installation
+#            echo "Installing package..."
+#            $nupgkFile = "${{ github.workspace }}/cfn-teleport.{0}.nupkg" -f $version
+#            choco install cfn-teleport --source $nupgkFile --yes
+#
+#            # Check if installation was successful
+#            echo "Checking if package was installed..."
+#            Get-Command cfn-teleport
+#            cfn-teleport.exe --version
+#
+#            # Uninstall package
+#            echo "Uninstalling package..."
+#            choco uninstall cfn-teleport --yes
+#
+#            # Ensure package is uninstalled
+#            echo "Checking if package was uninstalled..."
+#            if (Get-Command cfn-teleport -ErrorAction SilentlyContinue) {
+#              Write-Error "Package was not uninstalled"
+#              exit 1
+#            }
+#
+#            # Push package
+#            echo "Pushing package..."
+#            choco push $nupgkFile --source https://push.chocolatey.org/ --api-key ${{ secrets.CHOCOLATEY_API_KEY }}
+#          }
+#        env:
+#          NUSPEC: |
+#            <?xml version="1.0"?>
+#            <package xmlns="http://schemas.microsoft.com/packaging/2010/07/nuspec.xsd">
+#              <metadata>
+#                <id>cfn-teleport</id>
+#                <title>cfn-teleport</title>
+#                <version>{{ version }}</version>
+#                <authors>udondan</authors>
+#                <description>A command-line tool which can move CloudFormation resources between stacks</description>
+#                <summary>A command-line tool which can move CloudFormation resources between stacks</summary>
+#                <tags>aws cloudformation migration</tags>
+#                <licenseUrl>https://github.com/udondan/cfn-teleport/blob/master/LICENSE</licenseUrl>
+#                <projectUrl>https://github.com/udondan/cfn-teleport</projectUrl>
+#                <packageSourceUrl>https://github.com/udondan/cfn-teleport/blob/main/.github/workflows/publish.yml</packageSourceUrl>
+#                <releaseNotes>{{ release_notes }}</releaseNotes>
+#              </metadata>
+#              <files>
+#                <file src="tools\**" target="tools" />
+#              </files>
+#            </package>
+#          INSTALL_SCRIPT: |
+#            $packageName = 'cfn-teleport'
+#            $version = '{{ version }}'
+#            $installDir = "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
+#
+#            $fileArgs = @{
+#              packageName    = $packageName
+#              fileFullPath   = Join-Path $installDir 'cfn-teleport.exe'
+#              url            = '{{ url32 }}'
+#              checksum       = '{{ sha32 }}'
+#              url64bit       = '{{ url64 }}'
+#              checksum64     = '{{ sha64 }}'
+#              checksumType   = 'sha256'
+#              ChecksumType64 = 'sha256'
+#            }
+#            Get-ChocolateyWebFile @fileArgs
