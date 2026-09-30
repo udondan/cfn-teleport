@@ -290,7 +290,10 @@ Resources:
 
     #[test]
     fn roundtrips_test_templates() {
-        for entry in std::fs::read_dir("test/cloudformation").unwrap() {
+        // Absolute path: other tests change the working directory of the
+        // process while this one runs.
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/test/cloudformation");
+        for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();
             let contents = std::fs::read_to_string(&path).unwrap();
             let value: Value = match path.extension().and_then(|e| e.to_str()) {
