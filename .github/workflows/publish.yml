@@ -3,11 +3,34 @@
 
 name: Publish
 
+# release-please creates the GitHub release as a draft (see
+# release-please-config.json). Releases in this repository are immutable once
+# published, so all binaries and checksums are attached while the release is
+# still a draft, and the release is published afterwards. Draft releases never
+# trigger `release` events, therefore release-please.yml calls this workflow.
 on:
-  release:
-    types:
-      - published
+  workflow_call:
+    inputs:
+      tag:
+        description: Tag of the draft release to attach the binaries to and publish
+        type: string
+        required: true
+      ref:
+        description: Commit to build
+        type: string
+        required: true
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag of an existing draft release to attach the binaries to and publish (leave empty to only build)
+        type: string
+        required: false
+        default: ""
+      ref:
+        description: Commit to build (defaults to the tag, or the default branch when no tag is given)
+        type: string
+        required: false
+        default: ""
   pull_request: # for testing, when we change the workflow
     branches:
       - main
@@ -16,6 +39,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Empty for pull requests and builds without a release: nothing is uploaded
+  # or published then.
+  TAG: ${{ inputs.tag }}
 
 defaults:
   run:
@@ -77,6 +103,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || inputs.tag }}
           persist-credentials: false
           fetch-depth: 0
 
@@ -137,7 +164,7 @@ jobs:
         run: |
           mkdir -p ./artifacts
 
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="v9.9.9"
           fi
@@ -181,12 +208,16 @@ jobs:
           path: |
             ./artifacts
 
-      - name: Attach artifact to release
+      - name: Attach artifact to draft release
         run: |
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            gh release upload "${GITHUB_REF_NAME}" "${ARTIFACT}"
+          if [[ -n "${TAG}" ]]; then
+            if [[ "$(gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" --json isDraft --jq .isDraft)" != "true" ]]; then
+              echo "::error::Release ${TAG} is already published; assets cannot be added to an immutable release."
+              exit 1
+            fi
+            gh release upload "${TAG}" "${ARTIFACT}" --clobber --repo "${GITHUB_REPOSITORY}"
           else
-            echo "Not uploading artifact to release because this is a pull request"
+            echo "Not uploading artifact because there is no release"
             ls -l "${ARTIFACT}"
           fi
         env:
@@ -301,7 +332,7 @@ jobs:
       - name: Extract and test binary (Linux in Docker)
         if: runner.os == 'Linux'
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="v9.9.9"
           fi
@@ -340,7 +371,7 @@ jobs:
       - name: Extract and test binary (macOS)
         if: runner.os == 'macOS'
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="v9.9.9"
           fi
@@ -370,7 +401,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="v9.9.9"
           fi
@@ -391,12 +422,13 @@ jobs:
           echo "✅ All tests passed for ${{ matrix.distro }}"
 
   cargo-publish:
-    needs: test-binaries
+    needs: finalize-release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || inputs.tag }}
           persist-credentials: false
           fetch-depth: 0
 
@@ -412,7 +444,7 @@ jobs:
 
       - name: Publish to crates.io
         run: |
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+          if [[ -n "${TAG}" ]]; then
             cargo publish
           else
             cargo publish --dry-run
@@ -421,7 +453,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   homebrew-publish:
-    needs: test-binaries
+    needs: finalize-release
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -437,7 +469,7 @@ jobs:
 
       - name: Update homebrew formula
         run: |
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="v9.9.9"
           fi
@@ -474,7 +506,7 @@ jobs:
           git config --global user.name "udondan"
           git commit -m "Release ${VERSION:1}"
 
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+          if [[ -n "${TAG}" ]]; then
             git push
           fi
         env:
@@ -524,7 +556,7 @@ jobs:
             end
 
   aur-publish:
-    needs: test-binaries
+    needs: finalize-release
     runs-on: ubuntu-latest
     container: archlinux:latest
     steps:
@@ -561,7 +593,7 @@ jobs:
           git clone "ssh://aur.archlinux.org/cfn-teleport-bin.git" --depth=1
           cd cfn-teleport-bin
 
-          VERSION="${GITHUB_REF_NAME}"
+          VERSION="${TAG}"
           if ! [[ "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             VERSION="v9.9.9"
           fi
@@ -612,7 +644,7 @@ jobs:
           fi
           
           # Verify sources are accessible (only for real releases, not test runs)
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+          if [[ -n "${TAG}" ]]; then
             echo "##### Verifying sources are downloadable #####"
             chown -R foo:foo .
             runuser -l foo -c "cd $PWD; makepkg --verifysource"
@@ -636,7 +668,7 @@ jobs:
           git config --global user.name "udondan"
           git commit -am "Release ${VERSION:1}"
 
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+          if [[ -n "${TAG}" ]]; then
             git push
           fi
         env:
@@ -802,15 +834,15 @@ jobs:
           
           echo "✅ Signature verified successfully"
 
-      - name: Upload to release
+      - name: Upload to draft release
         run: |
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "Uploading checksums to release ${GITHUB_REF_NAME}..."
+          if [[ -n "${TAG}" ]]; then
+            echo "Uploading checksums to release ${TAG}..."
             # Use --clobber to allow re-running without "already exists" errors
-            gh release upload "${GITHUB_REF_NAME}" SHA256SUMS.txt SHA256SUMS.txt.asc --clobber
+            gh release upload "${TAG}" SHA256SUMS.txt SHA256SUMS.txt.asc --clobber --repo "${GITHUB_REPOSITORY}"
             echo "✅ Files uploaded to release"
           else
-            echo "Pull request detected - skipping upload"
+            echo "No release - skipping upload"
             echo ""
             echo "Generated files for review:"
             ls -lh SHA256SUMS.txt SHA256SUMS.txt.asc
@@ -820,6 +852,24 @@ jobs:
             echo ""
             echo "SHA256SUMS.txt.asc content (first 15 lines):"
             head -15 SHA256SUMS.txt.asc
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
+
+  # All assets are attached now. Publishing makes the release immutable and its
+  # downloads public, which Homebrew and AUR point to.
+  finalize-release:
+    needs:
+      - build
+      - checksums-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        run: |
+          if [[ -n "${TAG}" ]]; then
+            gh release edit "${TAG}" --draft=false --latest --repo "${GITHUB_REPOSITORY}"
+          else
+            echo "No release - nothing to publish"
           fi
         env:
           GH_TOKEN: ${{ secrets.OVERRIDE_TOKEN }}
