@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.52.1](https://github.com/udondan/cfn-teleport/compare/v0.52.0...v0.52.1) (2026-09-30)
+
+
+### Dependencies
+
+* **deps:** update actions/cache action to v6 ([#1361](https://github.com/udondan/cfn-teleport/issues/1361)) ([37cbf4a](https://github.com/udondan/cfn-teleport/commit/37cbf4a1c998c4c0b91a40f58a563cd18916168c))
+* **deps:** update actions/checkout action to v7 ([#1359](https://github.com/udondan/cfn-teleport/issues/1359)) ([0222019](https://github.com/udondan/cfn-teleport/commit/02220194e9a04f0c4cbeef954fb67012a2eac7cb))
+* **deps:** update aws-actions/configure-aws-credentials action to v6.3.0 ([#1369](https://github.com/udondan/cfn-teleport/issues/1369)) ([57a4598](https://github.com/udondan/cfn-teleport/commit/57a4598ba315b07a71579d01d16521eeaa006bd6))
+* **deps:** update aws-sdk-rust monorepo ([#1370](https://github.com/udondan/cfn-teleport/issues/1370)) ([efb0309](https://github.com/udondan/cfn-teleport/commit/efb03092045d1e8648b1fbbe7aef9b38a87a5780))
+* **deps:** update googleapis/release-please-action action to v5 ([#1362](https://github.com/udondan/cfn-teleport/issues/1362)) ([678d41c](https://github.com/udondan/cfn-teleport/commit/678d41c33c71d85eaada68818c5e90baee4a077f))
+* **deps:** update juliangruber/find-pull-request-action action to v1.11.1 ([#1349](https://github.com/udondan/cfn-teleport/issues/1349)) ([0a178b0](https://github.com/udondan/cfn-teleport/commit/0a178b06d561816e608ed5a0d6e4e4a679e0dd47))
+* **deps:** update rust crate aws-lc-sys to 0.45.0 ([#1371](https://github.com/udondan/cfn-teleport/issues/1371)) ([19f2b05](https://github.com/udondan/cfn-teleport/commit/19f2b05daa7a27a5ca14fe1726035d1c91043093))
+* **deps:** update rust crate clap to 4.6.7 ([#1350](https://github.com/udondan/cfn-teleport/issues/1350)) ([6fb4895](https://github.com/udondan/cfn-teleport/commit/6fb48954dc4c2c90b8c6b468802f6e8a40edf54b))
+* **deps:** update rust crate console to 0.16.6 ([#1352](https://github.com/udondan/cfn-teleport/issues/1352)) ([ddd0796](https://github.com/udondan/cfn-teleport/commit/ddd07966bf272033027c18e56cdeb37acfc96981))
+* **deps:** update rust crate indexmap to 2.14.2 ([#1356](https://github.com/udondan/cfn-teleport/issues/1356)) ([4271f2e](https://github.com/udondan/cfn-teleport/commit/4271f2e621e8896168cb938f2f0edebe29b24394))
+* **deps:** update rust crate proc-macro2 to 1.0.107 ([#1360](https://github.com/udondan/cfn-teleport/issues/1360)) ([8b6c311](https://github.com/udondan/cfn-teleport/commit/8b6c311c736767bdce83f9107bc54cd53b77b094))
+* **deps:** update rust crate serde_json to 1.0.151 ([#1367](https://github.com/udondan/cfn-teleport/issues/1367)) ([c52e6d4](https://github.com/udondan/cfn-teleport/commit/c52e6d497db61711b5512704ef6b15f58ab96f26))
+* **deps:** update rust crate tokio to 1.53.1 ([#1372](https://github.com/udondan/cfn-teleport/issues/1372)) ([4be8c96](https://github.com/udondan/cfn-teleport/commit/4be8c960d975d03f9460a1f07361629a463517ca))
+* **deps:** update rust crate uuid to 1.26.1 ([#1358](https://github.com/udondan/cfn-teleport/issues/1358)) ([056532a](https://github.com/udondan/cfn-teleport/commit/056532aa25552700d024c459cdf5f8b35d572f91))
+
 ## [0.52.0](https://github.com/udondan/cfn-teleport/compare/v0.51.0...v0.52.0) (2026-09-07)
 
 
