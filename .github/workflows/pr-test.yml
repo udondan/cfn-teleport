@@ -1448,8 +1448,8 @@ jobs:
   # The only required status check. Every job must have run and succeeded:
   # a skipped job (for example after a failed prepare-stacks or wait-for-turn)
   # must never let a PR become mergeable, least of all through automerge.
-  report-status:
-    name: success
+  # The only test check the ruleset requires.
+  required:
     if: always()
     runs-on: ubuntu-latest
     needs:
