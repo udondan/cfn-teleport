@@ -17,6 +17,7 @@ env:
 jobs:
   # Build Rust binary (lint, test, build)
   build:
+    needs: wait-for-turn
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -72,6 +73,7 @@ jobs:
 
   # Build Windows binary and validate embedded metadata
   build-windows:
+    needs: wait-for-turn
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -250,8 +252,10 @@ jobs:
           path: target/release/cfn-teleport.exe
           retention-days: 1
 
-  # Only one run at a time may use the AWS test stacks. Build jobs run in
-  # parallel; only the AWS jobs (all downstream of prepare-stacks) wait.
+  # Only one run at a time may use the AWS test stacks. The build jobs wait for
+  # the turn as well: the waiting runs of all open pull requests would otherwise
+  # take the runners of the account at once, and most of them are tested again
+  # after a rebase anyway.
   wait-for-turn:
     runs-on: ubuntu-latest
     timeout-minutes: 180
