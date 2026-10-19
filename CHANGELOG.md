@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.52.2](https://github.com/udondan/cfn-teleport/compare/v0.52.1...v0.52.2) (2026-10-19)
+
+
+### Dependencies
+
+* **deps:** lock file maintenance ([#1391](https://github.com/udondan/cfn-teleport/issues/1391)) ([56a59ec](https://github.com/udondan/cfn-teleport/commit/56a59ec1f5c4415f6ee916e269b30a72a6e8dfc5))
+* **deps:** lock file maintenance ([#1397](https://github.com/udondan/cfn-teleport/issues/1397)) ([a018bde](https://github.com/udondan/cfn-teleport/commit/a018bde53e092252b5d259009b7f255a58e2be9d))
+* **deps:** update rust crate aws-lc-sys to 0.46.0 ([#1395](https://github.com/udondan/cfn-teleport/issues/1395)) ([915f193](https://github.com/udondan/cfn-teleport/commit/915f193cd1a3097a3f1d0a7372ce7e7e014d2080))
+* **deps:** update rust crate aws-sdk-cloudformation to 1.131.0 ([#1387](https://github.com/udondan/cfn-teleport/issues/1387)) ([d352b1b](https://github.com/udondan/cfn-teleport/commit/d352b1b985e6532a500f6102d880412ddf82aba9))
+* **deps:** update rust crate serde_json to 1.0.154 ([#1394](https://github.com/udondan/cfn-teleport/issues/1394)) ([1454f98](https://github.com/udondan/cfn-teleport/commit/1454f980e0d839219c97ebf6faac4886278780b8))
+* **deps:** update rust crate tokio to 1.53.2 ([#1386](https://github.com/udondan/cfn-teleport/issues/1386)) ([68e5d11](https://github.com/udondan/cfn-teleport/commit/68e5d11f017e05866ea3e88c217e08cf4c77009a))
+* **deps:** update rust crate tokio to 1.53.3 ([#1396](https://github.com/udondan/cfn-teleport/issues/1396)) ([bd26b12](https://github.com/udondan/cfn-teleport/commit/bd26b127963d778b635d832494097b33f8ca3f1c))
+* **deps:** update rust crate uuid to 1.28.0 ([#1388](https://github.com/udondan/cfn-teleport/issues/1388)) ([2da56e1](https://github.com/udondan/cfn-teleport/commit/2da56e1617619a717fbcc17a38fdf17b8bdcf52b))
+* **deps:** update udondan/wait-for-turn to v1.4.0 ([#1393](https://github.com/udondan/cfn-teleport/issues/1393)) ([312c917](https://github.com/udondan/cfn-teleport/commit/312c91730d30260a943b3c31f423d1dc49609f76))
+
 ## [0.52.1](https://github.com/udondan/cfn-teleport/compare/v0.52.0...v0.52.1) (2026-10-13)
 
 
