@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.3](https://github.com/udondan/cfn-teleport/compare/v0.52.2...v0.52.3) (2026-10-23)
+
+
+### Dependencies
+
+* **deps:** update aws-sdk-rust monorepo ([#1398](https://github.com/udondan/cfn-teleport/issues/1398)) ([974c407](https://github.com/udondan/cfn-teleport/commit/974c407e917ebd871df8ed292957b37cc3fd4749))
+
 ## [0.52.2](https://github.com/udondan/cfn-teleport/compare/v0.52.1...v0.52.2) (2026-10-19)
 
 
