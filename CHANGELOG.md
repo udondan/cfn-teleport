@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.52.3](https://github.com/udondan/cfn-teleport/compare/v0.52.2...v0.52.3) (2026-10-26)
+
+
+### Dependencies
+
+* **deps:** lock file maintenance ([#1403](https://github.com/udondan/cfn-teleport/issues/1403)) ([3e899b7](https://github.com/udondan/cfn-teleport/commit/3e899b7c7ecc75c5c5b46acc4955372f12259fc9))
+* **deps:** update aws-sdk-rust monorepo ([#1398](https://github.com/udondan/cfn-teleport/issues/1398)) ([974c407](https://github.com/udondan/cfn-teleport/commit/974c407e917ebd871df8ed292957b37cc3fd4749))
+* **deps:** update rust crate aws-sdk-cloudformation to 1.133.0 ([#1400](https://github.com/udondan/cfn-teleport/issues/1400)) ([6b5751b](https://github.com/udondan/cfn-teleport/commit/6b5751b118a5ae66cbf972a2e899fc60cdd4e29a))
+* **deps:** update rust crate aws-sdk-cloudformation to 1.134.0 ([#1402](https://github.com/udondan/cfn-teleport/issues/1402)) ([a308cae](https://github.com/udondan/cfn-teleport/commit/a308cae6e0219c63943994e1b770afc2fea57133))
+* **deps:** update rust crate tokio to 1.54.1 ([#1401](https://github.com/udondan/cfn-teleport/issues/1401)) ([590146b](https://github.com/udondan/cfn-teleport/commit/590146b2c3d34c78713e00531475aa68ec2dc090))
+
 ## [0.52.2](https://github.com/udondan/cfn-teleport/compare/v0.52.1...v0.52.2) (2026-10-19)
 
 
