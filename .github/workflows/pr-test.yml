@@ -19,6 +19,9 @@ jobs:
   build:
     needs: wait-for-turn
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -36,6 +39,14 @@ jobs:
 
       - name: Install clippy
         run: rustup component add clippy
+
+      - name: Install llvm-tools
+        run: rustup component add llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: cargo-llvm-cov
 
       - name: Toolchain info
         run: |
@@ -59,7 +70,14 @@ jobs:
       - name: Test
         run: |
           cargo check
-          cargo test --all
+          cargo llvm-cov --all --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          fail_ci_if_error: false
+          files: lcov.info
 
       - name: Build binary
         run: cargo install --path .
