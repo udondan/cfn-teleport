@@ -105,14 +105,14 @@ jobs:
       OS: ${{ matrix.OS }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || inputs.tag }}
           persist-credentials: false
           fetch-depth: 0
 
       - name: Dependency cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -206,7 +206,7 @@ jobs:
           echo "ARTIFACT=${ARTIFACT}" >> "$GITHUB_OUTPUT"
 
       - name: Archive artifact
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        uses: actions/upload-artifact@v7
         with:
           name: artifacts-${{ matrix.TARGET }}
           path: |
@@ -322,7 +322,7 @@ jobs:
     
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8
         with:
           name: artifacts-${{ matrix.target }}
           path: artifacts
@@ -430,14 +430,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref || inputs.tag }}
           persist-credentials: false
           fetch-depth: 0
 
       - name: Dependency cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -461,12 +461,12 @@ jobs:
     needs: finalize-release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with: # zizmor: ignore[artipacked] pushes the formula update to the tap repository
           repository: udondan/homebrew-software
           token: ${{ secrets.OVERRIDE_TOKEN }}
 
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: artifacts
@@ -566,7 +566,7 @@ jobs:
     # Arch is a rolling release, the packaging needs a current image.
     container: archlinux:latest # zizmor: ignore[unpinned-images]
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: artifacts
@@ -734,12 +734,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - name: Download all artifacts
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        uses: actions/download-artifact@v8
         with:
           pattern: artifacts-*
           path: artifacts
