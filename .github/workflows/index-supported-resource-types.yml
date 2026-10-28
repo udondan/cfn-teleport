@@ -6,6 +6,10 @@ on:
     - cron: 42 4 * * *
   workflow_dispatch:
 
+# The pull request is created with OVERRIDE_TOKEN.
+permissions:
+  contents: read
+
 jobs:
   index-supported-resource-types:
     runs-on: ubuntu-latest

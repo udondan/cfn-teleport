@@ -37,6 +37,10 @@ on:
     paths:
       - .github/workflows/publish.yml
 
+# Uploads and the release use OVERRIDE_TOKEN, not the workflow token.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   # Empty for pull requests and builds without a release: nothing is uploaded
@@ -442,7 +446,8 @@ jobs:
           restore-keys: |
             ubuntu-latest-x86_64-unknown-linux-musl-target-
 
-      - name: Publish to crates.io
+      # Trusted publishing would need to be set up on crates.io first.
+      - name: Publish to crates.io # zizmor: ignore[use-trusted-publishing]
         run: |
           if [[ -n "${TAG}" ]]; then
             cargo publish
@@ -457,7 +462,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
+        with: # zizmor: ignore[artipacked] pushes the formula update to the tap repository
           repository: udondan/homebrew-software
           token: ${{ secrets.OVERRIDE_TOKEN }}
 
@@ -558,7 +563,8 @@ jobs:
   aur-publish:
     needs: finalize-release
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    # Arch is a rolling release, the packaging needs a current image.
+    container: archlinux:latest # zizmor: ignore[unpinned-images]
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -729,6 +735,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Download all artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
