@@ -2,8 +2,11 @@
 name: Automerge
 
 on:
-  pull_request_target:
+  # Doesn't check out or run code from the pull request, only waits for its checks and merges it.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [labeled, synchronize]
+
+permissions: {}
 
 jobs:
   automerge_ci:
@@ -12,6 +15,8 @@ jobs:
     if: |
       github.actor == 'udondan' &&
       contains(github.event.pull_request.labels.*.name, 'automerge')
+    permissions:
+      checks: read # wait for the required check; merging uses OVERRIDE_TOKEN
     steps:
       - name: Wait for tests to succeed
         uses: fountainhead/action-wait-for-check@5a908a24814494009c4bb27c242ea38c93c593be # v1.2.0

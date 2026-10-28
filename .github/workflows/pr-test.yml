@@ -11,6 +11,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -303,6 +306,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -361,6 +366,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -530,6 +537,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -619,6 +628,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -827,6 +838,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -1168,6 +1181,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download Windows binary artifact
         uses: actions/download-artifact@v8
@@ -1275,6 +1290,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -1455,6 +1472,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -1475,17 +1494,22 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
         with:
-          install_args: actionlint shellcheck
+          install_args: actionlint shellcheck zizmor
 
       # Also runs shellcheck over every `run:` block.
       - name: actionlint
         run: actionlint
+
+      - name: zizmor
+        run: zizmor .
+        env:
+          GH_TOKEN: ${{ github.token }} # zizmor checks the actions online
 
   # The only required status check. Every job must have run and succeeded:
   # a skipped job (for example after a failed prepare-stacks or wait-for-turn)

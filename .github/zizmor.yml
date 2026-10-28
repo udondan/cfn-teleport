@@ -1,0 +1,8 @@
+# First-party actions keep their version tags, everything else is pinned to a commit SHA.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "actions/*": ref-pin
+        "github/*": ref-pin
+        "*": hash-pin
