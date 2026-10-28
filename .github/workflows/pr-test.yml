@@ -1469,6 +1469,24 @@ jobs:
           echo "=========================================="
           make test-clean-all
 
+  # Lints the workflows. Doesn't touch AWS, so it doesn't wait for the turn.
+  actions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c # v4.3.0
+        with:
+          install_args: actionlint shellcheck
+
+      # Also runs shellcheck over every `run:` block.
+      - name: actionlint
+        run: actionlint
+
   # The only required status check. Every job must have run and succeeded:
   # a skipped job (for example after a failed prepare-stacks or wait-for-turn)
   # must never let a PR become mergeable, least of all through automerge.
@@ -1477,6 +1495,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     needs:
+      - actions
       - build
       - build-windows
       - wait-for-turn
