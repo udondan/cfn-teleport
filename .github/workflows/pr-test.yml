@@ -11,6 +11,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -321,6 +324,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -337,24 +342,24 @@ jobs:
           STACK_NAME="${STACK_NAME%.yaml}"
 
           # Build parameter overrides based on stack
-          PARAMS=""
-          CAPABILITIES=""
+          PARAMS=()
+          CAPABILITIES=()
 
           # RefactorTest1 uses parameters and requires IAM capability
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest1" ]; then
-            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
-            CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
+            PARAMS=(--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test)
+            CAPABILITIES=(--capabilities CAPABILITY_NAMED_IAM)
           fi
 
           # RefactorTest2 uses same parameters as RefactorTest1
           if [ "$STACK_NAME" = "CfnTeleportRefactorTest2" ]; then
-            PARAMS="--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test"
+            PARAMS=(--parameter-overrides ParameterTableName=cfn-teleport-refactor-param-test)
           fi
 
           # RenameTest1 requires IAM capability and QueueName parameter
           if [ "$STACK_NAME" = "CfnTeleportRenameTest1" ]; then
-            CAPABILITIES="--capabilities CAPABILITY_NAMED_IAM"
-            PARAMS="--parameter-overrides QueueName=cfn-teleport-rename-test-queue"
+            CAPABILITIES=(--capabilities CAPABILITY_NAMED_IAM)
+            PARAMS=(--parameter-overrides QueueName=cfn-teleport-rename-test-queue)
           fi
 
           # ImportTest1 and ImportTest2 have no parameters (import mode compatible)
@@ -362,8 +367,8 @@ jobs:
           aws cloudformation deploy \
             --template-file ${{ matrix.template }} \
             --stack-name "$STACK_NAME" \
-            $CAPABILITIES \
-            $PARAMS \
+            "${CAPABILITIES[@]}" \
+            "${PARAMS[@]}" \
             --tags ApplicationName=cfn-teleport-test \
             --no-fail-on-empty-changeset
 
@@ -379,6 +384,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -548,6 +555,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -637,6 +646,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -845,6 +856,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download binary artifact
         uses: actions/download-artifact@v8
@@ -871,7 +884,7 @@ jobs:
           run_cfn_teleport() {
             echo ""
             echo "═══════════════════════════════════════════════════════════════════════════════"
-            echo "▶ Running: cfn-teleport $@"
+            echo "▶ Running: cfn-teleport $*"
             echo "───────────────────────────────────────────────────────────────────────────────"
             cfn-teleport "$@" 2>&1
             local exit_code=$?
@@ -880,6 +893,26 @@ jobs:
             echo "═══════════════════════════════════════════════════════════════════════════════"
             echo ""
             return $exit_code
+          }
+
+          # Number of existing files among the given glob results
+          count_files() {
+            local f n=0
+            for f in "$@"; do
+              [ -e "$f" ] && n=$((n + 1))
+            done
+            echo "$n"
+          }
+
+          # First existing file among the given glob results (globs expand sorted)
+          first_file() {
+            local f
+            for f in "$@"; do
+              if [ -e "$f" ]; then
+                echo "$f"
+                return
+              fi
+            done
           }
 
           # Create test directories
@@ -904,7 +937,7 @@ jobs:
             --resource "${BUCKET1}"
 
           # Verify template files were created
-          EXPORTED_FILES=$(ls /tmp/cfn-test-export/*.json 2>/dev/null | wc -l)
+          EXPORTED_FILES=$(count_files /tmp/cfn-test-export/*.json)
           if [ "$EXPORTED_FILES" -ge 1 ]; then
             echo "✓ Export created $EXPORTED_FILES template file(s)"
             ls -lh /tmp/cfn-test-export/
@@ -914,8 +947,8 @@ jobs:
           fi
 
           # Verify format preservation: Stack1 is JSON → source file is JSON, target is YAML
-          SOURCE_FILE=$(ls /tmp/cfn-test-export/*source*.json | head -1)
-          TARGET_FILE=$(ls /tmp/cfn-test-export/*target*.yaml | head -1)
+          SOURCE_FILE=$(first_file /tmp/cfn-test-export/*source*.json)
+          TARGET_FILE=$(first_file /tmp/cfn-test-export/*target*.yaml)
           
           if jq empty "$SOURCE_FILE" 2>/dev/null; then
             echo "✓ Source template is valid JSON (format preserved from Stack1)"
@@ -953,7 +986,7 @@ jobs:
             --resource "${IMPORT_BUCKET}"
 
           # Verify 4 template files were created (retain, remove, target+retention, target final)
-          IMPORT_FILES=$(ls /tmp/cfn-test-import/*.json /tmp/cfn-test-import/*.yaml 2>/dev/null | wc -l)
+          IMPORT_FILES=$(count_files /tmp/cfn-test-import/*.json /tmp/cfn-test-import/*.yaml)
           if [ "$IMPORT_FILES" -eq 4 ]; then
             echo "✓ Import mode export created 4 template files as expected"
             ls -lh /tmp/cfn-test-import/
@@ -970,9 +1003,9 @@ jobs:
             if [ -f "$template_file" ]; then
               echo "Validating: $template_file"
               if aws cloudformation validate-template --template-body "file://$template_file" > /dev/null 2>&1; then
-                echo "✓ Template is valid: $(basename $template_file)"
+                echo "✓ Template is valid: $(basename "$template_file")"
               else
-                echo "✗ Template validation failed: $(basename $template_file)"
+                echo "✗ Template validation failed: $(basename "$template_file")"
                 exit 1
               fi
             fi
@@ -985,11 +1018,11 @@ jobs:
           # manually with a predictable name, then exporting with that same base name.
           
           # Count current files
-          EXPORT_COUNT_BEFORE=$(ls /tmp/cfn-test-export/*.json 2>/dev/null | wc -l)
+          EXPORT_COUNT_BEFORE=$(count_files /tmp/cfn-test-export/*.json)
           echo "Files before collision test: $EXPORT_COUNT_BEFORE"
           
           # Find an existing export to get the pattern
-          EXISTING_FILE=$(ls /tmp/cfn-test-export/*-source-*.json 2>/dev/null | head -1)
+          EXISTING_FILE=$(first_file /tmp/cfn-test-export/*-source-*.json)
           
           if [ -n "$EXISTING_FILE" ]; then
             # Extract the base pattern and create a collision file
@@ -1018,7 +1051,7 @@ jobs:
               --mode refactor --export --out-dir /tmp/cfn-test-export --yes \
               --resource "${BUCKET1}"
             
-            EXPORT_COUNT_AFTER=$(ls /tmp/cfn-test-export/*.json 2>/dev/null | wc -l)
+            EXPORT_COUNT_AFTER=$(count_files /tmp/cfn-test-export/*.json)
             echo "Files after second export: $EXPORT_COUNT_AFTER"
             
             # Should have at least 2 more files (source + target from second export)
@@ -1040,7 +1073,7 @@ jobs:
           echo ""
           echo "######### TEST 5: Use exported template as input (roundtrip test) #########"
           # Use the exported template as source for a new operation
-          EXPORTED_TEMPLATE=$(ls /tmp/cfn-test-export/*.json | head -1)
+          EXPORTED_TEMPLATE=$(first_file /tmp/cfn-test-export/*.json)
           echo "Using exported template as input: $EXPORTED_TEMPLATE"
           
           # Test --source-template flag (read from file instead of AWS)
@@ -1073,7 +1106,7 @@ jobs:
             --export --out-dir /tmp/cfn-test-spec --yes
 
           # Verify the exported template has the renamed resource
-          SPEC_TEMPLATE=$(ls /tmp/cfn-test-spec/*.json | head -1)
+          SPEC_TEMPLATE=$(first_file /tmp/cfn-test-spec/*.json)
           if jq -e '.Resources.RenamedBucket123' "$SPEC_TEMPLATE" > /dev/null; then
             echo "✓ Migration spec correctly renamed resource in exported template"
           else
@@ -1107,10 +1140,10 @@ jobs:
           
           if ls /tmp/cfn-test-import/*-target-*.yaml > /dev/null 2>&1; then
             echo "✓ YAML target stack exports created YAML files (format preserved)"
-            ls -lh /tmp/cfn-test-import/*-target-*.yaml | head -2
+            ls -lh /tmp/cfn-test-import/*-target-*.yaml
             
             # Verify the YAML file is valid YAML (not JSON)
-            YAML_FILE=$(ls /tmp/cfn-test-import/*-target-*.yaml | head -1)
+            YAML_FILE=$(first_file /tmp/cfn-test-import/*-target-*.yaml)
             if grep -q "AWSTemplateFormatVersion" "$YAML_FILE" && ! grep -q "^{" "$YAML_FILE"; then
               echo "✓ Exported file is valid YAML format"
             else
@@ -1166,6 +1199,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download Windows binary artifact
         uses: actions/download-artifact@v8
@@ -1273,6 +1308,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -1391,13 +1428,13 @@ jobs:
             echo "=========================================="
             echo "✅ All stacks are in original state - will be reused in next run!"
             echo "=========================================="
-            echo "state_valid=true" >> $GITHUB_OUTPUT
+            echo "state_valid=true" >> "$GITHUB_OUTPUT"
           else
             echo ""
             echo "=========================================="
             echo "❌ Some stacks are not in original state - will be destroyed and recreated"
             echo "=========================================="
-            echo "state_valid=false" >> $GITHUB_OUTPUT
+            echo "state_valid=false" >> "$GITHUB_OUTPUT"
             exit 1
           fi
 
@@ -1453,6 +1490,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
@@ -1467,6 +1506,29 @@ jobs:
           echo "=========================================="
           make test-clean-all
 
+  # Lints the workflows. Doesn't touch AWS, so it doesn't wait for the turn.
+  actions:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        with:
+          install_args: actionlint shellcheck zizmor
+
+      # Also runs shellcheck over every `run:` block.
+      - name: actionlint
+        run: actionlint
+
+      - name: zizmor
+        run: zizmor .
+        env:
+          GH_TOKEN: ${{ github.token }} # zizmor checks the actions online
+
   # The only required status check. Every job must have run and succeeded:
   # a skipped job (for example after a failed prepare-stacks or wait-for-turn)
   # must never let a PR become mergeable, least of all through automerge.
@@ -1475,6 +1537,7 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     needs:
+      - actions
       - build
       - build-windows
       - wait-for-turn

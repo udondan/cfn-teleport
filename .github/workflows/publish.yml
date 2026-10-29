@@ -37,6 +37,10 @@ on:
     paths:
       - .github/workflows/publish.yml
 
+# Uploads and the release use OVERRIDE_TOKEN, not the workflow token.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   # Empty for pull requests and builds without a release: nothing is uploaded
@@ -199,7 +203,7 @@ jobs:
             ls -lh "${SRC}" "${ARTIFACT}"
           fi
 
-          echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_OUTPUT
+          echo "ARTIFACT=${ARTIFACT}" >> "$GITHUB_OUTPUT"
 
       - name: Archive artifact
         uses: actions/upload-artifact@v7
@@ -325,7 +329,7 @@ jobs:
       
       - name: Set up QEMU for ARM emulation (Linux only)
         if: runner.os == 'Linux' && matrix.platform != ''
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
         with:
           platforms: ${{ matrix.platform }}
       
@@ -442,7 +446,8 @@ jobs:
           restore-keys: |
             ubuntu-latest-x86_64-unknown-linux-musl-target-
 
-      - name: Publish to crates.io
+      # Trusted publishing would need to be set up on crates.io first.
+      - name: Publish to crates.io # zizmor: ignore[use-trusted-publishing]
         run: |
           if [[ -n "${TAG}" ]]; then
             cargo publish
@@ -457,7 +462,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
+        with: # zizmor: ignore[artipacked] pushes the formula update to the tap repository
           repository: udondan/homebrew-software
           token: ${{ secrets.OVERRIDE_TOKEN }}
 
@@ -474,26 +479,26 @@ jobs:
             VERSION="v9.9.9"
           fi
 
-          AARM=($(shasum -a 256 artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg))
-          AINTEL=($(shasum -a 256 artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg))
-          LARM32=($(shasum -a 256 artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz))
-          LARM64=($(shasum -a 256 artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz))
-          LINTEL32=($(shasum -a 256 artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz))
-          LINTEL64=($(shasum -a 256 artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz))
+          read -r -a AARM < <(shasum -a 256 "artifacts/cfn-teleport-aarch64-apple-darwin-${VERSION}.dmg")
+          read -r -a AINTEL < <(shasum -a 256 "artifacts/cfn-teleport-x86_64-apple-darwin-${VERSION}.dmg")
+          read -r -a LARM32 < <(shasum -a 256 "artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz")
+          read -r -a LARM64 < <(shasum -a 256 "artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz")
+          read -r -a LINTEL32 < <(shasum -a 256 "artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz")
+          read -r -a LINTEL64 < <(shasum -a 256 "artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz")
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
-            -e "s!{{ a_intel_file }}!$(basename ${AINTEL[1]})!g" \
+            -e "s!{{ a_intel_file }}!$(basename "${AINTEL[1]}")!g" \
             -e "s!{{ a_intel_sha }}!${AINTEL[0]}!g" \
-            -e "s!{{ a_arm_file }}!$(basename ${AARM[1]})!g" \
+            -e "s!{{ a_arm_file }}!$(basename "${AARM[1]}")!g" \
             -e "s!{{ a_arm_sha }}!${AARM[0]}!g" \
-            -e "s!{{ l_intel32_file }}!$(basename ${LINTEL32[1]})!g" \
+            -e "s!{{ l_intel32_file }}!$(basename "${LINTEL32[1]}")!g" \
             -e "s!{{ l_intel32_sha }}!${LINTEL32[0]}!g" \
-            -e "s!{{ l_intel64_file }}!$(basename ${LINTEL64[1]})!g" \
+            -e "s!{{ l_intel64_file }}!$(basename "${LINTEL64[1]}")!g" \
             -e "s!{{ l_intel64_sha }}!${LINTEL64[0]}!g" \
-            -e "s!{{ l_arm32_file }}!$(basename ${LARM32[1]})!g" \
+            -e "s!{{ l_arm32_file }}!$(basename "${LARM32[1]}")!g" \
             -e "s!{{ l_arm32_sha }}!${LARM32[0]}!g" \
-            -e "s!{{ l_arm64_file }}!$(basename ${LARM64[1]})!g" \
+            -e "s!{{ l_arm64_file }}!$(basename "${LARM64[1]}")!g" \
             -e "s!{{ l_arm64_sha }}!${LARM64[0]}!g" \
             > cfn-teleport.rb
           cat cfn-teleport.rb
@@ -558,7 +563,8 @@ jobs:
   aur-publish:
     needs: finalize-release
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    # Arch is a rolling release, the packaging needs a current image.
+    container: archlinux:latest # zizmor: ignore[unpinned-images]
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -598,23 +604,23 @@ jobs:
             VERSION="v9.9.9"
           fi
 
-          ARM=($(sha256sum ../artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz))
-          X86_64=($(sha256sum ../artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz))
-          AARCH64=($(sha256sum ../artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz))
-          ARMV7H=($(sha256sum ../artifacts/cfn-teleport-armv7-unknown-linux-musleabihf-${VERSION}.tar.gz))
-          I686=($(sha256sum ../artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz))
+          read -r -a ARM < <(sha256sum "../artifacts/cfn-teleport-arm-unknown-linux-musleabihf-${VERSION}.tar.gz")
+          read -r -a X86_64 < <(sha256sum "../artifacts/cfn-teleport-x86_64-unknown-linux-musl-${VERSION}.tar.gz")
+          read -r -a AARCH64 < <(sha256sum "../artifacts/cfn-teleport-aarch64-unknown-linux-musl-${VERSION}.tar.gz")
+          read -r -a ARMV7H < <(sha256sum "../artifacts/cfn-teleport-armv7-unknown-linux-musleabihf-${VERSION}.tar.gz")
+          read -r -a I686 < <(sha256sum "../artifacts/cfn-teleport-i686-unknown-linux-musl-${VERSION}.tar.gz")
 
           echo "${TEMPLATE}" | sed \
             -e "s!{{ version }}!${VERSION:1}!g" \
-            -e "s!{{ arm_file }}!$(basename ${ARM[1]})!g" \
+            -e "s!{{ arm_file }}!$(basename "${ARM[1]}")!g" \
             -e "s!{{ arm_sha }}!${ARM[0]}!g" \
-            -e "s!{{ x86_64_file }}!$(basename ${X86_64[1]})!g" \
+            -e "s!{{ x86_64_file }}!$(basename "${X86_64[1]}")!g" \
             -e "s!{{ x86_64_sha }}!${X86_64[0]}!g" \
-            -e "s!{{ aarch64_file }}!$(basename ${AARCH64[1]})!g" \
+            -e "s!{{ aarch64_file }}!$(basename "${AARCH64[1]}")!g" \
             -e "s!{{ aarch64_sha }}!${AARCH64[0]}!g" \
-            -e "s!{{ armv7h_file }}!$(basename ${ARMV7H[1]})!g" \
+            -e "s!{{ armv7h_file }}!$(basename "${ARMV7H[1]}")!g" \
             -e "s!{{ armv7h_sha }}!${ARMV7H[0]}!g" \
-            -e "s!{{ i686_file }}!$(basename ${I686[1]})!g" \
+            -e "s!{{ i686_file }}!$(basename "${I686[1]}")!g" \
             -e "s!{{ i686_sha }}!${I686[0]}!g" \
             > PKGBUILD
           echo "##### PKGBUILD #####"
@@ -729,6 +735,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -825,9 +833,7 @@ jobs:
       - name: Verify signature
         run: |
           echo "Verifying signature..."
-          gpg --verify SHA256SUMS.txt.asc SHA256SUMS.txt
-          
-          if [ $? -ne 0 ]; then
+          if ! gpg --verify SHA256SUMS.txt.asc SHA256SUMS.txt; then
             echo "ERROR: Signature verification failed"
             exit 1
           fi
