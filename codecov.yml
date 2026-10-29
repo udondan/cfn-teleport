@@ -1,0 +1,19 @@
+---
+codecov:
+  # The Coverage job of the Test workflow waits for the Codecov checks, so
+  # Codecov must not wait for the other checks in turn.
+  require_ci_to_pass: false
+  notify:
+    wait_for_ci: false
+
+coverage:
+  status:
+    project:
+      default:
+        # The coverage of the whole project may drop by up to 1 % against main.
+        target: auto
+        threshold: 1%
+    patch:
+      default:
+        # At least 80 % of the lines a pull request changes must be tested.
+        target: 80%
