@@ -141,3 +141,85 @@ impl MarkedValue {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn loc() -> Location {
+        Location::new(3, 7)
+    }
+
+    #[test]
+    fn location_new_and_display() {
+        let l = loc();
+        assert_eq!(l, Location { line: 3, col: 7 });
+        assert_eq!(l.to_string(), "line 3, column 7");
+    }
+
+    #[test]
+    fn location_of_every_variant() {
+        let values = [
+            MarkedValue::Null(loc()),
+            MarkedValue::BadValue("x".to_string(), loc()),
+            MarkedValue::String("x".to_string(), loc()),
+            MarkedValue::Regex("x".to_string(), loc()),
+            MarkedValue::Bool(true, loc()),
+            MarkedValue::Int(1, loc()),
+            MarkedValue::Float(1.5, loc()),
+            MarkedValue::Char('c', loc()),
+            MarkedValue::List(vec![], loc()),
+            MarkedValue::Map(indexmap::IndexMap::new(), loc()),
+            MarkedValue::RangeInt(RangeType::Range(1, 2), loc()),
+            MarkedValue::RangeFloat(RangeType::Range(1.0, 2.0), loc()),
+            MarkedValue::RangeChar(RangeType::Range('a', 'b'), loc()),
+        ];
+        assert!(values.iter().all(|v| *v.location() == loc()));
+    }
+
+    #[test]
+    fn converts_simple_variants_to_json() {
+        assert_eq!(
+            MarkedValue::BadValue("bad".to_string(), loc()).to_json_value(),
+            json!("bad")
+        );
+        assert_eq!(
+            MarkedValue::Regex("a.*".to_string(), loc()).to_json_value(),
+            json!("a.*")
+        );
+        assert_eq!(MarkedValue::Char('c', loc()).to_json_value(), json!("c"));
+        assert_eq!(
+            MarkedValue::Float(f64::NAN, loc()).to_json_value(),
+            json!(null)
+        );
+    }
+
+    #[test]
+    fn converts_ranges_to_json() {
+        assert_eq!(
+            MarkedValue::RangeInt(RangeType::Range(1, 2), loc()).to_json_value(),
+            json!({"type": "range", "start": 1, "end": 2, "inclusive": true})
+        );
+        assert_eq!(
+            MarkedValue::RangeInt(RangeType::OpenRange(1, 2), loc()).to_json_value(),
+            json!({"type": "range", "start": 1, "end": 2, "inclusive": false})
+        );
+        assert_eq!(
+            MarkedValue::RangeFloat(RangeType::Range(1.5, 2.5), loc()).to_json_value(),
+            json!({"type": "range", "start": 1.5, "end": 2.5, "inclusive": true})
+        );
+        assert_eq!(
+            MarkedValue::RangeFloat(RangeType::OpenRange(1.5, 2.5), loc()).to_json_value(),
+            json!({"type": "range", "start": 1.5, "end": 2.5, "inclusive": false})
+        );
+        assert_eq!(
+            MarkedValue::RangeChar(RangeType::Range('a', 'z'), loc()).to_json_value(),
+            json!({"type": "range", "start": "a", "end": "z", "inclusive": true})
+        );
+        assert_eq!(
+            MarkedValue::RangeChar(RangeType::OpenRange('a', 'z'), loc()).to_json_value(),
+            json!({"type": "range", "start": "a", "end": "z", "inclusive": false})
+        );
+    }
+}

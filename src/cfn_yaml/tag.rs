@@ -59,3 +59,42 @@ impl Debug for Tag {
         cstr::debug_lossy(&self.0, formatter)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tag(bytes: &[u8]) -> Tag {
+        Tag(Box::from(bytes))
+    }
+
+    #[test]
+    fn splits_handle_and_suffix() {
+        let t = tag(b"!!int");
+        assert_eq!(t.get_handle(), "!!");
+        assert_eq!(t.get_suffix(2), "int");
+    }
+
+    #[test]
+    fn invalid_utf8_has_empty_handle_and_suffix() {
+        let t = tag(b"!\xff");
+        assert_eq!(t.get_handle(), "");
+        assert_eq!(t.get_suffix(0), "");
+    }
+
+    #[test]
+    fn compares_with_str() {
+        assert!(tag(b"!Ref") == *"!Ref");
+        assert!(tag(b"!Ref") != *"!Sub");
+    }
+
+    #[test]
+    fn derefs_to_bytes() {
+        assert_eq!(&*tag(b"!Ref"), b"!Ref");
+    }
+
+    #[test]
+    fn debug_formats_lossy() {
+        assert_eq!(format!("{:?}", tag(b"!Ref\xff")), r#""!Ref\xff""#);
+    }
+}

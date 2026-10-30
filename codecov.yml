@@ -15,5 +15,5 @@ coverage:
         threshold: 1%
     patch:
       default:
-        # At least 80 % of the lines a pull request changes must be tested.
-        target: 80%
+        # Every line a pull request changes must be tested.
+        target: 100%

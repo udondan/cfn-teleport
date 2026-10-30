@@ -62,3 +62,28 @@ impl<'input> Drop for ParserPinned<'input> {
         unsafe { sys::yaml_parser_delete(&mut self.sys) }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn next_debug(parser: &mut Parser) -> String {
+        let (event, _) = parser.next().unwrap();
+        format!("{:?}", event)
+    }
+
+    #[test]
+    fn emits_stream_start_and_end_for_empty_input() {
+        let mut parser = Parser::new(Cow::Borrowed(b""));
+        assert_eq!(next_debug(&mut parser), "StreamStart");
+        assert_eq!(next_debug(&mut parser), "StreamEnd");
+    }
+
+    #[test]
+    fn keeps_failing_after_an_error() {
+        let mut parser = Parser::new(Cow::Borrowed(b"\"x"));
+        assert_eq!(next_debug(&mut parser), "StreamStart");
+        assert!(parser.next().is_err());
+        assert!(parser.next().is_err());
+    }
+}
