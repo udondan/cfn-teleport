@@ -34,3 +34,23 @@ impl From<InternalError> for Error {
         Error::InternalError(err)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn displays_parse_error() {
+        let err = Error::ParseError("boom".to_string());
+        assert_eq!(err.to_string(), "Parse error: boom");
+    }
+
+    #[test]
+    fn converts_and_displays_internal_error() {
+        let err: Error = InternalError::InvalidKeyType("line 1, column 2".to_string()).into();
+        assert_eq!(
+            err.to_string(),
+            r#"Internal error: InvalidKeyType("line 1, column 2")"#
+        );
+    }
+}

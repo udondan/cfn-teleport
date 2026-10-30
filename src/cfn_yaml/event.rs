@@ -144,3 +144,74 @@ impl Debug for Anchor {
         cstr::debug_lossy(&self.0, formatter)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Event, Scalar};
+    use crate::cfn_yaml::parser::Parser;
+    use std::borrow::Cow;
+
+    /// Returns the Debug output of all events of a YAML document.
+    fn events(input: Cow<[u8]>) -> Vec<String> {
+        let mut parser = Parser::new(input);
+        let mut events = vec![];
+        loop {
+            let (event, _) = parser.next().unwrap();
+            let debug = format!("{:?}", event);
+            events.push(debug);
+            if events.last().unwrap() == "StreamEnd" {
+                return events;
+            }
+        }
+    }
+
+    #[test]
+    fn converts_anchors_tags_aliases_and_styles() {
+        let yaml = "- &a !Ref x\n- *a\n- 'single'\n- \"double\"\n- |\n  literal\n- >\n  folded\n- !!map {k: v}\n- &s !!seq [1]\n";
+        assert_eq!(
+            events(Cow::Borrowed(yaml.as_bytes())),
+            [
+                "StreamStart",
+                "DocumentStart",
+                "SequenceStart(SequenceStart { anchor: None, tag: None })",
+                r#"Scalar(Scalar { anchor: Some("a"), tag: Some("!Ref"), value: "x", style: Plain })"#,
+                r#"Alias("a")"#,
+                r#"Scalar(Scalar { anchor: None, tag: None, value: "single", style: SingleQuoted })"#,
+                r#"Scalar(Scalar { anchor: None, tag: None, value: "double", style: DoubleQuoted })"#,
+                r#"Scalar(Scalar { anchor: None, tag: None, value: "literal\n", style: Literal })"#,
+                r#"Scalar(Scalar { anchor: None, tag: None, value: "folded\n", style: Folded })"#,
+                r#"MappingStart(MappingStart { anchor: None, tag: Some("tag:yaml.org,2002:map") })"#,
+                r#"Scalar(Scalar { anchor: None, tag: None, value: "k", style: Plain })"#,
+                r#"Scalar(Scalar { anchor: None, tag: None, value: "v", style: Plain })"#,
+                "MappingEnd",
+                r#"SequenceStart(SequenceStart { anchor: Some("s"), tag: Some("tag:yaml.org,2002:seq") })"#,
+                r#"Scalar(Scalar { anchor: None, tag: None, value: "1", style: Plain })"#,
+                "SequenceEnd",
+                "SequenceEnd",
+                "DocumentEnd",
+                "StreamEnd",
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_repr_only_for_borrowed_input() {
+        let mut borrowed = Parser::new(Cow::Borrowed(b"'x'"));
+        borrowed.next().unwrap();
+        borrowed.next().unwrap();
+        let (event, _) = borrowed.next().unwrap();
+        assert!(matches!(
+            event,
+            Event::Scalar(Scalar {
+                repr: Some(b"'x'"),
+                ..
+            })
+        ));
+
+        let mut owned = Parser::new(Cow::Owned(b"'x'".to_vec()));
+        owned.next().unwrap();
+        owned.next().unwrap();
+        let (event, _) = owned.next().unwrap();
+        assert!(matches!(event, Event::Scalar(Scalar { repr: None, .. })));
+    }
+}

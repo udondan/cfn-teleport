@@ -237,3 +237,86 @@ fn handle_type_ref(val: String, loc: Location, type_ref: &str) -> MarkedValue {
         _ => MarkedValue::String(val, loc),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cfn_yaml::{parse_yaml_to_json, tag::Tag};
+    use serde_json::json;
+
+    fn parse(yaml: &str) -> serde_json::Value {
+        parse_yaml_to_json(yaml).unwrap()
+    }
+
+    #[test]
+    fn rejects_aliases() {
+        let err = parse_yaml_to_json("a: &x 1\nb: *x\n").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "Failed to parse CloudFormation YAML: Parse error: Guard does not currently support aliases"
+        );
+    }
+
+    #[test]
+    fn rejects_non_string_keys() {
+        let err = parse_yaml_to_json("a: 1\n2: b\n").unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            r#"Failed to parse CloudFormation YAML: Internal error: InvalidKeyType("line 1, column 0")"#
+        );
+    }
+
+    #[test]
+    fn parses_plain_scalars() {
+        assert_eq!(
+            parse("i: 1\nf: 1.5\nt: yes\nf2: no\nnul: ~\nnull2: NULL\ns: text\nq: '1'\n"),
+            json!({"i": 1, "f": 1.5, "t": true, "f2": false, "nul": null, "null2": null, "s": "text", "q": "1"})
+        );
+    }
+
+    #[test]
+    fn parses_single_value_function_tags() {
+        assert_eq!(
+            parse("a: !Ref x\nb: !Unknown y\nc: !<verbatim> z\n"),
+            json!({"a": {"Ref": "x"}, "b": "y", "c": "z"})
+        );
+    }
+
+    #[test]
+    fn parses_yaml_type_tags() {
+        assert_eq!(
+            parse(
+                "bt: !!bool true\nbs: !!bool yes\nit: !!int 5\nib: !!int x\nft: !!float 1.5\nfb: !!float x\nnl: !!null x\ns: !!str 1\n"
+            ),
+            json!({
+                "bt": true, "bs": "yes", "it": 5, "ib": "x", "ft": 1.5, "fb": "x", "nl": null, "s": "1"
+            })
+        );
+    }
+
+    #[test]
+    fn parses_sequence_function_tags() {
+        assert_eq!(
+            parse("a: !Join [',', [x, !Ref y]]\nb: !Unknown [1]\nc: !!seq [2]\n"),
+            json!({
+                "a": {"Fn::Join": [",", ["x", {"Ref": "y"}]]},
+                "b": [1],
+                "c": [2]
+            })
+        );
+    }
+
+    #[test]
+    fn treats_invalid_utf8_scalar_as_empty_string() {
+        let mut loader = Loader::new();
+        let scalar = Scalar {
+            anchor: None,
+            tag: Some(Tag(Box::from(&b"!Ref"[..]))),
+            value: Box::from(&b"\xff"[..]),
+            style: ScalarStyle::Plain,
+            repr: None,
+        };
+        loader.handle_scalar_event(scalar, Location::new(0, 0));
+        assert_eq!(loader.stack[0].to_json_value(), json!({"Ref": ""}));
+    }
+}

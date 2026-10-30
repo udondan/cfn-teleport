@@ -304,4 +304,30 @@ Resources:
             assert_eq!(roundtrip(&value), value, "{}", path.display());
         }
     }
+
+    #[test]
+    fn fails_when_event_initialization_fails() {
+        let mut emitter = Emitter::new();
+        assert_eq!(
+            emitter.emit(|_| false),
+            Err("Creating a YAML event failed".to_string())
+        );
+    }
+
+    #[test]
+    fn reports_emitter_problem() {
+        let mut emitter = Emitter::new();
+        // The stream can't end before it started.
+        let result =
+            emitter.emit(|event| unsafe { sys::yaml_stream_end_event_initialize(event).ok });
+        assert_eq!(
+            result,
+            Err("Writing YAML failed: expected STREAM-START".to_string())
+        );
+    }
+
+    #[test]
+    fn reports_error_without_problem() {
+        assert_eq!(Emitter::new().error(), "Writing YAML failed");
+    }
 }
