@@ -111,16 +111,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - name: Dependency cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ./target
-          key: ${{ runner.os }}-${{ matrix.TARGET }}-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ matrix.TARGET }}-target-
-
       - name: Install and configure dependencies
         run: |
           # dependencies are only needed on ubuntu as that's the only place where
@@ -435,16 +425,6 @@ jobs:
           ref: ${{ inputs.ref || inputs.tag }}
           persist-credentials: false
           fetch-depth: 0
-
-      - name: Dependency cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/registry
-            ./target
-          key: ubuntu-latest-x86_64-unknown-linux-musl-target-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ubuntu-latest-x86_64-unknown-linux-musl-target-
 
       # Trusted publishing would need to be set up on crates.io first.
       - name: Publish to crates.io # zizmor: ignore[use-trusted-publishing]
