@@ -2460,7 +2460,11 @@ fn set_default_deletion_policy(
                     let deletion_policy = match resource_type {
                         "AWS::RDS::DBCluster" => "Snapshot",
                         "AWS::RDS::DBInstance" => {
-                            if resource_object.contains_key("DBClusterIdentifier") {
+                            if resource_object
+                                .get("Properties")
+                                .and_then(|p| p.get("DBClusterIdentifier"))
+                                .is_some()
+                            {
                                 "Delete"
                             } else {
                                 "Snapshot"

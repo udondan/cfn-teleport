@@ -1129,7 +1129,10 @@ fn test_retain_and_remove_resources() {
 fn test_set_default_deletion_policy() {
     let template = json!({"Resources": {
         "Cluster": {"Type": "AWS::RDS::DBCluster"},
-        "ClusterInstance": {"Type": "AWS::RDS::DBInstance", "DBClusterIdentifier": "c"},
+        "ClusterInstance": {
+            "Type": "AWS::RDS::DBInstance",
+            "Properties": {"DBClusterIdentifier": "c"}
+        },
         "Instance": {"Type": "AWS::RDS::DBInstance"},
         "Bucket": {"Type": "AWS::S3::Bucket"},
         "Kept": {"Type": "AWS::S3::Bucket", "DeletionPolicy": "Retain"},
