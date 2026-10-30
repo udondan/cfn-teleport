@@ -2,8 +2,9 @@
 name: Coverage
 
 # Codecov compares the coverage of a pull request against main, so main needs
-# a report as well. The Test workflow only runs for pull requests and deploys
-# to AWS, so this workflow runs just the unit tests and uploads their coverage.
+# a report as well. The Test workflow runs on main too, but only after all
+# waiting pull requests. This workflow runs just the unit tests and uploads
+# their coverage right away, so pull requests have a report to compare against.
 
 on:
   push:
