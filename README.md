@@ -1,4 +1,4 @@
-# cfn-teleport
+![cfn-teleport](https://raw.githubusercontent.com/udondan/cfn-teleport/main/docs/banner.png)
 
 [![Release](https://img.shields.io/github/v/release/udondan/cfn-teleport)][latest]
 [![crates.io](https://img.shields.io/badge/crates.io-cfn--teleport-yellowgreen)][crate]
