@@ -326,6 +326,7 @@ jobs:
       actions: read
       contents: write # lock refs under refs/wait-for-turn/
       pull-requests: read # labels for label-weights
+      statuses: write # queue position as commit status
     # A new commit on the branch or on main cancels the waiting of the outdated
     # run, so the new run doesn't queue behind it. Once a run has the turn, this job is
     # done: AWS jobs that already run are never cancelled and always clean up.
@@ -343,8 +344,9 @@ jobs:
       # release-please doesn't update its PR when the merged commit doesn't
       # change the changelog, so without this its branch would stay behind.
       - name: Wait for turn
-        uses: udondan/wait-for-turn@58f1a8ffab1d08231b455fb0e5f9d25470c327fe # v1.6.0
+        uses: udondan/wait-for-turn@5d5087178d139c5f6af28997dff9addf49738a86 # v1.7.1
         with:
+          status-context: wait-for-turn
           require-up-to-date: true
           update-token: ${{ secrets.OVERRIDE_TOKEN }}
           label-weights: |
