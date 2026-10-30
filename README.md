@@ -2,6 +2,8 @@
 
 [![Release](https://img.shields.io/github/v/release/udondan/cfn-teleport)][latest]
 [![crates.io](https://img.shields.io/badge/crates.io-cfn--teleport-yellowgreen)][crate]
+[![CI](https://github.com/udondan/cfn-teleport/actions/workflows/test.yml/badge.svg?branch=main)][ci]
+[![codecov](https://codecov.io/gh/udondan/cfn-teleport/graph/badge.svg)][codecov]
 [![License](https://img.shields.io/github/license/udondan/cfn-teleport)][license]
 
 A command-line tool for managing CloudFormation resources across and within stacks.
@@ -314,6 +316,8 @@ Contributions are welcome!
 
 This project uses [conventional commits](https://www.conventionalcommits.org/). Please make sure all your merge request titles follow these specifications.
 
-[license]: https://github.com/udondan/iam-floyd/blob/main/LICENSE
+[license]: https://github.com/udondan/cfn-teleport/blob/main/LICENSE
 [crate]: https://crates.io/crates/cfn-teleport
 [latest]: https://github.com/udondan/cfn-teleport/releases/latest
+[ci]: https://github.com/udondan/cfn-teleport/actions/workflows/test.yml
+[codecov]: https://codecov.io/gh/udondan/cfn-teleport

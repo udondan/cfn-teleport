@@ -237,4 +237,4 @@ async fn get_stacks(
 - `src/main.rs:312-319` - Simple utility function example
 - `src/spinner.rs` - Custom progress indicator wrapper
 - `Cargo.toml` - Dependencies and project metadata
-- `.github/workflows/pr-test.yml` - CI pipeline configuration
+- `.github/workflows/test.yml` - CI pipeline configuration
