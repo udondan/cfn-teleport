@@ -1,0 +1,67 @@
+---
+name: Coverage
+
+# Codecov compares the coverage of a pull request against main, so main needs
+# a report as well. The Test workflow only runs for pull requests and deploys
+# to AWS, so this workflow runs just the unit tests and uploads their coverage.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Codecov upload via OIDC
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Update local toolchain
+        run: rustup update
+
+      - name: Install stable toolchain
+        run: |
+          rustup install stable
+          rustup default stable
+
+      - name: Install llvm-tools
+        run: rustup component add llvm-tools-preview
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Rust dependency cache
+        uses: actions/cache@v6
+        with:
+          path: target
+          key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-stable-target-
+
+      - name: Test
+        run: cargo llvm-cov --all --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          fail_ci_if_error: false
+          files: lcov.info
