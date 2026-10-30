@@ -811,11 +811,8 @@ mod tests {
 
         let references = find_all_references(&template);
 
-        // Should not contain any pseudo-parameters
-        if let Some(refs) = references.get("Resource") {
-            assert!(!refs.contains("AWS::StackName"));
-            assert!(!refs.contains("AWS::Region"));
-        }
+        // Pseudo-parameters are no references, so nothing is found
+        assert!(!references.contains_key("Resource"));
     }
 
     #[test]
@@ -893,5 +890,100 @@ mod tests {
 
         // Literal should NOT be detected (it's escaped with ${!...})
         assert!(!lambda_refs.contains("Literal"));
+    }
+
+    #[test]
+    fn test_find_all_references_without_resources() {
+        assert!(find_all_references(&json!({})).is_empty());
+        assert!(find_all_references(&json!({"Resources": []})).is_empty());
+    }
+
+    #[test]
+    fn test_find_all_references_unusual_shapes() {
+        let template = json!({
+            "Resources": {
+                "R": {
+                    "Type": "AWS::S3::Bucket",
+                    "DependsOn": ["Dep", 1],
+                    "Properties": {
+                        "RefNumber": {"Ref": 1},
+                        "GetAttString": {"Fn::GetAtt": "Str.Arn"},
+                        "GetAttNumber": {"Fn::GetAtt": 1},
+                        "GetAttEmpty": {"Fn::GetAtt": []},
+                        "SubNumber": {"Fn::Sub": 1},
+                        "SubFirstNotString": {"Fn::Sub": [1, {}]},
+                        "SubWithoutMap": {"Fn::Sub": ["${Plain}"]},
+                        "SubMapNotObject": {"Fn::Sub": ["${Listed}", []]},
+                        "SubOddText": {"Fn::Sub": "$ $x ${} ${!Open"},
+                        "SubUnclosed": {"Fn::Sub": "${Unclosed"},
+                        "SubUnclosedAttr": {"Fn::Sub": "${Attr.Arn"}
+                    }
+                },
+                "S": {"Type": "AWS::SQS::Queue", "DependsOn": 1}
+            }
+        });
+
+        let references = find_all_references(&template);
+
+        let mut found: Vec<&String> = references["R"].iter().collect();
+        found.sort();
+        assert_eq!(found, ["Attr", "Dep", "Listed", "Plain", "Str", "Unclosed"]);
+        assert!(!references.contains_key("S"));
+    }
+
+    #[test]
+    fn test_update_template_references_unusual_shapes() {
+        let template = json!({
+            "Resources": {
+                "R": {
+                    "Type": "AWS::S3::Bucket",
+                    "DependsOn": ["Other", 1, "Old"],
+                    "Properties": {
+                        "RefNumber": {"Ref": 1},
+                        "RefOther": {"Ref": "Other"},
+                        "GetAttEmpty": {"Fn::GetAtt": []},
+                        "GetAttFirstNotString": {"Fn::GetAtt": [1, "Arn"]},
+                        "GetAttOther": {"Fn::GetAtt": ["Other", "Arn"]},
+                        "GetAttNoDot": {"Fn::GetAtt": "Old"},
+                        "GetAttOtherString": {"Fn::GetAtt": "Other.Arn"},
+                        "GetAttNumber": {"Fn::GetAtt": 1},
+                        "SubNumber": {"Fn::Sub": 1},
+                        "SubEmpty": {"Fn::Sub": []},
+                        "SubFirstNotString": {"Fn::Sub": [1]},
+                        "SubMapNotObject": {"Fn::Sub": ["${Old}", []]}
+                    }
+                },
+                "S": {"Type": "AWS::SQS::Queue", "DependsOn": "Other"},
+                "T": {"Type": "AWS::SQS::Queue", "DependsOn": 1}
+            }
+        });
+        let mapping = HashMap::from([("Old".to_string(), "New".to_string())]);
+
+        let result = update_template_references(template.clone(), &mapping);
+
+        let props = &result["Resources"]["R"]["Properties"];
+        let before = &template["Resources"]["R"]["Properties"];
+        for key in [
+            "RefNumber",
+            "RefOther",
+            "GetAttEmpty",
+            "GetAttFirstNotString",
+            "GetAttOther",
+            "GetAttNoDot",
+            "GetAttOtherString",
+            "GetAttNumber",
+            "SubNumber",
+            "SubEmpty",
+            "SubFirstNotString",
+        ] {
+            assert_eq!(props[key], before[key], "{key}");
+        }
+        assert_eq!(props["SubMapNotObject"], json!({"Fn::Sub": ["${New}", []]}));
+        assert_eq!(
+            result["Resources"]["R"]["DependsOn"],
+            json!(["Other", 1, "New"])
+        );
+        assert_eq!(result["Resources"]["S"]["DependsOn"], "Other");
+        assert_eq!(result["Resources"]["T"]["DependsOn"], 1);
     }
 }

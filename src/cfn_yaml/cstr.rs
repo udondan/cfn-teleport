@@ -121,3 +121,50 @@ pub(crate) fn debug_lossy(mut bytes: &[u8], formatter: &mut fmt::Formatter) -> f
 
     formatter.write_char('"')
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cstr(bytes: &[u8]) -> CStr<'_> {
+        assert_eq!(bytes.last(), Some(&0));
+        unsafe { CStr::from_ptr(NonNull::new(bytes.as_ptr() as *mut i8).unwrap()) }
+    }
+
+    #[test]
+    fn len_and_to_bytes_stop_at_nul() {
+        let s = cstr(b"abc\0");
+        assert_eq!(s.len(), 3);
+        assert_eq!(s.to_bytes(), b"abc");
+    }
+
+    #[test]
+    fn display_valid_utf8() {
+        assert_eq!(cstr("äb\0".as_bytes()).to_string(), "äb");
+    }
+
+    #[test]
+    fn display_replaces_invalid_bytes() {
+        assert_eq!(cstr(b"a\xffb\0").to_string(), "a\u{fffd}b");
+    }
+
+    #[test]
+    fn display_replaces_truncated_sequence_at_end() {
+        assert_eq!(cstr(b"a\xe2\x82\0").to_string(), "a\u{fffd}");
+    }
+
+    #[test]
+    fn debug_escapes_special_characters() {
+        assert_eq!(format!("{:?}", cstr(b"a\"b\nc\0")), r#""a\"b\nc""#);
+    }
+
+    #[test]
+    fn debug_hex_escapes_invalid_bytes() {
+        assert_eq!(format!("{:?}", cstr(b"a\xffb\0")), r#""a\xffb""#);
+    }
+
+    #[test]
+    fn debug_hex_escapes_truncated_sequence_at_end() {
+        assert_eq!(format!("{:?}", cstr(b"a\xe2\x82\0")), r#""a\xe2\x82""#);
+    }
+}
