@@ -1,6 +1,6 @@
-use atty::Stream;
 use console::style;
 use spinach::{RunningSpinner, Spinner};
+use std::io::IsTerminal;
 use std::io::Write;
 
 pub struct Spin {
@@ -10,7 +10,7 @@ pub struct Spin {
 
 impl Spin {
     pub fn new(message: &str) -> Self {
-        if atty::is(Stream::Stdout) {
+        if std::io::stdout().is_terminal() {
             let sp = Spinner::new(message)
                 .symbols(vec!["-", "=", "≡"])
                 .frames_duration(100)
