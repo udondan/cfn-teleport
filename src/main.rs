@@ -18,6 +18,17 @@ mod reference_updater;
 mod spinner;
 mod supported_resource_types;
 
+#[cfg(test)]
+mod aws_tests;
+#[cfg(test)]
+#[path = "../tests/support/cfn_xml.rs"]
+mod cfn_xml;
+#[cfg(test)]
+mod run_tests;
+#[cfg(test)]
+#[path = "../tests/support/unit_support.rs"]
+mod test_support;
+
 const DEMO: bool = false;
 
 // Dependency marker emojis
@@ -117,6 +128,71 @@ struct Args {
     export: bool,
 }
 
+/// Asks the user for input. The CLI uses dialoguer, tests use scripted answers.
+trait Prompter {
+    /// Returns the index of the selected item, or None if the user aborted.
+    fn select(&self, prompt: &str, items: &[&str]) -> Result<Option<usize>, Box<dyn Error>>;
+
+    /// Returns the indices of the selected items, or None if the user aborted.
+    fn multi_select(
+        &self,
+        prompt: &str,
+        items: &[String],
+    ) -> Result<Option<Vec<usize>>, Box<dyn Error>>;
+
+    /// Returns the entered text, or the default if the user just pressed enter.
+    fn input(&self, prompt: &str, default: &str) -> Result<String, Box<dyn Error>>;
+
+    /// Returns the answer, or None if the user aborted.
+    fn confirm(&self, prompt: &str) -> Result<Option<bool>, Box<dyn Error>>;
+}
+
+/// Interactive prompts on the terminal
+struct DialoguerPrompter;
+
+impl Prompter for DialoguerPrompter {
+    fn select(&self, prompt: &str, items: &[&str]) -> Result<Option<usize>, Box<dyn Error>> {
+        Ok(Select::with_theme(&ColorfulTheme::default())
+            .with_prompt(prompt)
+            .items(items)
+            .report(false)
+            .default(0)
+            .interact_on_opt(&Term::stderr())?)
+    }
+
+    fn multi_select(
+        &self,
+        prompt: &str,
+        items: &[String],
+    ) -> Result<Option<Vec<usize>>, Box<dyn Error>> {
+        // Custom theme with grey checkmark for unchecked items
+        let theme = ColorfulTheme {
+            unchecked_item_prefix: style("✔".to_string()).for_stderr().dim(),
+            ..ColorfulTheme::default()
+        };
+
+        Ok(MultiSelect::with_theme(&theme)
+            .with_prompt(prompt)
+            .report(false)
+            .items(items)
+            .interact_on_opt(&Term::stderr())?)
+    }
+
+    fn input(&self, prompt: &str, default: &str) -> Result<String, Box<dyn Error>> {
+        Ok(Input::new()
+            .with_prompt(prompt)
+            .default(default.to_string())
+            .interact_text()?)
+    }
+
+    fn confirm(&self, prompt: &str) -> Result<Option<bool>, Box<dyn Error>> {
+        Ok(Confirm::new()
+            .with_prompt(prompt)
+            .default(false)
+            .interact_on_opt(&Term::stderr())?)
+    }
+}
+
 #[tokio::main]
 async fn main() {
     if let Err(err) = run().await {
@@ -128,7 +204,25 @@ async fn main() {
 
 async fn run() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
+    validate_args(&args)?;
 
+    // Configure retry with 3 retries (4 total attempts), exponential backoff
+    let retry_config = RetryConfig::standard()
+        .with_max_attempts(4) // 1 initial + 3 retries
+        .with_initial_backoff(std::time::Duration::from_secs(1))
+        .with_max_backoff(std::time::Duration::from_secs(4));
+
+    let config = aws_config::defaults(BehaviorVersion::v2026_01_12())
+        .retry_config(retry_config)
+        .load()
+        .await;
+    let client = cloudformation::Client::new(&config);
+
+    run_with(args, &client, &DialoguerPrompter, &std::env::current_dir()?).await
+}
+
+/// Checks flag combinations and that the given files can be read
+fn validate_args(args: &Args) -> Result<(), Box<dyn Error>> {
     // Validate CLI argument combinations
     if args.export && args.source_template.is_some() {
         return Err("Cannot use --export with --source-template.\n\
@@ -236,20 +330,18 @@ async fn run() -> Result<(), Box<dyn Error>> {
         })?;
     }
 
-    // Configure retry with 3 retries (4 total attempts), exponential backoff
-    let retry_config = RetryConfig::standard()
-        .with_max_attempts(4) // 1 initial + 3 retries
-        .with_initial_backoff(std::time::Duration::from_secs(1))
-        .with_max_backoff(std::time::Duration::from_secs(4));
+    Ok(())
+}
 
-    let config = aws_config::defaults(BehaviorVersion::v2026_01_12())
-        .retry_config(retry_config)
-        .load()
-        .await;
-    let client = cloudformation::Client::new(&config);
-
+/// Runs the move or rename. `work_dir` is where export and debug files go by default.
+async fn run_with(
+    args: Args,
+    client: &cloudformation::Client,
+    prompter: &dyn Prompter,
+    work_dir: &Path,
+) -> Result<(), Box<dyn Error>> {
     // Try to get stacks and handle credential errors specifically
-    let stacks = match get_stacks(&client).await {
+    let stacks = match get_stacks(client).await {
         Ok(stacks) => stacks,
         Err(err) => {
             // Check error source chain for credential-related errors
@@ -287,36 +379,34 @@ async fn run() -> Result<(), Box<dyn Error>> {
         .map(|s| s.stack_name().unwrap_or_default())
         .collect();
 
-    let source_stack = args.source.unwrap_or_else(|| {
-        select_stack("Select source stack", &stack_names)
-            .unwrap()
-            .to_string()
-    });
+    let source_stack = match args.source {
+        Some(stack) => stack,
+        None => select_stack(prompter, "Select source stack", &stack_names)?.to_string(),
+    };
 
-    let resources = get_resources(&client, &source_stack).await?;
+    let resources = get_resources(client, &source_stack).await?;
 
     if resources.is_empty() {
         return Err(format!("No resources found in stack '{}'", source_stack).into());
     }
 
-    let target_stack = args.target.unwrap_or_else(|| {
-        select_stack("Select target stack", &stack_names)
-            .unwrap()
-            .to_string()
-    });
+    let target_stack = match args.target {
+        Some(stack) => stack,
+        None => select_stack(prompter, "Select target stack", &stack_names)?.to_string(),
+    };
 
     let resource_refs = &resources.iter().collect::<Vec<_>>();
 
     // Get source template for dependency analysis
     let source_template =
-        get_template(&client, &source_stack, args.source_template.as_ref()).await?;
+        get_template(client, &source_stack, args.source_template.as_ref()).await?;
 
     // Determine if this is a cross-stack move or same-stack rename
     let is_cross_stack = source_stack != target_stack;
 
     // Fetch target template early for cross-stack parameter validation
     let target_template = if is_cross_stack {
-        Some(get_template(&client, &target_stack, args.target_template.as_ref()).await?)
+        Some(get_template(client, &target_stack, args.target_template.as_ref()).await?)
     } else {
         None
     };
@@ -367,6 +457,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
             }
             None => {
                 select_resources(
+                    prompter,
                     "Select resources to copy",
                     resource_refs,
                     &source_template.content,
@@ -398,13 +489,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
                         .unwrap_or_default()
                         .to_owned();
 
-                    let mut new_logical_id: String = Input::new()
-                        .with_prompt(format!(
+                    let mut new_logical_id = prompter.input(
+                        &format!(
                             "Optionally provide a new logical ID for resource '{}'",
                             old_logical_id
-                        ))
-                        .default(old_logical_id.clone())
-                        .interact_text()?;
+                        ),
+                        &old_logical_id,
+                    )?;
 
                     if new_logical_id.is_empty() {
                         new_logical_id = resource
@@ -517,7 +608,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     }
 
     if !args.yes {
-        user_confirm()?;
+        user_confirm(prompter)?;
     }
 
     let template_source_str = template_source.to_string()?;
@@ -565,6 +656,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
             let paths = export_templates(
                 &templates,
                 args.out_dir.as_ref(),
+                work_dir,
                 &source_stack,
                 "refactor-same-stack",
             )?;
@@ -578,23 +670,22 @@ async fn run() -> Result<(), Box<dyn Error>> {
         }
 
         return refactor_stack_resources(
-            &client,
+            client,
             &source_stack,
             template_source,
             new_logical_ids_map,
+            work_dir,
         )
         .await;
     }
 
+    // Cross-stack move: the target template has been fetched above
+    let target_template_actual = target_template.ok_or("Target template missing")?;
+
     // Cross-stack move: Use refactor or import based on --mode
     if matches!(args.mode, Mode::Refactor) {
         // Use CloudFormation Stack Refactoring API (safer, atomic, but fewer supported resource types)
-        // Reuse the target template we fetched earlier for cross-stack moves
-        let template_target = if let Some(tmpl) = target_template {
-            tmpl
-        } else {
-            get_template(&client, &target_stack, args.target_template.as_ref()).await?
-        };
+        let template_target = target_template_actual;
 
         // If export mode, generate templates and write them to disk
         if args.export {
@@ -633,6 +724,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
             let paths = export_templates(
                 &templates,
                 args.out_dir.as_ref(),
+                work_dir,
                 &source_stack,
                 "refactor-cross-stack",
             )?;
@@ -646,12 +738,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
         }
 
         return refactor_stack_resources_cross_stack(
-            &client,
+            client,
             &source_stack,
             &target_stack,
             template_source,
             template_target,
             new_logical_ids_map,
+            work_dir,
         )
         .await;
     }
@@ -740,13 +833,6 @@ async fn run() -> Result<(), Box<dyn Error>> {
         resource_ids_to_remove.clone(),
     );
 
-    // Fetch target template if not already available to get its format
-    let target_template_actual = if let Some(tmpl) = target_template {
-        tmpl
-    } else {
-        get_template(&client, &target_stack, args.target_template.as_ref()).await?
-    };
-
     let (template_target_with_deletion_policy, template_target_final) = add_resources(
         target_template_actual.content.clone(),
         template_source.content.clone(),
@@ -767,7 +853,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
         template_target.clone(),
         template_target_with_deletion_policy.clone(),
     ] {
-        let result = validate_template(&client, template).await;
+        let result = validate_template(client, template).await;
         if result.is_err() {
             let error_msg = result.err().unwrap();
 
@@ -798,7 +884,8 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
             if let Ok(paths) = export_templates(
                 &templates_to_save,
-                None, // Use current directory
+                None,
+                work_dir,
                 &source_stack,
                 "error-import",
             ) {
@@ -812,7 +899,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
             let timestamp = get_timestamp();
             let context_filename =
                 format!("{}-error-import-context-{}.txt", source_stack, timestamp);
-            let context_path = std::env::current_dir()?.join(context_filename);
+            let context_path = work_dir.join(context_filename);
 
             if write_error_context(
                 &context_path,
@@ -861,7 +948,13 @@ async fn run() -> Result<(), Box<dyn Error>> {
             ),
         ];
 
-        let paths = export_templates(&templates, args.out_dir.as_ref(), &source_stack, "import")?;
+        let paths = export_templates(
+            &templates,
+            args.out_dir.as_ref(),
+            work_dir,
+            &source_stack,
+            "import",
+        )?;
 
         println!("\n✅ Templates exported successfully:");
         for path in paths {
@@ -882,23 +975,23 @@ async fn run() -> Result<(), Box<dyn Error>> {
 
     if template_source_str != template_retained_str {
         update_stack(
-            &client,
+            client,
             &source_stack,
             template_retained,
             template_source.format,
         )
         .await?;
-        wait_for_stack_update_completion(&client, &source_stack, None).await?;
+        wait_for_stack_update_completion(client, &source_stack, None).await?;
     }
 
     update_stack(
-        &client,
+        client,
         &source_stack,
         template_removed,
         template_source.format,
     )
     .await?;
-    wait_for_stack_update_completion(&client, &source_stack, Some(spinner)).await?;
+    wait_for_stack_update_completion(client, &source_stack, Some(spinner)).await?;
 
     let spinner = spinner::Spin::new(&format!(
         "Importing {} resources into stack {}",
@@ -907,7 +1000,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
     ));
 
     let changeset_name = create_changeset(
-        &client,
+        client,
         &target_stack,
         template_target_with_deletion_policy,
         target_template_actual.format,
@@ -916,18 +1009,18 @@ async fn run() -> Result<(), Box<dyn Error>> {
     )
     .await?;
 
-    wait_for_changeset_created(&client, &target_stack, &changeset_name).await?;
-    execute_changeset(&client, &target_stack, &changeset_name).await?;
-    wait_for_stack_update_completion(&client, &target_stack, None).await?;
+    wait_for_changeset_created(client, &target_stack, &changeset_name).await?;
+    execute_changeset(client, &target_stack, &changeset_name).await?;
+    wait_for_stack_update_completion(client, &target_stack, None).await?;
 
     update_stack(
-        &client,
+        client,
         &target_stack,
         template_target,
         target_template_actual.format,
     )
     .await?;
-    wait_for_stack_update_completion(&client, &target_stack, Some(spinner)).await?;
+    wait_for_stack_update_completion(client, &target_stack, Some(spinner)).await?;
 
     Ok(())
 }
@@ -949,8 +1042,11 @@ fn split_ids(id: String) -> (String, String) {
 fn get_timestamp() -> String {
     let now = SystemTime::now();
     let duration = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-    let secs = duration.as_secs();
+    format_timestamp(duration.as_secs())
+}
 
+/// Formats seconds since the Unix epoch as YYYYMMDD-HHMMSS (UTC)
+fn format_timestamp(secs: u64) -> String {
     // Calculate date/time components from Unix timestamp
     // This is a simplified calculation for local time approximation
     let total_days = secs / 86400;
@@ -1227,14 +1323,14 @@ fn write_error_context(
 ///
 /// # Example
 /// ```ignore
-/// let dir = validate_output_directory(Path::new("./templates"))?;
+/// let dir = validate_output_directory(Path::new("./templates"), &work_dir)?;
 /// ```
-fn validate_output_directory(path: &Path) -> Result<PathBuf, Box<dyn Error>> {
+fn validate_output_directory(path: &Path, base_dir: &Path) -> Result<PathBuf, Box<dyn Error>> {
     // Convert to absolute path
     let abs_path = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        std::env::current_dir()?.join(path)
+        base_dir.join(path)
     };
 
     // Check if path exists
@@ -1454,6 +1550,7 @@ fn validate_migration_spec_resources(
 /// # Arguments
 /// * `templates` - Vector of (template, suffix) tuples to export
 /// * `output_dir` - Directory to write templates to (will be validated/created)
+/// * `base_dir` - Directory used when `output_dir` is missing or relative
 /// * `stack_name` - Stack name for filename generation
 /// * `operation` - Operation type ("refactor", "import", etc.) for filename generation
 ///
@@ -1467,19 +1564,19 @@ fn validate_migration_spec_resources(
 ///     (source_template, "source".to_string()),
 ///     (target_template, "target".to_string()),
 /// ];
-/// let paths = export_templates(&templates, Some(&output_dir), "MyStack", "refactor")?;
+/// let paths = export_templates(&templates, Some(&output_dir), &work_dir, "MyStack", "refactor")?;
 /// ```
 fn export_templates(
     templates: &[(Template, String)],
     output_dir: Option<&PathBuf>,
+    base_dir: &Path,
     stack_name: &str,
     operation: &str,
 ) -> Result<Vec<PathBuf>, Box<dyn Error>> {
-    // Determine output directory (current dir if not specified)
-    let dir = if let Some(d) = output_dir {
-        validate_output_directory(d)?
-    } else {
-        std::env::current_dir()?
+    // Determine output directory (base dir if not specified)
+    let dir = match output_dir {
+        Some(d) => validate_output_directory(d, base_dir)?,
+        None => base_dir.to_path_buf(),
     };
 
     let timestamp = get_timestamp();
@@ -1564,40 +1661,43 @@ async fn get_stacks(
         }
     }
 
-    let mut stacks = stacks
+    let stacks = stacks
         .into_iter()
         .filter(|stack| !stack.stack_status().unwrap().as_str().starts_with("DELETE"))
         .collect::<Vec<_>>();
 
-    if DEMO {
-        // filter by name, for demo purposes
-        stacks = stacks
-            .into_iter()
-            .filter(|stack| {
-                stack
-                    .stack_name()
-                    .unwrap_or_default()
-                    .contains("CfnTeleportTest")
-            })
-            .collect::<Vec<_>>();
-    }
-
     // Sort the stacks by name
-    let mut sorted_stacks = stacks;
+    let mut sorted_stacks = filter_demo_stacks(stacks, DEMO);
     sorted_stacks.sort_by_key(|stack| stack.stack_name().unwrap_or_default().to_string());
 
     Ok(sorted_stacks)
 }
 
-fn select_stack<'a>(prompt: &str, items: &'a [&str]) -> Result<&'a str, Box<dyn Error>> {
-    let selection = Select::with_theme(&ColorfulTheme::default())
-        .with_prompt(prompt)
-        .items(items)
-        .report(false)
-        .default(0)
-        .interact_on_opt(&Term::stderr())?;
+/// For recording the demo, only the test stacks are shown
+fn filter_demo_stacks(
+    stacks: Vec<cloudformation::types::StackSummary>,
+    demo: bool,
+) -> Vec<cloudformation::types::StackSummary> {
+    if !demo {
+        return stacks;
+    }
+    stacks
+        .into_iter()
+        .filter(|stack| {
+            stack
+                .stack_name()
+                .unwrap_or_default()
+                .contains("CfnTeleportTest")
+        })
+        .collect()
+}
 
-    match selection {
+fn select_stack<'a>(
+    prompter: &dyn Prompter,
+    prompt: &str,
+    items: &'a [&str],
+) -> Result<&'a str, Box<dyn Error>> {
+    match prompter.select(prompt, items)? {
         Some(index) => Ok(items[index]),
         None => Err("User did not select anything".into()),
     }
@@ -1661,6 +1761,7 @@ async fn filter_resources<'a>(
 }
 
 async fn select_resources<'a>(
+    prompter: &dyn Prompter,
     prompt: &str,
     resources: &'a [&aws_sdk_cloudformation::types::StackResourceSummary],
     template: &serde_json::Value,
@@ -1678,19 +1779,7 @@ async fn select_resources<'a>(
     // Format resources with dependency markers
     let items = format_resources(resources, None, Some(&dependency_info)).await?;
 
-    // Create custom theme with grey checkmark for unchecked items
-    let theme = ColorfulTheme {
-        unchecked_item_prefix: style("✔".to_string()).for_stderr().dim(),
-        ..ColorfulTheme::default()
-    };
-
-    let selection = MultiSelect::with_theme(&theme)
-        .with_prompt(prompt)
-        .report(false)
-        .items(&items)
-        .interact_on_opt(&Term::stderr())?;
-
-    match selection {
+    match prompter.multi_select(prompt, &items)? {
         Some(indices) => {
             // Validate selection for cross-stack moves
             if is_cross_stack {
@@ -1730,37 +1819,37 @@ async fn select_resources<'a>(
                     let resource = resources[index];
                     let logical_id = resource.logical_resource_id().unwrap_or_default();
 
-                    if let Some(info) = dependency_info.get(logical_id) {
-                        // Block resources referenced by outputs
-                        if info.referenced_by_outputs {
-                            blocked_outputs.push((
+                    // Every resource has dependency info
+                    let info = &dependency_info[logical_id];
+                    // Block resources referenced by outputs
+                    if info.referenced_by_outputs {
+                        blocked_outputs.push((
+                            logical_id.to_string(),
+                            resource.resource_type().unwrap_or_default().to_string(),
+                        ));
+                    }
+
+                    // Block resources that depend on parameters not present in target
+                    if info.depends_on_parameters {
+                        // Find which parameters this resource depends on
+                        let all_references = reference_updater::find_all_references(template);
+                        let resource_references =
+                            all_references.get(logical_id).cloned().unwrap_or_default();
+
+                        // Check which parameters are missing in target
+                        let missing_params: Vec<String> = resource_references
+                            .iter()
+                            .filter(|ref_name| source_parameters.contains(*ref_name))
+                            .filter(|param_name| !target_parameters.contains(*param_name))
+                            .map(|s| s.to_string())
+                            .collect();
+
+                        if !missing_params.is_empty() {
+                            blocked_parameters.push((
                                 logical_id.to_string(),
                                 resource.resource_type().unwrap_or_default().to_string(),
+                                missing_params,
                             ));
-                        }
-
-                        // Block resources that depend on parameters not present in target
-                        if info.depends_on_parameters {
-                            // Find which parameters this resource depends on
-                            let all_references = reference_updater::find_all_references(template);
-                            let resource_references =
-                                all_references.get(logical_id).cloned().unwrap_or_default();
-
-                            // Check which parameters are missing in target
-                            let missing_params: Vec<String> = resource_references
-                                .iter()
-                                .filter(|ref_name| source_parameters.contains(*ref_name))
-                                .filter(|param_name| !target_parameters.contains(*param_name))
-                                .map(|s| s.to_string())
-                                .collect();
-
-                            if !missing_params.is_empty() {
-                                blocked_parameters.push((
-                                    logical_id.to_string(),
-                                    resource.resource_type().unwrap_or_default().to_string(),
-                                    missing_params,
-                                ));
-                            }
                         }
                     }
                 }
@@ -1925,11 +2014,8 @@ fn validate_move_references(
     Ok(())
 }
 
-fn user_confirm() -> Result<(), Box<dyn Error>> {
-    let confirmed = Confirm::new()
-        .with_prompt("Please confirm your selection:")
-        .default(false)
-        .interact_on_opt(&Term::stderr())?;
+fn user_confirm(prompter: &dyn Prompter) -> Result<(), Box<dyn Error>> {
+    let confirmed = prompter.confirm("Please confirm your selection:")?;
 
     println!();
 
@@ -2229,11 +2315,15 @@ async fn format_resources(
 
         // Generate marker string based on dependency info
         // Dynamically adjust spacing based on max emoji count
-        let marker = if max_emoji_count == 0 {
+        // Padding for resources without markers, matches the width of the marker column
+        let padding = " ".repeat(max_emoji_count + 1);
+        let info = dependency_info.and_then(|dep_info| dep_info.get(logical_id));
+
+        let marker = match info {
             // No dependencies at all - no marker column needed
-            String::new()
-        } else if let Some(dep_info) = dependency_info {
-            if let Some(info) = dep_info.get(logical_id) {
+            _ if max_emoji_count == 0 => String::new(),
+            None => padding,
+            Some(info) => {
                 let mut marker_str = String::new();
 
                 // Left/Right arrows for resource dependencies
@@ -2274,24 +2364,11 @@ async fn format_resources(
 
                 // If no markers for this resource, pad based on max_emoji_count
                 if marker_str.is_empty() {
-                    match max_emoji_count {
-                        1 => "  ".to_string(),  // Match ~1 emoji width
-                        2 => "   ".to_string(), // Match ~2 emoji width
-                        _ => String::new(),
-                    }
+                    padding
                 } else {
                     marker_str
                 }
-            } else {
-                // No info for this resource, pad based on max_emoji_count
-                match max_emoji_count {
-                    1 => "  ".to_string(),
-                    2 => "   ".to_string(),
-                    _ => String::new(),
-                }
             }
-        } else {
-            String::new()
         };
 
         let output = if renamed {
@@ -2456,6 +2533,7 @@ async fn refactor_stack_resources(
     stack_name: &str,
     template: Template,
     id_mapping: HashMap<String, String>,
+    work_dir: &Path,
 ) -> Result<(), Box<dyn Error>> {
     use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
 
@@ -2493,9 +2571,13 @@ async fn refactor_stack_resources(
         let template_to_save = Template::new(updated_template.clone(), template.format);
         let templates = vec![(template_to_save, "refactored".to_string())];
 
-        if let Ok(paths) =
-            export_templates(&templates, None, stack_name, "error-refactor-same-stack")
-        {
+        if let Ok(paths) = export_templates(
+            &templates,
+            None,
+            work_dir,
+            stack_name,
+            "error-refactor-same-stack",
+        ) {
             eprintln!("📄 Template saved to:");
             for path in &paths {
                 eprintln!("   {}", path.display());
@@ -2505,24 +2587,20 @@ async fn refactor_stack_resources(
         // Save error context
         let timestamp = get_timestamp();
         let context_filename = format!("{}-error-refactor-context-{}.txt", stack_name, timestamp);
-        let context_path = std::env::current_dir()
-            .ok()
-            .map(|d| d.join(context_filename));
+        let context_path = work_dir.join(context_filename);
 
-        if let Some(path) = context_path {
-            if write_error_context(
-                &path,
-                &timestamp,
-                &e.to_string(),
-                stack_name,
-                None,
-                "refactor-same-stack",
-                &id_mapping,
-            )
-            .is_ok()
-            {
-                eprintln!("📝 Error context saved to: {}", path.display());
-            }
+        if write_error_context(
+            &context_path,
+            &timestamp,
+            &e.to_string(),
+            stack_name,
+            None,
+            "refactor-same-stack",
+            &id_mapping,
+        )
+        .is_ok()
+        {
+            eprintln!("📝 Error context saved to: {}", context_path.display());
         }
 
         return Err(format!(
@@ -2674,6 +2752,7 @@ async fn refactor_stack_resources_cross_stack(
     source_template: Template,
     target_template: Template,
     id_mapping: HashMap<String, String>,
+    work_dir: &Path,
 ) -> Result<(), Box<dyn Error>> {
     use cloudformation::types::{ResourceLocation, ResourceMapping, StackDefinition};
 
@@ -2708,7 +2787,13 @@ async fn refactor_stack_resources_cross_stack(
     let source_validation = validate_template(client, source_final.clone()).await;
     let target_validation = validate_template(client, target_final.clone()).await;
 
-    if source_validation.is_err() || target_validation.is_err() {
+    let validation_error = match (&source_validation, &target_validation) {
+        (Err(e), _) => Some(format!("Source template validation failed: {}", e)),
+        (_, Err(e)) => Some(format!("Target template validation failed: {}", e)),
+        _ => None,
+    };
+
+    if let Some(error_msg) = validation_error {
         eprintln!("\n⚠️  Template validation failed. Saving templates for debugging...");
 
         // Save both templates
@@ -2726,6 +2811,7 @@ async fn refactor_stack_resources_cross_stack(
         if let Ok(paths) = export_templates(
             &templates,
             None,
+            work_dir,
             source_stack_name,
             "error-refactor-cross-stack",
         ) {
@@ -2741,30 +2827,20 @@ async fn refactor_stack_resources_cross_stack(
             "{}-error-refactor-cross-stack-context-{}.txt",
             source_stack_name, timestamp
         );
-        let context_path = std::env::current_dir()
-            .ok()
-            .map(|d| d.join(context_filename));
+        let context_path = work_dir.join(context_filename);
 
-        let error_msg = match (&source_validation, &target_validation) {
-            (Err(e), _) => format!("Source template validation failed: {}", e),
-            (_, Err(e)) => format!("Target template validation failed: {}", e),
-            _ => "Unknown validation error".to_string(),
-        };
-
-        if let Some(path) = context_path {
-            if write_error_context(
-                &path,
-                &timestamp,
-                &error_msg,
-                source_stack_name,
-                Some(target_stack_name),
-                "refactor-cross-stack",
-                &id_mapping,
-            )
-            .is_ok()
-            {
-                eprintln!("📝 Error context saved to: {}", path.display());
-            }
+        if write_error_context(
+            &context_path,
+            &timestamp,
+            &error_msg,
+            source_stack_name,
+            Some(target_stack_name),
+            "refactor-cross-stack",
+            &id_mapping,
+        )
+        .is_ok()
+        {
+            eprintln!("📝 Error context saved to: {}", context_path.display());
         }
 
         // Return appropriate error
@@ -3827,7 +3903,7 @@ Resources:
         let dir_path = temp_dir.path();
 
         // Validate existing directory
-        let result = validate_output_directory(dir_path);
+        let result = validate_output_directory(dir_path, dir_path);
         assert!(result.is_ok());
 
         let validated_path = result.unwrap();
@@ -3847,7 +3923,7 @@ Resources:
         assert!(!new_dir.exists());
 
         // Validate should create it
-        let result = validate_output_directory(&new_dir);
+        let result = validate_output_directory(&new_dir, temp_dir.path());
         assert!(result.is_ok());
 
         // Directory should now exist
@@ -3864,7 +3940,7 @@ Resources:
         let file_path = temp_file.path();
 
         // Attempting to validate a file as a directory should fail
-        let result = validate_output_directory(file_path);
+        let result = validate_output_directory(file_path, Path::new("/"));
         assert!(result.is_err());
 
         let err_msg = result.unwrap_err().to_string();
@@ -3873,24 +3949,19 @@ Resources:
 
     #[test]
     fn test_validate_output_directory_relative_path() {
-        use std::env;
         use tempfile::TempDir;
 
-        // Create temporary directory and change to it
         let temp_dir = TempDir::new().unwrap();
-        let original_dir = env::current_dir().unwrap();
-        env::set_current_dir(temp_dir.path()).unwrap();
 
-        // Validate relative path
-        let rel_path = Path::new("./test_output");
-        let result = validate_output_directory(rel_path);
-
-        // Restore original directory
-        env::set_current_dir(original_dir).unwrap();
+        // A relative path is resolved against the base directory
+        let rel_path = Path::new("test_output");
+        let result = validate_output_directory(rel_path, temp_dir.path());
 
         assert!(result.is_ok());
         let validated_path = result.unwrap();
         assert!(validated_path.is_absolute());
+        assert_eq!(validated_path, temp_dir.path().join("test_output"));
+        assert!(validated_path.is_dir());
     }
 
     #[test]
@@ -4103,6 +4174,7 @@ Resources:
         let path1 = export_templates(
             &[(template.clone(), "source".to_string())],
             Some(&dir_path.to_path_buf()),
+            dir_path,
             "TestStack",
             "refactor",
         )
@@ -4110,21 +4182,19 @@ Resources:
             .clone();
 
         assert!(path1.exists());
-        assert_eq!(
-            path1
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .starts_with("TestStack-refactor-source-"),
-            true
-        );
+        assert!(path1
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("TestStack-refactor-source-"));
         assert_eq!(path1.extension().unwrap(), "json");
 
         // Write the second template (should create .1 variant)
         let path2 = export_templates(
             &[(template.clone(), "source".to_string())],
             Some(&dir_path.to_path_buf()),
+            dir_path,
             "TestStack",
             "refactor",
         )
@@ -4144,6 +4214,7 @@ Resources:
         let path3 = export_templates(
             &[(template.clone(), "source".to_string())],
             Some(&dir_path.to_path_buf()),
+            dir_path,
             "TestStack",
             "refactor",
         )
@@ -4193,6 +4264,7 @@ Resources:
                 (template2.clone(), "target-final".to_string()),
             ],
             Some(&dir_path.to_path_buf()),
+            dir_path,
             "ImportStack",
             "import",
         )
@@ -4441,6 +4513,7 @@ Resources:
         let json_paths = export_templates(
             &[(json_template, "source".to_string())],
             Some(&temp_dir.path().to_path_buf()),
+            temp_dir.path(),
             "JsonStack",
             "refactor",
         )
@@ -4459,6 +4532,7 @@ Resources:
         let yaml_paths = export_templates(
             &[(yaml_template, "target".to_string())],
             Some(&temp_dir.path().to_path_buf()),
+            temp_dir.path(),
             "YamlStack",
             "import",
         )
@@ -4516,180 +4590,106 @@ Resources:
     }
 
     // ============================================================================
-    // CLI Argument Validation Tests (T059)
+    // CLI Argument Validation Tests
     // ============================================================================
-    // Note: These test the validation logic extracted from run() function.
-    // The actual validations occur at lines 132-157 in run().
 
-    /// Helper function to test CLI argument validation logic
-    /// Mirrors the validation checks in run() function (lines 132-157)
-    fn validate_cli_args(
-        export: bool,
-        source_template: bool,
-        target_template: bool,
-        migration_spec: bool,
-        resource: bool,
-    ) -> Result<(), String> {
-        // Validation 1: Cannot use --export with --source-template
-        if export && source_template {
-            return Err("Cannot use --export with --source-template.\n\
-                 Export mode fetches templates from AWS and writes them to disk.\n\
-                 If you already have template files, you don't need export mode."
-                .to_string());
-        }
+    fn parse_args(extra: &[&str]) -> Args {
+        let mut argv = vec!["cfn-teleport"];
+        argv.extend_from_slice(extra);
+        Args::try_parse_from(argv).unwrap()
+    }
 
-        // Validation 2: Cannot use --export with --target-template
-        if export && target_template {
-            return Err("Cannot use --export with --target-template.\n\
-                 Export mode fetches templates from AWS and writes them to disk.\n\
-                 If you already have template files, you don't need export mode."
-                .to_string());
-        }
-
-        // Validation 3: Cannot use --migration-spec with --resource
-        if migration_spec && resource {
-            return Err(
-                "Cannot use --migration-spec with --resource.\n\
-                 The migration spec file defines resource mappings, so the --resource flag is not needed."
-                    .to_string(),
-            );
-        }
-
-        Ok(())
+    fn validate_err(extra: &[&str]) -> String {
+        validate_args(&parse_args(extra)).unwrap_err().to_string()
     }
 
     #[test]
-    fn test_cli_validation_export_with_source_template() {
-        // T059: Test --export + --source-template conflict
-        let result = validate_cli_args(
-            true,  // export
-            true,  // source_template
-            false, // target_template
-            false, // migration_spec
-            false, // resource
-        );
+    fn test_validate_args_defaults_ok() {
+        assert!(validate_args(&parse_args(&[])).is_ok());
+        assert!(validate_args(&parse_args(&["--export"])).is_ok());
+        assert!(validate_args(&parse_args(&["--export", "--out-dir", "x"])).is_ok());
+    }
 
-        assert!(result.is_err());
-        let err = result.unwrap_err();
+    #[test]
+    fn test_validate_args_flag_conflicts() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let path = file.path().to_str().unwrap();
+
+        let err = validate_err(&["--export", "--source-template", path]);
         assert!(err.contains("Cannot use --export with --source-template"));
-    }
 
-    #[test]
-    fn test_cli_validation_export_with_target_template() {
-        // T059: Test --export + --target-template conflict
-        let result = validate_cli_args(
-            true,  // export
-            false, // source_template
-            true,  // target_template
-            false, // migration_spec
-            false, // resource
-        );
-
-        assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = validate_err(&["--export", "--target-template", path]);
         assert!(err.contains("Cannot use --export with --target-template"));
-    }
 
-    #[test]
-    fn test_cli_validation_migration_spec_with_resource() {
-        // T059: Test --migration-spec + --resource conflict
-        let result = validate_cli_args(
-            false, // export
-            false, // source_template
-            false, // target_template
-            true,  // migration_spec
-            true,  // resource
-        );
+        let err = validate_err(&["--out-dir", "x"]);
+        assert!(err.contains("Cannot use --out-dir without --export"));
 
-        assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = validate_err(&["--migration-spec", path, "--resource", "A"]);
         assert!(err.contains("Cannot use --migration-spec with --resource"));
     }
 
     #[test]
-    fn test_cli_validation_export_only() {
-        // T059: Test --export alone is valid
-        let result = validate_cli_args(
-            true,  // export
-            false, // source_template
-            false, // target_template
-            false, // migration_spec
-            false, // resource
-        );
-
-        assert!(result.is_ok());
+    fn test_validate_args_valid_files() {
+        let file = tempfile::NamedTempFile::new().unwrap();
+        let path = file.path().to_str().unwrap();
+        let args = parse_args(&[
+            "--source-template",
+            path,
+            "--target-template",
+            path,
+            "--migration-spec",
+            path,
+        ]);
+        assert!(validate_args(&args).is_ok());
+        assert!(validate_args(&parse_args(&["--export", "--migration-spec", path])).is_ok());
     }
 
     #[test]
-    fn test_cli_validation_source_template_only() {
-        // T059: Test --source-template alone is valid
-        let result = validate_cli_args(
-            false, // export
-            true,  // source_template
-            false, // target_template
-            false, // migration_spec
-            false, // resource
-        );
+    fn test_validate_args_missing_files() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let missing = dir.path().join("missing.json");
+        let missing = missing.to_str().unwrap();
 
-        assert!(result.is_ok());
+        let err = validate_err(&["--source-template", missing]);
+        assert!(err.contains("Source template file does not exist"));
+        let err = validate_err(&["--target-template", missing]);
+        assert!(err.contains("Target template file does not exist"));
+        let err = validate_err(&["--migration-spec", missing]);
+        assert!(err.contains("Migration spec file does not exist"));
     }
 
     #[test]
-    fn test_cli_validation_migration_spec_only() {
-        // T059: Test --migration-spec alone is valid
-        let result = validate_cli_args(
-            false, // export
-            false, // source_template
-            false, // target_template
-            true,  // migration_spec
-            false, // resource
-        );
+    fn test_validate_args_directories() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let dir = dir.path().to_str().unwrap();
 
-        assert!(result.is_ok());
+        let err = validate_err(&["--source-template", dir]);
+        assert!(err.contains("Source template path is not a file"));
+        let err = validate_err(&["--target-template", dir]);
+        assert!(err.contains("Target template path is not a file"));
+        let err = validate_err(&["--migration-spec", dir]);
+        assert!(err.contains("Migration spec path is not a file"));
     }
 
+    #[cfg(unix)]
     #[test]
-    fn test_cli_validation_export_with_migration_spec() {
-        // T059: Test --export + --migration-spec is valid (both allowed together)
-        let result = validate_cli_args(
-            true,  // export
-            false, // source_template
-            false, // target_template
-            true,  // migration_spec
-            false, // resource
-        );
+    fn test_validate_args_unreadable_files() {
+        use std::os::unix::fs::PermissionsExt;
 
-        assert!(result.is_ok());
-    }
+        let file = tempfile::NamedTempFile::new().unwrap();
+        fs::set_permissions(file.path(), fs::Permissions::from_mode(0o000)).unwrap();
+        // Root can read anything, so validation passes then
+        let readable = fs::File::open(file.path()).is_ok();
+        let path = file.path().to_str().unwrap();
 
-    #[test]
-    fn test_cli_validation_templates_with_migration_spec() {
-        // T059: Test --source-template + --migration-spec is valid
-        let result = validate_cli_args(
-            false, // export
-            true,  // source_template
-            true,  // target_template
-            true,  // migration_spec
-            false, // resource
-        );
-
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_cli_validation_all_conflicts() {
-        // T059: Test multiple conflicts at once (export takes precedence)
-        let result = validate_cli_args(
-            true, // export
-            true, // source_template
-            true, // target_template
-            true, // migration_spec
-            true, // resource
-        );
-
-        assert!(result.is_err());
-        // Should catch the first validation (export + source_template)
-        let err = result.unwrap_err();
-        assert!(err.contains("Cannot use --export with --source-template"));
+        for (flag, expected) in [
+            ("--source-template", "Cannot read source template file"),
+            ("--target-template", "Cannot read target template file"),
+            ("--migration-spec", "Cannot read migration spec file"),
+        ] {
+            let result = validate_args(&parse_args(&[flag, path]));
+            let message = result.err().map(|e| e.to_string()).unwrap_or_default();
+            assert_eq!(message.contains(expected), !readable);
+        }
     }
 }
