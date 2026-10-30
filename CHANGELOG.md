@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.52.4](https://github.com/udondan/cfn-teleport/compare/v0.52.3...v0.52.4) (2026-10-30)
+
+
+### Dependencies
+
+* **deps:** update jdx/mise-action action to v5 ([#1408](https://github.com/udondan/cfn-teleport/issues/1408)) ([c56b9bb](https://github.com/udondan/cfn-teleport/commit/c56b9bb1e2a0e111edcc7bb3820ae5744376aa8f))
+* **deps:** update jdx/mise-action action to v5.2.4 ([#1414](https://github.com/udondan/cfn-teleport/issues/1414)) ([a39874d](https://github.com/udondan/cfn-teleport/commit/a39874d55f5394002b27249e81be29c1ce54b875))
+* **deps:** update rust crate uuid to 1.29.0 ([#1404](https://github.com/udondan/cfn-teleport/issues/1404)) ([3929a32](https://github.com/udondan/cfn-teleport/commit/3929a327bfb86e421bcd7052ce99fcc24f486420))
+* **deps:** update udondan/wait-for-turn action to v1.4.1 ([#1410](https://github.com/udondan/cfn-teleport/issues/1410)) ([40ad070](https://github.com/udondan/cfn-teleport/commit/40ad0706d168f107871049580466dcd134271808))
+* **deps:** update udondan/wait-for-turn action to v1.4.2 ([#1411](https://github.com/udondan/cfn-teleport/issues/1411)) ([3085556](https://github.com/udondan/cfn-teleport/commit/308555671b6e3ca820e2255feeca6fa45c359bde))
+
 ## [0.52.3](https://github.com/udondan/cfn-teleport/compare/v0.52.2...v0.52.3) (2026-10-26)
 
 
