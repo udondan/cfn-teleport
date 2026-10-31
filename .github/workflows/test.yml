@@ -320,39 +320,18 @@ jobs:
   # take the runners of the account at once, and most of them are tested again
   # after a rebase anyway.
   wait-for-turn:
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
     permissions:
       actions: read
       contents: write # lock refs under refs/wait-for-turn/
       pull-requests: read # labels for label-weights
       statuses: write # queue position as commit status
-    # A new commit on the branch or on main cancels the waiting of the outdated
-    # run, so the new run doesn't queue behind it. Once a run has the turn, this job is
-    # done: AWS jobs that already run are never cancelled and always clean up.
-    concurrency:
-      group: test-wait-${{ github.head_ref || github.ref }}
-      cancel-in-progress: true
-    steps:
-      # Queue order: manual PRs first, then Renovate updates, then the
-      # release-please PR, which is updated after most merges to main anyway,
-      # and main last.
-      # A branch that is behind main is rebased and the run stops right away;
-      # the rebased commit starts a new run. Branch protection requires PRs to
-      # be up to date, so testing an outdated branch is wasted time. The rebase
-      # needs OVERRIDE_TOKEN: pushes with github.token don't start new runs.
-      # release-please doesn't update its PR when the merged commit doesn't
-      # change the changelog, so without this its branch would stay behind.
-      - name: Wait for turn
-        uses: udondan/wait-for-turn@5d5087178d139c5f6af28997dff9addf49738a86 # v1.7.1
-        with:
-          status-context: wait-for-turn
-          require-up-to-date: true
-          update-token: ${{ secrets.OVERRIDE_TOKEN }}
-          label-weights: |
-            autorelease: pending=-10
-            renovate=-5
-          no-pull-request-weight: -100
+    # Queue order, the concurrency group that cancels outdated waiting runs and
+    # the rebase of branches that are behind main: see
+    # https://github.com/udondan/wait-for-turn#reusable-workflow
+    # The rebase needs OVERRIDE_TOKEN: pushes with github.token don't start new runs.
+    uses: udondan/wait-for-turn/.github/workflows/wait-for-turn.yml@v1
+    secrets:
+      update-token: ${{ secrets.OVERRIDE_TOKEN }}
 
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
