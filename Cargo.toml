@@ -46,7 +46,7 @@ rexpect = "0.7.1"
 
 # Enable bindgen feature for musl cross-compilation with cross tool
 [target.'cfg(target_env = "musl")'.dependencies]
-aws-lc-sys = { version = "0.46.0", features = ["bindgen"] }
+aws-lc-sys = { version = "0.47.0", features = ["bindgen"] }
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1.12"
