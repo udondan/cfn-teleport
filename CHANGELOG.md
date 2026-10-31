@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.52.5](https://github.com/udondan/cfn-teleport/compare/v0.52.4...v0.52.5) (2026-10-31)
+
+
+### Dependencies
+
+* **deps:** update aws-sdk-rust monorepo ([#1418](https://github.com/udondan/cfn-teleport/issues/1418)) ([cb0cfc4](https://github.com/udondan/cfn-teleport/commit/cb0cfc4da558c712f8e818369787d5a28925f124))
+* **deps:** update rust crate aws-sdk-cloudformation to 1.135.0 ([#1423](https://github.com/udondan/cfn-teleport/issues/1423)) ([95e1f48](https://github.com/udondan/cfn-teleport/commit/95e1f48bb2c64ff04beb673aace401c3d39d66e4))
+
 ## [0.52.4](https://github.com/udondan/cfn-teleport/compare/v0.52.3...v0.52.4) (2026-10-30)
 
 
