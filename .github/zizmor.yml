@@ -1,5 +1,5 @@
 # First-party actions keep their version tags, everything else is pinned to a commit SHA.
-# The reusable workflow of wait-for-turn is used by its major tag, so every
+# The reusable workflow of priority-boarding is used by its major tag, so every
 # release reaches this repo without update PRs.
 rules:
   unpinned-uses:
@@ -7,5 +7,5 @@ rules:
       policies:
         "actions/*": ref-pin
         "github/*": ref-pin
-        "udondan/wait-for-turn/*": ref-pin
+        "udondan/priority-boarding/*": ref-pin
         "*": hash-pin

@@ -2,7 +2,7 @@
 name: Test
 
 # The AWS test jobs share CloudFormation test stacks, so only one run may use
-# them at a time. The wait-for-turn job queues the runs of pull requests and
+# them at a time. The priority-boarding job queues the runs of pull requests and
 # main, pull requests first. A single workflow-wide concurrency group is not
 # used for this because GitHub keeps only one pending run per group and cancels
 # the others.
@@ -24,7 +24,7 @@ env:
 jobs:
   # Build Rust binary (lint, test, build)
   build:
-    needs: wait-for-turn
+    needs: priority-boarding
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -136,7 +136,7 @@ jobs:
 
   # Build Windows binary and validate embedded metadata
   build-windows:
-    needs: wait-for-turn
+    needs: priority-boarding
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -319,23 +319,23 @@ jobs:
   # the turn as well: the waiting runs of all open pull requests would otherwise
   # take the runners of the account at once, and most of them are tested again
   # after a rebase anyway.
-  wait-for-turn:
+  priority-boarding:
     permissions:
       actions: read
-      contents: write # lock refs under refs/wait-for-turn/
+      contents: write # lock refs under refs/priority-boarding/
       pull-requests: read # labels for label-weights
       statuses: write # queue position as commit status
     # Queue order, the concurrency group that cancels outdated waiting runs and
     # the rebase of branches that are behind main: see
-    # https://github.com/udondan/wait-for-turn#reusable-workflow
+    # https://github.com/udondan/priority-boarding#reusable-workflow
     # The rebase needs OVERRIDE_TOKEN: pushes with github.token don't start new runs.
-    uses: udondan/wait-for-turn/.github/workflows/wait-for-turn.yml@v1
+    uses: udondan/priority-boarding/.github/workflows/priority-boarding.yml@v1
     secrets:
       update-token: ${{ secrets.OVERRIDE_TOKEN }}
 
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
-    needs: wait-for-turn
+    needs: priority-boarding
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1320,14 +1320,14 @@ jobs:
   # Verify stack template formats and resource state
   verify-state:
     needs:
-      - wait-for-turn
+      - priority-boarding
       - test-windows
       - test-refactor
       - test-import
       - test-rename
       - test-template-io
     # Only touch the shared stacks when this run holds the turn
-    if: always() && needs.wait-for-turn.result == 'success'
+    if: always() && needs.priority-boarding.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1470,9 +1470,9 @@ jobs:
   # Delete stacks in parallel (only if verification failed)
   delete-stacks:
     needs:
-      - wait-for-turn
+      - priority-boarding
       - verify-state
-    if: always() && needs.wait-for-turn.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
+    if: always() && needs.priority-boarding.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1508,10 +1508,10 @@ jobs:
   # Cleanup remaining resources (runs after parallel stack deletion)
   cleanup-resources:
     needs:
-      - wait-for-turn
+      - priority-boarding
       - verify-state
       - delete-stacks
-    if: always() && needs.wait-for-turn.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
+    if: always() && needs.priority-boarding.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1559,7 +1559,7 @@ jobs:
           GH_TOKEN: ${{ github.token }} # zizmor checks the actions online
 
   # The only required status check. Every job must have run and succeeded:
-  # a skipped job (for example after a failed prepare-stacks or wait-for-turn)
+  # a skipped job (for example after a failed prepare-stacks or priority-boarding)
   # must never let a PR become mergeable, least of all through automerge.
   # Only coverage may be skipped: it is skipped when build didn't succeed, and
   # build fails this job then anyway.
@@ -1572,7 +1572,7 @@ jobs:
       - build
       - coverage
       - build-windows
-      - wait-for-turn
+      - priority-boarding
       - prepare-stacks
       - test-refactor
       - test-import
