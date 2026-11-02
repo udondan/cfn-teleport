@@ -1,0 +1,13 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CfnTeleportImportTest2 - YAML target stack for import mode tests
+
+Resources:
+  # CloudFormation requires at least one resource - this is a minimal placeholder
+  # Real test resources will be moved here from ImportTest1 during integration tests
+  WaitConditionHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+
+Outputs:
+  StackFormat:
+    Description: Format of this stack template
+    Value: YAML
