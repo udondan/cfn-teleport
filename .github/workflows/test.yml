@@ -6,6 +6,10 @@ name: Test
 # main, pull requests first. A single workflow-wide concurrency group is not
 # used for this because GitHub keeps only one pending run per group and cancels
 # the others.
+#
+# Pull requests from forks get no secrets and no AWS credentials. They skip the
+# wait and the AWS tests, and only run the build jobs. The required job fails
+# for them, as the AWS tests didn't run.
 
 on:
   pull_request:
@@ -25,6 +29,8 @@ jobs:
   # Build Rust binary (lint, test, build)
   build:
     needs: boarding-gate
+    # The wait is skipped for forks.
+    if: ${{ !cancelled() && (needs.boarding-gate.result == 'success' || needs.boarding-gate.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -80,7 +86,7 @@ jobs:
           cargo llvm-cov --all --lcov --output-path lcov.info
 
       # main uploads its coverage in the Coverage workflow, without waiting
-      # for the turn.
+      # for the turn. For forks the action uploads without a token instead of OIDC.
       - name: Upload coverage to Codecov
         if: github.event_name == 'pull_request'
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
@@ -106,7 +112,7 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'pull_request' && needs.build.result == 'success'
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && needs.build.result == 'success' }}
     timeout-minutes: 10
     permissions:
       checks: read
@@ -137,6 +143,7 @@ jobs:
   # Build Windows binary and validate embedded metadata
   build-windows:
     needs: boarding-gate
+    if: ${{ !cancelled() && (needs.boarding-gate.result == 'success' || needs.boarding-gate.result == 'skipped') }}
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -318,8 +325,9 @@ jobs:
   # Only one run at a time may use the AWS test stacks. The build jobs wait for
   # the turn as well: the waiting runs of all open pull requests would otherwise
   # take the runners of the account at once, and most of them are tested again
-  # after a rebase anyway.
+  # after a rebase anyway. Forks can't use the AWS test stacks and don't wait.
   boarding-gate:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       actions: read
       contents: write # lock refs under refs/boarding-gate/
@@ -1584,9 +1592,13 @@ jobs:
       - name: Check that all jobs succeeded
         env:
           RESULTS: ${{ toJSON(needs) }}
+          FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           failed=$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success" and (.key != "coverage" or .value.result != "skipped")) | "\(.key): \(.value.result)"')
           if [ -n "$failed" ]; then
+            if [ "$FORK" = true ]; then
+              echo "::error::Pull requests from forks don't run the AWS tests. A maintainer has to test this change from a branch of the repository."
+            fi
             echo "::error::Not all jobs succeeded:"
             echo "$failed"
             exit 1
