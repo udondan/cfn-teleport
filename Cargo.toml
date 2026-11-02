@@ -1,0 +1,52 @@
+[package]
+name = "cfn-teleport"
+version = "0.52.5"
+edition = "2021"
+description = "Moves CloudFormation resources between stacks"
+license = "Apache-2.0"
+homepage = "https://github.com/udondan/cfn-teleport/"
+repository = "https://github.com/udondan/cfn-teleport/"
+authors = ["Daniel Schroeder"]
+readme = "README.md"
+keywords = ["aws", "cfn", "CloudFormation", "migration", "resources"]
+categories = ["command-line-utilities"]
+publish = true
+
+[dependencies]
+aws-config = "1.13.0"
+aws-sdk-cloudformation = { version = "1.135.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
+clap = { version = "4.6.7", features = ["derive"] }
+console = "0.16.6"
+dialoguer = "0.12.0"
+indexmap = { version = "2.14.2", features = ["serde"] }
+lazy_static = "1.5.1"
+serde_json = "1.0.154"
+spinach = "3.2.0"
+tokio = { version = "1.54.1", features = ["full"] }
+unsafe-libyaml = "0.2.11"
+proc-macro2 = "1.0.107"                               # override indirect dependency
+
+[dependencies.uuid]
+version = "1.29.0"
+features = [
+    "v4",       # Lets you generate random UUIDs
+    "fast-rng", # Use a faster (but still sufficiently random) RNG
+]
+
+[dev-dependencies]
+aws-credential-types = "1.3.1"
+aws-smithy-runtime-api = { version = "1.19.2", features = ["client"] }
+aws-smithy-types = "1.9.1"
+tempfile = "3.27.0"
+tiny_http = "0.12.0"
+tokio = { version = "1.54.1", features = ["full", "test-util"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+rexpect = "0.7.1"
+
+# Enable bindgen feature for musl cross-compilation with cross tool
+[target.'cfg(target_env = "musl")'.dependencies]
+aws-lc-sys = { version = "0.47.0", features = ["bindgen"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1.12"
