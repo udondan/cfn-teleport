@@ -329,7 +329,7 @@ jobs:
     # the rebase of branches that are behind main: see
     # https://github.com/udondan/priority-boarding#reusable-workflow
     # The rebase needs OVERRIDE_TOKEN: pushes with github.token don't start new runs.
-    uses: udondan/priority-boarding/.github/workflows/priority-boarding.yml@v1
+    uses: udondan/priority-boarding/.github/workflows/priority-boarding.yml@426db7b535a1b999e919c03a2d85727c9fcdc66d # v1
     secrets:
       update-token: ${{ secrets.OVERRIDE_TOKEN }}
 
