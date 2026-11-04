@@ -5,6 +5,7 @@
 [![CI](https://github.com/udondan/cfn-teleport/actions/workflows/test.yml/badge.svg?branch=main)][ci]
 [![codecov](https://codecov.io/gh/udondan/cfn-teleport/graph/badge.svg)][codecov]
 [![License](https://img.shields.io/github/license/udondan/cfn-teleport)][license]
+[![Maintainability](https://qlty.sh/gh/udondan/projects/cfn-teleport/maintainability.svg)][qlty]
 
 A command-line tool for managing CloudFormation resources across and within stacks.
 
@@ -321,3 +322,4 @@ This project uses [conventional commits](https://www.conventionalcommits.org/). 
 [latest]: https://github.com/udondan/cfn-teleport/releases/latest
 [ci]: https://github.com/udondan/cfn-teleport/actions/workflows/test.yml
 [codecov]: https://codecov.io/gh/udondan/cfn-teleport
+[qlty]: https://qlty.sh/gh/udondan/projects/cfn-teleport
