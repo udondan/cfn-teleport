@@ -322,8 +322,8 @@ jobs:
           path: target/release/cfn-teleport.exe
           retention-days: 1
 
-  # Code smells (complexity, duplication, nesting) via Qlty. Git-aware: only
-  # smells introduced by the PR compared to main fail the job.
+  # Code smells (complexity, duplication, nesting) via Qlty. Only smells that
+  # do not exist on the PR base fail the job (see .github/scripts).
   qlty:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -346,18 +346,15 @@ jobs:
         if: github.event_name != 'pull_request'
         run: qlty smells --all --no-snippets
 
-      - name: Report new code smells
+      - name: Report code smells in changed files
         if: github.event_name == 'pull_request'
-        run: qlty smells --upstream origin/main --no-snippets
+        run: qlty smells --upstream "origin/${GITHUB_BASE_REF}" --no-snippets
 
       - name: Fail on new code smells
         if: github.event_name == 'pull_request'
-        run: |
-          count=$(qlty smells --upstream origin/main --json --quiet 2>/dev/null | jq length)
-          if [ "$count" -gt 0 ]; then
-            echo "::error::qlty found $count new code smell(s) compared to main"
-            exit 1
-          fi
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: .github/scripts/qlty-new-smells.sh "$BASE_SHA"
 
   # Only one run at a time may use the AWS test stacks. The build jobs wait for
   # the turn as well: the waiting runs of all open pull requests would otherwise
