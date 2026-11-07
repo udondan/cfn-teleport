@@ -2482,6 +2482,45 @@ fn set_default_deletion_policy(
     template
 }
 
+// Intentional duplicate to verify the qlty smells check. Do not merge.
+#[allow(dead_code)]
+fn set_default_update_replace_policy(
+    mut template: serde_json::Value,
+    resource_ids: Vec<String>,
+) -> serde_json::Value {
+    let resources = template["Resources"].as_object_mut().unwrap();
+
+    for resource_id in resource_ids {
+        if let Some(resource) = resources.get_mut(&resource_id) {
+            if resource.is_object() {
+                let resource_object = resource.as_object_mut().unwrap();
+                if !resource_object.contains_key("UpdateReplacePolicy") {
+                    let resource_type = resource_object["Type"].as_str().unwrap();
+                    let deletion_policy = match resource_type {
+                        "AWS::RDS::DBCluster" => "Snapshot",
+                        "AWS::RDS::DBInstance" => {
+                            if resource_object
+                                .get("Properties")
+                                .and_then(|p| p.get("DBClusterIdentifier"))
+                                .is_some()
+                            {
+                                "Delete"
+                            } else {
+                                "Snapshot"
+                            }
+                        }
+                        _ => "Delete",
+                    };
+                    resource["UpdateReplacePolicy"] =
+                        serde_json::Value::String(deletion_policy.to_string());
+                }
+            }
+        }
+    }
+
+    template
+}
+
 fn remove_resources(
     mut template: serde_json::Value,
     resource_ids: Vec<String>,
