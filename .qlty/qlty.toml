@@ -41,6 +41,13 @@ exclude_patterns = [
   "**/testdata/**",
   "**/vendor/**",
   "**/.claude/**",
+  # Vendored from cloudformation-guard, kept close to upstream (see src/cfn_yaml/readme.md)
+  "src/cfn_yaml/cstr.rs",
+  "src/cfn_yaml/event.rs",
+  "src/cfn_yaml/loader.rs",
+  "src/cfn_yaml/parser.rs",
+  "src/cfn_yaml/tag.rs",
+  "src/cfn_yaml/util.rs",
 ]
 
 test_patterns = [

@@ -60,7 +60,7 @@ Quick reference for AI coding agents working on cfn-teleport.
 
 ### Import Organization
 
-Group imports in this order (see `main.rs:1-11`):
+Group imports in this order (see `src/refactor.rs`):
 
 1. External crate imports (alphabetical)
 2. Local module declarations (`mod`)
@@ -93,7 +93,7 @@ mod supported_resource_types;
 - **AWS SDK operations**: Return `Result<T, cloudformation::Error>` for specific AWS errors
 - **Error propagation**: Use `?` operator for concise error handling
 - **Custom errors**: Convert to `Box<dyn Error>` with `.into()` or string conversion
-- **User-facing errors**: Use `eprintln!` for error messages with helpful context (see `main.rs:63-73`)
+- **User-facing errors**: Use `eprintln!` for error messages with helpful context (see `main` in `src/main.rs`)
 - **Process exit**: Use `process::exit(1)` for fatal errors after printing user-friendly messages
 
 Example:
@@ -118,14 +118,14 @@ async fn get_stacks(
 - **Entry point**: Use `#[tokio::main]` on `async fn main()`
 - **AWS operations**: All AWS SDK calls are `async` - use `.await?` pattern
 - **Dependencies**: `tokio = { version = "1.37.0", features = ["full"] }`
-- **Threading**: Use `std::thread::sleep` for blocking waits (see `main.rs:895`)
+- **Waiting**: Use `tokio::time::sleep` when polling AWS for status (see `src/stack_update.rs`)
 
 ### Documentation
 
 - Use `///` for public API documentation comments
 - Use `//` for inline explanatory comments
 - Use `//!` for module-level documentation
-- CLI arg documentation: Use `#[arg(...)]` doc attributes (see `main.rs:19-33`)
+- CLI arg documentation: Use `#[arg(...)]` doc attributes (see `src/cli.rs`)
 
 ### Code Organization
 
@@ -223,7 +223,7 @@ async fn get_stacks(
 
 ## Architecture Notes
 
-- **Single binary**: All code in `src/main.rs` with small helper modules
+- **Single binary**: `src/main.rs` only declares the modules and starts `workflow::run_with`; each step of the flow lives in its own module (`cli`, `stacks`, `selection`, `refactor`, `import`, `export`, ...)
 - **State management**: Uses `HashMap` for resource ID mappings (`new_logical_ids_map`)
 - **Async flow**: Sequential AWS operations with `await`, no parallelism needed
 - **Error recovery**: Gracefully handles AWS errors with user-friendly messages
@@ -232,9 +232,9 @@ async fn get_stacks(
 
 ## Reference Files
 
-- `src/main.rs:1-11` - Import organization example
-- `src/main.rs:37-87` - Error handling pattern for AWS credentials
-- `src/main.rs:312-319` - Simple utility function example
+- `src/refactor.rs` - Import organization example
+- `src/workflow.rs` (`stacks_error`) - Error handling pattern for AWS credentials
+- `src/refactor.rs` (`plural`) - Simple utility function example
 - `src/spinner.rs` - Custom progress indicator wrapper
 - `Cargo.toml` - Dependencies and project metadata
 - `.github/workflows/test.yml` - CI pipeline configuration
