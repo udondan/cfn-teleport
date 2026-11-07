@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::test_support::{form_value, FakeCfn, Reply};
+use aws_sdk_cloudformation::error::ProvideErrorMetadata;
 use serde_json::json;
 
 fn resource_summary(logical: &str, physical: &str, typ: &str) -> StackResourceSummary {
@@ -406,8 +407,7 @@ async fn test_create_changeset() {
     let name = create_changeset(
         &fake.client(),
         "Target",
-        json!({"Resources": {}}),
-        TemplateFormat::Json,
+        Template::new(json!({"Resources": {}}), TemplateFormat::Json),
         vec![&renamed, &kept],
         rename_bucket(),
     )
@@ -452,8 +452,7 @@ async fn test_create_changeset_errors() {
         let result = create_changeset(
             &client,
             "Target",
-            json!({}),
-            TemplateFormat::Json,
+            Template::new(json!({}), TemplateFormat::Json),
             vec![],
             HashMap::new(),
         )
@@ -736,10 +735,14 @@ async fn test_refactor_same_stack_template_without_resources() {
 async fn move_bucket(fake: &FakeCfn, work_dir: &Path) -> Result<(), Box<dyn Error>> {
     refactor_stack_resources_cross_stack(
         &fake.client(),
-        "Source",
-        "Target",
-        bucket_template(),
-        Template::new(json!({"Resources": {}}), TemplateFormat::Yaml),
+        StackTemplate {
+            name: "Source",
+            template: bucket_template(),
+        },
+        StackTemplate {
+            name: "Target",
+            template: Template::new(json!({"Resources": {}}), TemplateFormat::Yaml),
+        },
         rename_bucket(),
         work_dir,
     )
@@ -790,10 +793,14 @@ async fn test_refactor_cross_stack_dangling_reference() {
 
     let result = refactor_stack_resources_cross_stack(
         &fake.client(),
-        "Source",
-        "Target",
-        source,
-        Template::new(json!({"Resources": {}}), TemplateFormat::Json),
+        StackTemplate {
+            name: "Source",
+            template: source,
+        },
+        StackTemplate {
+            name: "Target",
+            template: Template::new(json!({"Resources": {}}), TemplateFormat::Json),
+        },
         rename_bucket(),
         dir.path(),
     )

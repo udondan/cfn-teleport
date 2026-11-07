@@ -935,7 +935,7 @@ async fn test_select_resources_cross_stack_parameters() {
     let resources = [&bucket, &queue];
 
     // Without a target template every parameter is missing
-    let err = select_resources(&prompter, "p", &resources, &template, None, true)
+    let err = select_resources(&prompter, &resources, &template, None, true)
         .await
         .unwrap_err();
     assert!(err.to_string().contains("missing parameters: Name"));
@@ -943,7 +943,6 @@ async fn test_select_resources_cross_stack_parameters() {
     // The target has the parameter
     let selected = select_resources(
         &prompter,
-        "p",
         &resources,
         &template,
         Some(&target_with_param),
@@ -954,7 +953,7 @@ async fn test_select_resources_cross_stack_parameters() {
     assert_eq!(selected[0].logical_resource_id(), Some("Queue"));
 
     // Same-stack renames are never blocked
-    let selected = select_resources(&prompter, "p", &resources, &template, None, false)
+    let selected = select_resources(&prompter, &resources, &template, None, false)
         .await
         .unwrap();
     assert_eq!(selected.len(), 2);

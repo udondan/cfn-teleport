@@ -108,7 +108,10 @@ fn rename_sub_vars(template: &str, old_id: &str, new_id: &str) -> String {
 /// Renames the `old_id` key of a Fn::Sub variable map and updates references in its values
 fn rename_sub_var_map(vars: &mut Map<String, Value>, old_id: &str, new_id: &str) {
     if let Some(value) = vars.remove(old_id) {
-        vars.insert(new_id.to_string(), traverse_and_update(value, old_id, new_id));
+        vars.insert(
+            new_id.to_string(),
+            traverse_and_update(value, old_id, new_id),
+        );
     }
 
     for value in vars.values_mut() {
