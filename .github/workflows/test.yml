@@ -322,6 +322,43 @@ jobs:
           path: target/release/cfn-teleport.exe
           retention-days: 1
 
+  # Code smells (complexity, duplication, nesting) via Qlty. Git-aware: only
+  # smells introduced by the PR compared to main fail the job.
+  qlty:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install qlty
+        uses: qltysh/qlty-action/install@ebcd284bf32e36a030afe15f1e136c7be08b9506 # v2.5.0
+
+      - name: Lint via qlty plugins
+        run: qlty check --all
+
+      - name: Report code smells
+        if: github.event_name != 'pull_request'
+        run: qlty smells --all --no-snippets
+
+      - name: Report new code smells
+        if: github.event_name == 'pull_request'
+        run: qlty smells --upstream origin/main --no-snippets
+
+      - name: Fail on new code smells
+        if: github.event_name == 'pull_request'
+        run: |
+          count=$(qlty smells --upstream origin/main --json --quiet 2>/dev/null | jq length)
+          if [ "$count" -gt 0 ]; then
+            echo "::error::qlty found $count new code smell(s) compared to main"
+            exit 1
+          fi
+
   # Only one run at a time may use the AWS test stacks. The build jobs wait for
   # the turn as well: the waiting runs of all open pull requests would otherwise
   # take the runners of the account at once, and most of them are tested again
@@ -1580,6 +1617,7 @@ jobs:
       - build
       - coverage
       - build-windows
+      - qlty
       - boarding-gate
       - prepare-stacks
       - test-refactor
