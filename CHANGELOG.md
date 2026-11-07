@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.52.6](https://github.com/udondan/cfn-teleport/compare/v0.52.5...v0.52.6) (2026-11-07)
+
+
+### Dependencies
+
+* **deps:** update dependency zizmor to v1.32.0 ([#1439](https://github.com/udondan/cfn-teleport/issues/1439)) ([392d2f4](https://github.com/udondan/cfn-teleport/commit/392d2f48895d26dd8e9ec2e6eb6ca2c7595b4e75))
+* **deps:** update jdx/mise-action action to v5.2.5 ([#1434](https://github.com/udondan/cfn-teleport/issues/1434)) ([f15c249](https://github.com/udondan/cfn-teleport/commit/f15c249f9ace9d28f6bcc53677cb9b3d4ccb8ac8))
+* **deps:** update jdx/mise-action action to v5.2.6 ([#1437](https://github.com/udondan/cfn-teleport/issues/1437)) ([d6ba650](https://github.com/udondan/cfn-teleport/commit/d6ba6507f952f79e751593d089124b2a00e62e49))
+* **deps:** update rust crate aws-sdk-cloudformation to 1.136.0 ([#1429](https://github.com/udondan/cfn-teleport/issues/1429)) ([d54615a](https://github.com/udondan/cfn-teleport/commit/d54615a56d0b211d3b1d185816832e82febebf6f))
+* **deps:** update taiki-e/install-action action to v2.88.1 ([#1431](https://github.com/udondan/cfn-teleport/issues/1431)) ([e14a064](https://github.com/udondan/cfn-teleport/commit/e14a0647a35ffd18f8662df12162704e076fa5c3))
+* **deps:** update taiki-e/install-action action to v2.89.0 ([#1436](https://github.com/udondan/cfn-teleport/issues/1436)) ([d53f153](https://github.com/udondan/cfn-teleport/commit/d53f153ecca63cc958de485f1ccf216d0a7344a6))
+* **deps:** update taiki-e/install-action action to v2.89.1 ([#1438](https://github.com/udondan/cfn-teleport/issues/1438)) ([296ed6b](https://github.com/udondan/cfn-teleport/commit/296ed6b032094f5e0e26aaf01e88562b012217fe))
+* **deps:** update taiki-e/install-action action to v2.90.0 ([#1440](https://github.com/udondan/cfn-teleport/issues/1440)) ([f0fc97c](https://github.com/udondan/cfn-teleport/commit/f0fc97c559aced618da7af31493d1854f6e514e1))
+
 ## [0.52.5](https://github.com/udondan/cfn-teleport/compare/v0.52.4...v0.52.5) (2026-11-02)
 
 
