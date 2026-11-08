@@ -1,4 +1,8 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>udondan/renovate-config"]
+  "extends": ["github>udondan/renovate-config"],
+  "lockFileMaintenance": {
+    "description": "The binary is built from Cargo.lock, so lock file maintenance ships to users.",
+    "semanticCommitType": "build"
+  }
 }
