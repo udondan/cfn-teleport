@@ -67,13 +67,20 @@ jobs:
           rustc --version
           cargo clippy --version
 
+      # Build output of another compiler version is useless, and stale test
+      # binaries in it distort the coverage report.
+      - name: Get rustc version
+        id: rustc
+        shell: bash
+        run: echo "version=$(rustc --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
       - name: Rust dependency cache
         uses: actions/cache@v6
         with:
           path: target
-          key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-rustc-${{ steps.rustc.outputs.version }}-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-stable-target-
+            ${{ runner.os }}-rustc-${{ steps.rustc.outputs.version }}-target-
 
       - name: Lint
         run: |
@@ -83,6 +90,9 @@ jobs:
       - name: Test
         run: |
           cargo check
+          # Remove test binaries of earlier builds from the cache, otherwise
+          # llvm-cov reads their outdated coverage data as well.
+          cargo llvm-cov clean --workspace
           cargo llvm-cov --all --lcov --output-path lcov.info
 
       # main uploads its coverage in the Coverage workflow, without waiting
@@ -165,13 +175,20 @@ jobs:
           cargo --version --verbose
           rustc --version
 
+      # Build output of another compiler version is useless, and stale test
+      # binaries in it distort the coverage report.
+      - name: Get rustc version
+        id: rustc
+        shell: bash
+        run: echo "version=$(rustc --version | cut -d' ' -f2)" >> "$GITHUB_OUTPUT"
+
       - name: Rust dependency cache
         uses: actions/cache@v6
         with:
           path: target
-          key: ${{ runner.os }}-stable-target-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-rustc-${{ steps.rustc.outputs.version }}-target-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-stable-target-
+            ${{ runner.os }}-rustc-${{ steps.rustc.outputs.version }}-target-
 
       - name: Build Windows binary
         run: cargo build --release
