@@ -70,7 +70,7 @@ async fn run() -> Result<(), Box<dyn Error>> {
         .with_initial_backoff(std::time::Duration::from_secs(1))
         .with_max_backoff(std::time::Duration::from_secs(4));
 
-    let config = aws_config::defaults(BehaviorVersion::v2026_01_12())
+    let config = aws_config::defaults(BehaviorVersion::v2026_11_10())
         .retry_config(retry_config)
         .load()
         .await;
