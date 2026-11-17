@@ -191,11 +191,14 @@ async fn get_stacks(
 
 ### CI Pipeline
 
-1. **Path filtering**: Only runs tests if `src/`, `test/`, or `Cargo.*` files change
-2. **Matrix testing**: Runs on both `stable` and `nightly` Rust
-3. **Lint checks**: Only on `stable` toolchain
-4. **Integration tests**: Only on `stable` toolchain (requires AWS credentials)
-5. **Cleanup**: Automatically destroys test resources after tests
+`.github/workflows/test.yml`:
+
+1. **Queue**: the boarding-gate job queues the runs of pull requests and main, so only one run uses the shared AWS test stacks at a time. Every other job waits for it and fails if it failed. Pull requests from forks skip the wait and the AWS tests, so `required` fails for them.
+2. **Path filtering**: on pull requests, the `changes` job (`dorny/paths-filter`) decides whether the build and AWS test jobs run: only if `src/`, `tests/`, `test/`, `Cargo.*`, `build.rs`, `.cargo/`, the `Makefile`, `codecov.yml` or `test.yml` changed. Add new files the build or tests depend on to that filter. Pushes to main always run everything.
+3. **Build**: fmt check, clippy and unit tests with coverage on Linux (`build`), and the Windows build with its metadata check (`build-windows`), on the `stable` toolchain.
+4. **Integration tests**: `prepare-stacks` deploys the test stacks, the `test-*` jobs run the built binary against them (they need the build jobs).
+5. **Cleanup**: `verify-state` checks the stacks afterwards; if they aren't in the expected state, `delete-stacks` and `cleanup-resources` remove them.
+6. **Lint**: `actions` (actionlint, zizmor) and `qlty` run on every pull request.
 
 ## Common Development Tasks
 

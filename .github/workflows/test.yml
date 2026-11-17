@@ -28,14 +28,19 @@ env:
 jobs:
   # Build Rust binary (lint, test, build)
   build:
-    needs: boarding-gate
-    # The wait is skipped for forks.
-    if: ${{ !cancelled() && (needs.boarding-gate.result == 'success' || needs.boarding-gate.result == 'skipped') }}
+    needs: [boarding-gate, changes]
+    # Skip if no code changed. Otherwise fail instead of skip if boarding-gate
+    # failed, see the changes job. The wait is skipped for forks.
+    if: ${{ !cancelled() && (needs.changes.result == 'skipped' || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
     steps:
+      - name: Check turn
+        if: needs.boarding-gate.result == 'failure' || needs.boarding-gate.result == 'cancelled'
+        run: exit 1
+
       - name: Checkout code
         uses: actions/checkout@v7
         with:
@@ -152,10 +157,15 @@ jobs:
 
   # Build Windows binary and validate embedded metadata
   build-windows:
-    needs: boarding-gate
-    if: ${{ !cancelled() && (needs.boarding-gate.result == 'success' || needs.boarding-gate.result == 'skipped') }}
+    needs: [boarding-gate, changes]
+    # See the build job.
+    if: ${{ !cancelled() && (needs.changes.result == 'skipped' || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: windows-latest
     steps:
+      - name: Check turn
+        if: needs.boarding-gate.result == 'failure' || needs.boarding-gate.result == 'cancelled'
+        run: exit 1
+
       - name: Checkout code
         uses: actions/checkout@v7
         with:
@@ -342,11 +352,18 @@ jobs:
   # Code smells (complexity, duplication, nesting) via Qlty. Git-aware: only
   # smells introduced by the PR compared to main fail the job.
   qlty:
+    needs: boarding-gate
+    # Fail instead of skip if boarding-gate failed, see the changes job.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
     steps:
+      - name: Check turn
+        if: needs.boarding-gate.result == 'failure' || needs.boarding-gate.result == 'cancelled'
+        run: exit 1
+
       - name: Checkout code
         uses: actions/checkout@v7
         with:
@@ -376,11 +393,12 @@ jobs:
             exit 1
           fi
 
-  # Only one run at a time may use the AWS test stacks. The build jobs wait for
+  # Only one run at a time may use the AWS test stacks. All other jobs wait for
   # the turn as well: the waiting runs of all open pull requests would otherwise
   # take the runners of the account at once, and most of them are tested again
   # after a rebase anyway. Forks can't use the AWS test stacks and don't wait.
   boarding-gate:
+    name: Queue
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       actions: read
@@ -395,9 +413,47 @@ jobs:
     secrets:
       update-token: ${{ secrets.OVERRIDE_TOKEN }}
 
+  # On pull requests, the build and AWS test jobs only run if code, tests or
+  # build config changed. Skipped outside of pull requests, so pushes to main
+  # always run them. Waits for boarding-gate like everything else: while another
+  # run holds the turn, this one likely needs a rebase anyway.
+  changes:
+    needs: boarding-gate
+    # A skipped job fails the required job, so run it even if boarding-gate
+    # failed and fail it in the first step. The wait is skipped for forks.
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists the PR's files via the API
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Check turn
+        if: needs.boarding-gate.result == 'failure' || needs.boarding-gate.result == 'cancelled'
+        run: exit 1
+
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            code:
+              - src/**
+              - tests/**
+              - test/**
+              - Cargo.toml
+              - Cargo.lock
+              - build.rs
+              - .cargo/**
+              - Makefile
+              - codecov.yml
+              - .github/workflows/test.yml
+
   # Deploy test stacks in parallel (matrix strategy for speed)
   prepare-stacks:
-    needs: boarding-gate
+    needs: [boarding-gate, changes]
+    # Only with the turn, and only if code changed (see the changes job).
+    if: ${{ !cancelled() && needs.boarding-gate.result == 'success' && (needs.changes.result == 'skipped' || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true')) }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1388,8 +1444,10 @@ jobs:
       - test-import
       - test-rename
       - test-template-io
-    # Only touch the shared stacks when this run holds the turn
-    if: always() && needs.boarding-gate.result == 'success'
+      - changes
+    # Only touch the shared stacks when this run holds the turn and the tests
+    # weren't skipped for lack of code changes.
+    if: always() && needs.boarding-gate.result == 'success' && (needs.changes.result == 'skipped' || (needs.changes.result == 'success' && needs.changes.outputs.code == 'true'))
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1534,7 +1592,7 @@ jobs:
     needs:
       - boarding-gate
       - verify-state
-    if: always() && needs.boarding-gate.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
+    if: always() && needs.boarding-gate.result == 'success' && needs.verify-state.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1573,7 +1631,7 @@ jobs:
       - boarding-gate
       - verify-state
       - delete-stacks
-    if: always() && needs.boarding-gate.result == 'success' && needs.verify-state.outputs.state_valid != 'true'
+    if: always() && needs.boarding-gate.result == 'success' && needs.verify-state.result != 'skipped' && needs.verify-state.outputs.state_valid != 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1597,12 +1655,19 @@ jobs:
           echo "=========================================="
           make test-clean-all
 
-  # Lints the workflows. Doesn't touch AWS, so it doesn't wait for the turn.
+  # Lints the workflows.
   actions:
+    needs: boarding-gate
+    # Fail instead of skip if boarding-gate failed, see the changes job.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
+      - name: Check turn
+        if: needs.boarding-gate.result == 'failure' || needs.boarding-gate.result == 'cancelled'
+        run: exit 1
+
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -1624,13 +1689,16 @@ jobs:
   # a skipped job (for example after a failed prepare-stacks or boarding-gate)
   # must never let a PR become mergeable, least of all through automerge.
   # Only coverage may be skipped: it is skipped when build didn't succeed, and
-  # build fails this job then anyway.
+  # build fails this job then anyway. changes is skipped outside of pull
+  # requests. If changes found no code change, the build and AWS test jobs may
+  # be skipped too.
   # The only test check the ruleset requires.
   required:
     if: always()
     runs-on: ubuntu-latest
     needs:
       - actions
+      - changes
       - build
       - coverage
       - build-windows
@@ -1647,9 +1715,14 @@ jobs:
       - name: Check that all jobs succeeded
         env:
           RESULTS: ${{ toJSON(needs) }}
+          NO_CODE: ${{ needs.changes.outputs.code == 'false' }}
           FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
-          failed=$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result != "success" and (.key != "coverage" or .value.result != "skipped")) | "\(.key): \(.value.result)"')
+          failed=$(echo "$RESULTS" | jq -r --arg nocode "$NO_CODE" '
+            to_entries[]
+            | select(.value.result != "success")
+            | select(.value.result == "skipped" and ((.key | IN("coverage", "changes")) or ($nocode == "true" and (.key | IN("boarding-gate", "actions", "qlty") | not))) | not)
+            | "\(.key): \(.value.result)"')
           if [ -n "$failed" ]; then
             if [ "$FORK" = true ]; then
               echo "::error::Pull requests from forks don't run the AWS tests. A maintainer has to test this change from a branch of the repository."
