@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.52.8](https://github.com/udondan/cfn-teleport/compare/v0.52.7...v0.52.8) (2026-11-21)
+
+
+### Bug Fixes
+
+* apply AWS SDK default read timeout (5 min) to CloudFormation API calls ([db10dbc](https://github.com/udondan/cfn-teleport/commit/db10dbc57fc1c5f4243fff862dc90b618fc7528a))
+
+
+### Dependencies
+
+* **deps:** update aws-sdk-rust monorepo ([#1475](https://github.com/udondan/cfn-teleport/issues/1475)) ([024e154](https://github.com/udondan/cfn-teleport/commit/024e1545e079dad59246103fdaa0537181675269))
+* **deps:** update rust crate aws-sdk-cloudformation to 1.139.0 ([#1465](https://github.com/udondan/cfn-teleport/issues/1465)) ([37ae9ef](https://github.com/udondan/cfn-teleport/commit/37ae9efca9fae985da2ebc5fc2b30f2d43ea93e9))
+* **deps:** update rust crate clap to 4.6.8 ([#1472](https://github.com/udondan/cfn-teleport/issues/1472)) ([78a3d9e](https://github.com/udondan/cfn-teleport/commit/78a3d9ea0590b428b6de2024325dc2a727e0db4e))
+* **deps:** update rust crate uuid to 1.29.3 ([#1473](https://github.com/udondan/cfn-teleport/issues/1473)) ([fb79eef](https://github.com/udondan/cfn-teleport/commit/fb79eef05fcd11271e802a25a5672b0b00919b73))
+
 ## [0.52.7](https://github.com/udondan/cfn-teleport/compare/v0.52.6...v0.52.7) (2026-11-16)
 
 
