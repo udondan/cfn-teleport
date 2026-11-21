@@ -7,6 +7,9 @@
 [![Maintainability](https://qlty.sh/gh/udondan/projects/cfn-teleport/maintainability.svg)][qlty]
 [![License](https://img.shields.io/github/license/udondan/cfn-teleport)][license]
 
+> [!NOTE]
+> Unofficial community project. Not affiliated with, endorsed or authorized by Amazon Web Services (AWS).
+
 A command-line tool for managing CloudFormation resources across and within stacks.
 
 **Features:**
@@ -316,6 +319,10 @@ The error context file includes:
 Contributions are welcome!
 
 This project uses [conventional commits](https://www.conventionalcommits.org/). Please make sure all your merge request titles follow these specifications.
+
+## Disclaimer
+
+This is an unofficial, independent open-source project and is not affiliated with, funded or endorsed by Amazon Web Services, Inc. or its affiliates. AWS, AWS CloudFormation and the names of other AWS services are trademarks of Amazon.com, Inc. or its affiliates. The names are used only to describe compatibility. Use at your own risk: cfn-teleport changes live CloudFormation stacks, so review the planned changes before you confirm them.
 
 [license]: https://github.com/udondan/cfn-teleport/blob/main/LICENSE
 [crate]: https://crates.io/crates/cfn-teleport
