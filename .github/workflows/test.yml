@@ -511,6 +511,41 @@ jobs:
 
           # ImportTest1 and ImportTest2 have no parameters (import mode compatible)
 
+          # A previous run's cleanup may have left the stack in a state that
+          # can't be updated (e.g. DELETE_FAILED after a transient error).
+          # Delete it first so it gets recreated instead of blocking this run.
+          stack_status() {
+            aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+              --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "GONE"
+          }
+
+          STATUS=$(stack_status)
+          case "$STATUS" in
+            DELETE_FAILED|ROLLBACK_COMPLETE)
+              MAX_ATTEMPTS=3
+              for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+                echo "⚠️ Stack $STACK_NAME is in $STATUS, deleting before deploy (attempt $attempt/$MAX_ATTEMPTS)"
+                aws cloudformation delete-stack --stack-name "$STACK_NAME" || true
+                aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" || true
+
+                STATUS=$(stack_status)
+                if [ "$STATUS" = "GONE" ] || [ "$STATUS" = "DELETE_COMPLETE" ]; then
+                  echo "✅ Stack $STACK_NAME deleted"
+                  break
+                fi
+
+                if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+                  echo "❌ Stack $STACK_NAME is still in $STATUS after $MAX_ATTEMPTS delete attempts"
+                  aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
+                    --query "StackEvents[?ResourceStatus=='DELETE_FAILED'].[Timestamp,LogicalResourceId,ResourceType,ResourceStatusReason]" \
+                    --output table | head -20 || true
+                  exit 1
+                fi
+                sleep 30
+              done
+              ;;
+          esac
+
           aws cloudformation deploy \
             --template-file ${{ matrix.template }} \
             --stack-name "$STACK_NAME" \
