@@ -511,6 +511,41 @@ jobs:
 
           # ImportTest1 and ImportTest2 have no parameters (import mode compatible)
 
+          # A previous run's cleanup may have left the stack in a state that
+          # can't be updated (e.g. DELETE_FAILED after a transient error).
+          # Delete it first so it gets recreated instead of blocking this run.
+          stack_status() {
+            aws cloudformation describe-stacks --stack-name "$STACK_NAME" \
+              --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "GONE"
+          }
+
+          STATUS=$(stack_status)
+          case "$STATUS" in
+            DELETE_FAILED|ROLLBACK_COMPLETE)
+              MAX_ATTEMPTS=3
+              for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+                echo "⚠️ Stack $STACK_NAME is in $STATUS, deleting before deploy (attempt $attempt/$MAX_ATTEMPTS)"
+                aws cloudformation delete-stack --stack-name "$STACK_NAME" || true
+                aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" || true
+
+                STATUS=$(stack_status)
+                if [ "$STATUS" = "GONE" ] || [ "$STATUS" = "DELETE_COMPLETE" ]; then
+                  echo "✅ Stack $STACK_NAME deleted"
+                  break
+                fi
+
+                if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+                  echo "❌ Stack $STACK_NAME is still in $STATUS after $MAX_ATTEMPTS delete attempts"
+                  aws cloudformation describe-stack-events --stack-name "$STACK_NAME" \
+                    --query "StackEvents[?ResourceStatus=='DELETE_FAILED'].[Timestamp,LogicalResourceId,ResourceType,ResourceStatusReason]" \
+                    --output table | head -20 || true
+                  exit 1
+                fi
+                sleep 30
+              done
+              ;;
+          esac
+
           aws cloudformation deploy \
             --template-file ${{ matrix.template }} \
             --stack-name "$STACK_NAME" \
@@ -1616,14 +1651,43 @@ jobs:
           aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Delete stack ${{ matrix.stack }}
+        env:
+          STACK: ${{ matrix.stack }}
         run: |
-          echo "Deleting stack: ${{ matrix.stack }}"
-          aws cloudformation delete-stack --stack-name ${{ matrix.stack }} || true
+          # Deletion can fail transiently (e.g. AWS::EC2::KeyPair returning
+          # InternalFailure). A stack left in DELETE_FAILED breaks the next
+          # deploy, so retry and fail the job if it still can't be deleted.
+          stack_status() {
+            aws cloudformation describe-stacks --stack-name "$STACK" \
+              --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "GONE"
+          }
 
-          echo "Waiting for deletion to complete..."
-          aws cloudformation wait stack-delete-complete --stack-name ${{ matrix.stack }} || true
+          MAX_ATTEMPTS=3
+          for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
+            echo "Deleting stack: $STACK (attempt $attempt/$MAX_ATTEMPTS)"
+            aws cloudformation delete-stack --stack-name "$STACK" || true
 
-          echo "✅ Stack ${{ matrix.stack }} deleted"
+            echo "Waiting for deletion to complete..."
+            aws cloudformation wait stack-delete-complete --stack-name "$STACK" || true
+
+            STATUS=$(stack_status)
+            if [ "$STATUS" = "GONE" ] || [ "$STATUS" = "DELETE_COMPLETE" ]; then
+              echo "✅ Stack $STACK deleted"
+              exit 0
+            fi
+
+            echo "⚠️ Stack $STACK is in $STATUS after attempt $attempt"
+            aws cloudformation describe-stack-events --stack-name "$STACK" \
+              --query "StackEvents[?ResourceStatus=='DELETE_FAILED'].[Timestamp,LogicalResourceId,ResourceType,ResourceStatusReason]" \
+              --output table | head -20 || true
+
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              sleep 30
+            fi
+          done
+
+          echo "❌ Stack $STACK could not be deleted after $MAX_ATTEMPTS attempts"
+          exit 1
 
   # Cleanup remaining resources (runs after parallel stack deletion)
   cleanup-resources:
