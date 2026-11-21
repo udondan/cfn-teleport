@@ -35,9 +35,11 @@ jobs:
     if: needs.release-please.outputs.release_created == 'true'
     # The workflow is read from the same commit either way.
     uses: ./.github/workflows/publish.yml # zizmor: ignore[self-repository]
-    # Everything that writes uses OVERRIDE_TOKEN.
+    # Everything that writes uses OVERRIDE_TOKEN. id-token is needed for
+    # trusted publishing to crates.io.
     permissions:
       contents: read
+      id-token: write
     with:
       tag: ${{ needs.release-please.outputs.tag_name }}
       ref: ${{ needs.release-please.outputs.sha }}
