@@ -559,6 +559,9 @@ jobs:
     needs:
       - build
       - prepare-stacks
+    # Without an explicit if, the implicit success() also requires the
+    # transitive needs to succeed, and changes is skipped on push.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.prepare-stacks.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -730,6 +733,9 @@ jobs:
     needs:
       - build
       - prepare-stacks
+    # Without an explicit if, the implicit success() also requires the
+    # transitive needs to succeed, and changes is skipped on push.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.prepare-stacks.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -821,6 +827,9 @@ jobs:
     needs:
       - build
       - prepare-stacks
+    # Without an explicit if, the implicit success() also requires the
+    # transitive needs to succeed, and changes is skipped on push.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.prepare-stacks.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1031,6 +1040,9 @@ jobs:
       - prepare-stacks
       - test-refactor
       - test-import
+    # Without an explicit if, the implicit success() also requires the
+    # transitive needs to succeed, and changes is skipped on push.
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.prepare-stacks.result == 'success' && needs.test-refactor.result == 'success' && needs.test-import.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1374,6 +1386,9 @@ jobs:
     needs:
       - build-windows
       - prepare-stacks
+    # Without an explicit if, the implicit success() also requires the
+    # transitive needs to succeed, and changes is skipped on push.
+    if: ${{ !cancelled() && needs.build-windows.result == 'success' && needs.prepare-stacks.result == 'success' }}
     runs-on: windows-latest
     permissions:
       id-token: write
