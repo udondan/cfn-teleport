@@ -291,11 +291,11 @@ jobs:
           
           # macOS Apple Silicon (native ARM + x86_64 under Rosetta)
           - target: x86_64-apple-darwin
-            os: macos-14  # ARM runner, runs x86_64 via Rosetta 2
-            distro: macOS 14 ARM (Rosetta x86_64)
+            os: macos-15  # ARM runner, runs x86_64 via Rosetta 2
+            distro: macOS 15 ARM (Rosetta x86_64)
           - target: aarch64-apple-darwin
-            os: macos-14  # ARM runner
-            distro: macOS 14 ARM
+            os: macos-15  # ARM runner
+            distro: macOS 15 ARM
           
           # Windows MSVC
           - target: x86_64-pc-windows-msvc
