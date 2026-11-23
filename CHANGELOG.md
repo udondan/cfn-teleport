@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.52.9](https://github.com/udondan/cfn-teleport/compare/v0.52.8...v0.52.9) (2026-11-23)
+
+
+### Dependencies
+
+* **deps:** update rust crate aws-sdk-cloudformation to 1.141.0 ([#1483](https://github.com/udondan/cfn-teleport/issues/1483)) ([a88c11a](https://github.com/udondan/cfn-teleport/commit/a88c11a6d2c1926f24cf17d4c9e4c345930f5410))
+* **deps:** update rust crate aws-sdk-cloudformation to 1.142.0 ([#1486](https://github.com/udondan/cfn-teleport/issues/1486)) ([e440f5d](https://github.com/udondan/cfn-teleport/commit/e440f5df8f7a80b6bc11467446df0f289e3fa83b))
+* **deps:** update rust crate clap to 4.6.9 ([#1487](https://github.com/udondan/cfn-teleport/issues/1487)) ([31ac5d4](https://github.com/udondan/cfn-teleport/commit/31ac5d4dc1b4652a37cf9df92e783545c3094a99))
+
 ## [0.52.8](https://github.com/udondan/cfn-teleport/compare/v0.52.7...v0.52.8) (2026-11-21)
 
 
