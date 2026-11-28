@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.52.10](https://github.com/udondan/cfn-teleport/compare/v0.52.9...v0.52.10) (2026-11-28)
+
+
+### Dependencies
+
+* **deps:** update rust crate clap to 4.6.10 ([#1497](https://github.com/udondan/cfn-teleport/issues/1497)) ([07806c5](https://github.com/udondan/cfn-teleport/commit/07806c518925e2ed37c480874299fadfbf6b7c36))
+
 ## [0.52.9](https://github.com/udondan/cfn-teleport/compare/v0.52.8...v0.52.9) (2026-11-23)
 
 
