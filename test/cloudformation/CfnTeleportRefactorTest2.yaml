@@ -1,0 +1,23 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CfnTeleportRefactorTest2 - YAML target stack for refactor mode tests
+
+Parameters:
+  ParameterTableName:
+    Type: String
+    Default: cfn-teleport-param-test
+    Description: Table name controlled by stack parameter (must match RefactorTest1 parameter name)
+
+Resources:
+  # CloudFormation requires at least one resource - this is a minimal placeholder
+  # Real test resources will be moved here from RefactorTest1 during integration tests
+  WaitConditionHandle:
+    Type: AWS::CloudFormation::WaitConditionHandle
+
+Outputs:
+  StackFormat:
+    Description: Format of this stack template
+    Value: YAML
+
+  ParameterName:
+    Description: Name of the parameter (for verification)
+    Value: !Ref ParameterTableName
